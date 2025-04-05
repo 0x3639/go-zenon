@@ -11,6 +11,7 @@ import (
 
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/p2p"
+	"github.com/zenon-network/go-zenon/p2p/discover"
 	api "github.com/zenon-network/go-zenon/rpc"
 	rpc "github.com/zenon-network/go-zenon/rpc/server"
 	"github.com/zenon-network/go-zenon/wallet"
@@ -80,17 +81,41 @@ func NewNode(conf *Config) (*Node, error) {
 		return nil, errors.Errorf("Unable to parse seeders. Reason: %v", err)
 	}
 
+	// Parse static nodes
+	var staticNodes []*discover.Node
+	if len(netConfig.StaticNodes) > 0 {
+		staticNodes = make([]*discover.Node, len(netConfig.StaticNodes))
+		for i, nodeStr := range netConfig.StaticNodes {
+			staticNodes[i], err = discover.ParseNode(nodeStr)
+			if err != nil {
+				return nil, errors.Errorf("Unable to parse static node %s. Reason: %v", nodeStr, err)
+			}
+		}
+	}
+
+	// Parse trusted nodes
+	var trustedNodes []*discover.Node
+	if len(netConfig.TrustedNodes) > 0 {
+		trustedNodes = make([]*discover.Node, len(netConfig.TrustedNodes))
+		for i, nodeStr := range netConfig.TrustedNodes {
+			trustedNodes[i], err = discover.ParseNode(nodeStr)
+			if err != nil {
+				return nil, errors.Errorf("Unable to parse trusted node %s. Reason: %v", nodeStr, err)
+			}
+		}
+	}
+
 	node.server = &p2p.Server{
 		PrivateKey:        netConfig.PrivateKey(),
 		Name:              netConfig.Name,
 		MaxPeers:          netConfig.MaxPeers,
 		MinConnectedPeers: netConfig.MinConnectedPeers,
 		MaxPendingPeers:   netConfig.MaxPendingPeers,
-		Discovery:         true,
+		Discovery:         netConfig.Discovery,
 		NoDial:            false,
-		StaticNodes:       nil,
+		StaticNodes:       staticNodes,
 		BootstrapNodes:    nodes,
-		TrustedNodes:      nil,
+		TrustedNodes:      trustedNodes,
 		NodeDatabase:      netConfig.NodeDatabase,
 		ListenAddr:        fmt.Sprintf("%v:%v", netConfig.ListenAddr, netConfig.ListenPort),
 		Protocols:         node.z.Protocol().SubProtocols,

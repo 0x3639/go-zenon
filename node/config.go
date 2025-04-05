@@ -46,7 +46,11 @@ type NetConfig struct {
 	MaxPeers          int
 	MaxPendingPeers   int
 
-	Seeders []string
+	Discovery    bool
+	NoDial       bool
+	StaticNodes  []string
+	TrustedNodes []string
+	Seeders      []string
 }
 
 type Config struct {
@@ -197,6 +201,10 @@ func (c *Config) makeNetConfig() *p2p.Net {
 		MaxPendingPeers:   c.Net.MaxPendingPeers,
 		MinConnectedPeers: c.Net.MinConnectedPeers,
 		Name:              fmt.Sprintf("%v %v", metadata.Version, c.Name),
+		Discovery:         c.Net.Discovery,
+		NoDial:            c.Net.NoDial,
+		StaticNodes:       c.Net.StaticNodes,
+		TrustedNodes:      c.Net.TrustedNodes,
 		Seeders:           c.Net.Seeders,
 		NodeDatabase:      networkDataDir,
 		ListenAddr:        c.Net.ListenHost,

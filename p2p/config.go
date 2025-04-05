@@ -24,6 +24,7 @@ const (
 
 	DefaultNetDirName        = "network"
 	DefaultNetPrivateKeyFile = "network-private-key"
+	DefaultDiscovery         = true
 )
 
 var (
@@ -171,6 +172,9 @@ type Net struct {
 	// Name sets the node name of this server.
 	Name string
 
+	// If NoDial is true, the server will not dial any peers.
+	NoDial bool
+
 	Seeders []string
 
 	// NodeDatabase is the path to the database containing the previously seen
@@ -185,6 +189,10 @@ type Net struct {
 	// the server is started.
 	ListenAddr string
 	ListenPort int
+
+	Discovery    bool
+	StaticNodes  []string
+	TrustedNodes []string
 }
 
 // PrivateKey retrieves the currently configured private key of the node, checking
