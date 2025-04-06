@@ -39,6 +39,7 @@ var DefaultNodeConfig = Config{
 		MaxPeers:          p2p.DefaultMaxPeers,
 		MaxPendingPeers:   p2p.DefaultMaxPendingPeers,
 		Discovery:         p2p.DefaultDiscovery,
+		NoDial:            p2p.DefaultNoDial,
 		Seeders:           p2p.DefaultSeeders,
 	},
 }

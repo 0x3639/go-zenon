@@ -25,6 +25,7 @@ const (
 	DefaultNetDirName        = "network"
 	DefaultNetPrivateKeyFile = "network-private-key"
 	DefaultDiscovery         = true
+	DefaultNoDial            = false
 )
 
 var (
