@@ -112,7 +112,7 @@ func NewNode(conf *Config) (*Node, error) {
 		MinConnectedPeers: netConfig.MinConnectedPeers,
 		MaxPendingPeers:   netConfig.MaxPendingPeers,
 		Discovery:         netConfig.Discovery,
-		NoDial:            false,
+		NoDial:            netConfig.NoDial,
 		StaticNodes:       staticNodes,
 		BootstrapNodes:    nodes,
 		TrustedNodes:      trustedNodes,
