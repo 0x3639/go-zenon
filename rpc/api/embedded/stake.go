@@ -51,6 +51,7 @@ type StakeEntry struct {
 	ExpirationTimestamp int64         `json:"expirationTimestamp"`
 	Address             types.Address `json:"address"`
 	Id                  types.Hash    `json:"id"`
+	IsRevocable         bool          `json:"isRevocable"`
 }
 
 type StakeEntryMarshal struct {
@@ -60,6 +61,7 @@ type StakeEntryMarshal struct {
 	ExpirationTimestamp int64         `json:"expirationTimestamp"`
 	Address             types.Address `json:"address"`
 	Id                  types.Hash    `json:"id"`
+	IsRevocable         bool          `json:"isRevocable"`
 }
 
 func (s *StakeEntry) ToStakeEntryMarshal() *StakeEntryMarshal {
@@ -70,6 +72,7 @@ func (s *StakeEntry) ToStakeEntryMarshal() *StakeEntryMarshal {
 		ExpirationTimestamp: s.ExpirationTimestamp,
 		Address:             s.Address,
 		Id:                  s.Id,
+		IsRevocable:         s.IsRevocable,
 	}
 	return aux
 }
@@ -89,6 +92,7 @@ func (s *StakeEntry) UnmarshalJSON(data []byte) error {
 	s.ExpirationTimestamp = aux.ExpirationTimestamp
 	s.Address = aux.Address
 	s.Id = aux.Id
+	s.IsRevocable = aux.IsRevocable
 	return nil
 }
 
@@ -143,7 +147,7 @@ func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSiz
 		return nil, api.ErrPageSizeParamTooBig
 	}
 
-	_, context, err := api.GetFrontierContext(a.chain, types.StakeContract)
+	momentum, context, err := api.GetFrontierContext(a.chain, types.StakeContract)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +169,7 @@ func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSiz
 			ExpirationTimestamp: info.ExpirationTime,
 			Address:             info.StakeAddress,
 			Id:                  info.Id,
+			IsRevocable:         momentum.Timestamp.Unix() >= info.ExpirationTime,
 		}
 	}
 

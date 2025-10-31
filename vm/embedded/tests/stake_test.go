@@ -396,7 +396,8 @@ t=2001-09-09T06:46:40+0000 lvl=dbug msg="revoked stake entry" module=embedded co
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000007210,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3"
+			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -424,7 +425,8 @@ t=2001-09-09T06:46:40+0000 lvl=dbug msg="revoked stake entry" module=embedded co
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000007210,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3"
+			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -447,7 +449,8 @@ t=2001-09-09T06:46:40+0000 lvl=dbug msg="revoked stake entry" module=embedded co
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000007210,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3"
+			"id": "5c303a6d7fe2b3390921e299f78ea9281c8f48ad564b9fe9cb1af015d5d5aed3",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -643,7 +646,8 @@ t=2001-09-09T07:16:50+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000003610,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		},
 		{
 			"amount": "1000000000",
@@ -651,7 +655,8 @@ t=2001-09-09T07:16:50+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000014410,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -972,7 +977,8 @@ t=2001-09-09T05:17:00+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000003610,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "60be4b855f8b1871ccfbe13b348039c4106a15a902b2e983dc289c809691f545"
+			"id": "60be4b855f8b1871ccfbe13b348039c4106a15a902b2e983dc289c809691f545",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -994,7 +1000,8 @@ t=2001-09-09T05:17:00+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"startTimestamp": 1000000010,
 			"expirationTimestamp": 1000003610,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
