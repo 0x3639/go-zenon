@@ -25,6 +25,65 @@ func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 	}
 }
 
+type LiquidityStakeEntry struct {
+	Amount         *big.Int                 `json:"amount"`
+	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
+	WeightedAmount *big.Int                 `json:"weightedAmount"`
+	StartTime      int64                    `json:"startTime"`
+	RevokeTime     int64                    `json:"revokeTime"`
+	ExpirationTime int64                    `json:"expirationTime"`
+	StakeAddress   types.Address            `json:"stakeAddress"`
+	Id             types.Hash               `json:"id"`
+	IsRevocable    bool                     `json:"isRevocable"`
+}
+
+type LiquidityStakeEntryMarshal struct {
+	Amount         string                   `json:"amount"`
+	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
+	WeightedAmount string                   `json:"weightedAmount"`
+	StartTime      int64                    `json:"startTime"`
+	RevokeTime     int64                    `json:"revokeTime"`
+	ExpirationTime int64                    `json:"expirationTime"`
+	StakeAddress   types.Address            `json:"stakeAddress"`
+	Id             types.Hash               `json:"id"`
+	IsRevocable    bool                     `json:"isRevocable"`
+}
+
+func (l *LiquidityStakeEntry) ToLiquidityStakeEntryMarshal() *LiquidityStakeEntryMarshal {
+	return &LiquidityStakeEntryMarshal{
+		Amount:         l.Amount.String(),
+		TokenStandard:  l.TokenStandard,
+		WeightedAmount: l.WeightedAmount.String(),
+		StartTime:      l.StartTime,
+		RevokeTime:     l.RevokeTime,
+		ExpirationTime: l.ExpirationTime,
+		StakeAddress:   l.StakeAddress,
+		Id:             l.Id,
+		IsRevocable:    l.IsRevocable,
+	}
+}
+
+func (l *LiquidityStakeEntry) MarshalJSON() ([]byte, error) {
+	return json.Marshal(l.ToLiquidityStakeEntryMarshal())
+}
+
+func (l *LiquidityStakeEntry) UnmarshalJSON(data []byte) error {
+	aux := new(LiquidityStakeEntryMarshal)
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	l.Amount = common.StringToBigInt(aux.Amount)
+	l.TokenStandard = aux.TokenStandard
+	l.WeightedAmount = common.StringToBigInt(aux.WeightedAmount)
+	l.StartTime = aux.StartTime
+	l.RevokeTime = aux.RevokeTime
+	l.ExpirationTime = aux.ExpirationTime
+	l.StakeAddress = aux.StakeAddress
+	l.Id = aux.Id
+	l.IsRevocable = aux.IsRevocable
+	return nil
+}
+
 func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
@@ -54,17 +113,17 @@ func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, erro
 }
 
 type LiquidityStakeList struct {
-	TotalAmount         *big.Int                          `json:"totalAmount"`
-	TotalWeightedAmount *big.Int                          `json:"totalWeightedAmount"`
-	Count               int                               `json:"count"`
-	Entries             []*definition.LiquidityStakeEntry `json:"list"`
+	TotalAmount         *big.Int               `json:"totalAmount"`
+	TotalWeightedAmount *big.Int               `json:"totalWeightedAmount"`
+	Count               int                    `json:"count"`
+	Entries             []*LiquidityStakeEntry `json:"list"`
 }
 
 type LiquidityStakeListMarshal struct {
-	TotalAmount         string                            `json:"totalAmount"`
-	TotalWeightedAmount string                            `json:"totalWeightedAmount"`
-	Count               int                               `json:"count"`
-	Entries             []*definition.LiquidityStakeEntry `json:"list"`
+	TotalAmount         string                 `json:"totalAmount"`
+	TotalWeightedAmount string                 `json:"totalWeightedAmount"`
+	Count               int                    `json:"count"`
+	Entries             []*LiquidityStakeEntry `json:"list"`
 }
 
 func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeListMarshal {
@@ -73,7 +132,7 @@ func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeLi
 		TotalWeightedAmount: stake.TotalWeightedAmount.String(),
 		Count:               stake.Count,
 	}
-	aux.Entries = make([]*definition.LiquidityStakeEntry, len(stake.Entries))
+	aux.Entries = make([]*LiquidityStakeEntry, len(stake.Entries))
 	for idx, entry := range stake.Entries {
 		aux.Entries[idx] = entry
 	}
@@ -92,7 +151,7 @@ func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	stake.TotalAmount = common.StringToBigInt(aux.TotalAmount)
 	stake.TotalWeightedAmount = common.StringToBigInt(aux.TotalWeightedAmount)
 	stake.Count = aux.Count
-	stake.Entries = make([]*definition.LiquidityStakeEntry, len(aux.Entries))
+	stake.Entries = make([]*LiquidityStakeEntry, len(aux.Entries))
 	for idx, entry := range aux.Entries {
 		stake.Entries[idx] = entry
 	}
@@ -104,7 +163,7 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 		return nil, api.ErrPageSizeParamTooBig
 	}
 
-	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
+	momentum, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +177,26 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 	listLen := len(list)
 	start, end := api.GetRange(pageIndex, pageSize, uint32(listLen))
 
+	entryList := make([]*LiquidityStakeEntry, end-start)
+	for i, info := range list[start:end] {
+		entryList[i] = &LiquidityStakeEntry{
+			Amount:         info.Amount,
+			TokenStandard:  info.TokenStandard,
+			WeightedAmount: info.WeightedAmount,
+			StartTime:      info.StartTime,
+			RevokeTime:     info.RevokeTime,
+			ExpirationTime: info.ExpirationTime,
+			StakeAddress:   info.StakeAddress,
+			Id:             info.Id,
+			IsRevocable:    momentum.Timestamp.Unix() >= info.ExpirationTime,
+		}
+	}
+
 	return &LiquidityStakeList{
 		TotalAmount:         total,
 		TotalWeightedAmount: totalWeighted,
 		Count:               listLen,
-		Entries:             list[start:end],
+		Entries:             entryList,
 	}, nil
 }
 

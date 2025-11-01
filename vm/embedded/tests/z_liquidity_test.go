@@ -231,7 +231,8 @@ func activateLiquidityStep3(t *testing.T, z mock.MockZenon) {
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": false
 		},
 		{
 			"amount": "3000000000",
@@ -241,7 +242,8 @@ func activateLiquidityStep3(t *testing.T, z mock.MockZenon) {
 			"revokeTime": 0,
 			"expirationTime": 1000016300,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea"
+			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -386,7 +388,8 @@ func activateLiquidityStep7(t *testing.T, z mock.MockZenon) {
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": true
 		},
 		{
 			"amount": "3000000000",
@@ -396,7 +399,8 @@ func activateLiquidityStep7(t *testing.T, z mock.MockZenon) {
 			"revokeTime": 0,
 			"expirationTime": 1000016300,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea"
+			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -816,7 +820,8 @@ func TestLiquidity_SetTokenTuples(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000009860,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "131b20547046c41ed4256290b836ae9eed649b9b4d0f4896888f790bc0eca90c"
+			"id": "131b20547046c41ed4256290b836ae9eed649b9b4d0f4896888f790bc0eca90c",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -1159,7 +1164,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": false
 		},
 		{
 			"amount": "3000000000",
@@ -1169,7 +1175,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000016300,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea"
+			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea",
+			"isRevocable": false
 		},
 		{
 			"amount": "5000000000",
@@ -1179,7 +1186,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000050570,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927"
+			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -1212,7 +1220,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000007470,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea"
+			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea",
+			"isRevocable": true
 		},
 		{
 			"amount": "5000000000",
@@ -1222,7 +1231,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000007470,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927"
+			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927",
+			"isRevocable": true
 		},
 		{
 			"amount": "1000000000",
@@ -1232,7 +1242,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -1257,7 +1268,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000007470,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea"
+			"id": "3de102aa795d705f1183c3422f8139983bbbcf398d3b60c848f7de27defdf4ea",
+			"isRevocable": true
 		},
 		{
 			"amount": "5000000000",
@@ -1267,7 +1279,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000007470,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927"
+			"id": "5fd186418784d4b963369941646bfaa63dc7b28127c71be37e64116fa1580927",
+			"isRevocable": true
 		},
 		{
 			"amount": "1000000000",
@@ -1277,7 +1290,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -1307,7 +1321,8 @@ t=2001-09-09T03:52:10+0000 lvl=dbug msg="revoked liquidity stake entry" module=e
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1"
+			"id": "62690006c58c67dc5b7c41e095a22e40307eba0463cee5585f84b91f6815a5b1",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -1556,7 +1571,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021700,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "7fa485f45e7f0ced2a90f0b6a5b3d82b1eeaea47a6a3289629206e7ca3355643"
+			"id": "7fa485f45e7f0ced2a90f0b6a5b3d82b1eeaea47a6a3289629206e7ca3355643",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1566,7 +1582,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021740,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "2c546fd7a4566a18a552ddf9c186f219d02214492d8ad0cfb8d8aed80da2f0ad"
+			"id": "2c546fd7a4566a18a552ddf9c186f219d02214492d8ad0cfb8d8aed80da2f0ad",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1576,7 +1593,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021760,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "2a6875bedb9e74f4f61bc2c37fa3abdf1659a8ec924dfa8c5550e9e5d09612b4"
+			"id": "2a6875bedb9e74f4f61bc2c37fa3abdf1659a8ec924dfa8c5550e9e5d09612b4",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1586,7 +1604,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021800,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "03d684838b68cd9b05277c58f8e023da4037815b7507b50e26b2e40616fc3bd5"
+			"id": "03d684838b68cd9b05277c58f8e023da4037815b7507b50e26b2e40616fc3bd5",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1596,7 +1615,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021820,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "b3f1f5b0bc0eee6b529507f2754a5fc1fa507d9c006707b00be27953f16d1493"
+			"id": "b3f1f5b0bc0eee6b529507f2754a5fc1fa507d9c006707b00be27953f16d1493",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1606,7 +1626,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021860,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "66710f2e36a85f0c3394f09dc7c97f9ecb1cd64a7ae36e78c725cf815381ff8c"
+			"id": "66710f2e36a85f0c3394f09dc7c97f9ecb1cd64a7ae36e78c725cf815381ff8c",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1616,7 +1637,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021880,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "3f1e0561aadb430607b73bae1ed1937865b973af9b3dfe1d82ad2db9ad4d012d"
+			"id": "3f1e0561aadb430607b73bae1ed1937865b973af9b3dfe1d82ad2db9ad4d012d",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -1635,7 +1657,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021720,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "5b95e7bffdae5cae44a6f6774dd4adddfafd064a0357a9d5896b7b8389c8684b"
+			"id": "5b95e7bffdae5cae44a6f6774dd4adddfafd064a0357a9d5896b7b8389c8684b",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1645,7 +1668,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021780,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "a4de82d0fc2b79657ae34380eac21a53e6839af25078d4733d1f27e464a9d36f"
+			"id": "a4de82d0fc2b79657ae34380eac21a53e6839af25078d4733d1f27e464a9d36f",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1655,7 +1679,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021840,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "441c85b14820b8085382e28b140d58d4138eef07308be106bf2616045b3fb0a6"
+			"id": "441c85b14820b8085382e28b140d58d4138eef07308be106bf2616045b3fb0a6",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1665,7 +1690,8 @@ func TestLiquidity_TestScenariosNoAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021900,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "b1519131d644714862f6e59f51ad1b7940c0f39494121d85af8a0c4774b9c3ac"
+			"id": "b1519131d644714862f6e59f51ad1b7940c0f39494121d85af8a0c4774b9c3ac",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -1951,7 +1977,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021700,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "6bf235ba6df49d27ca269cccddf852a2e71b23ae5a98d91843ea9e5ba3070b67"
+			"id": "6bf235ba6df49d27ca269cccddf852a2e71b23ae5a98d91843ea9e5ba3070b67",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1961,7 +1988,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021740,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "468ffd339aca907988b2cba552344005ab34bfe7e345092770a8899f903f7900"
+			"id": "468ffd339aca907988b2cba552344005ab34bfe7e345092770a8899f903f7900",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1971,7 +1999,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021760,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "61b1d6e73f4bccde98742dd013f0884273fdeb6243ab8d76c117a68b45fb9b82"
+			"id": "61b1d6e73f4bccde98742dd013f0884273fdeb6243ab8d76c117a68b45fb9b82",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1981,7 +2010,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021800,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "081158361eed80d008a5bfcb7daba3de139d84d03da9d095eb5408fd82d91ddf"
+			"id": "081158361eed80d008a5bfcb7daba3de139d84d03da9d095eb5408fd82d91ddf",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -1991,7 +2021,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021820,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "ac7b1258bac27fb78126d3520429aacc79cb7dd11b1372ce29c3cf49ff33080e"
+			"id": "ac7b1258bac27fb78126d3520429aacc79cb7dd11b1372ce29c3cf49ff33080e",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -2001,7 +2032,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021860,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "4798779359065c465aed8b76a8ebd3c7cf1987ae6ac67851e80c403dbd1f3469"
+			"id": "4798779359065c465aed8b76a8ebd3c7cf1987ae6ac67851e80c403dbd1f3469",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -2011,7 +2043,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021880,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "61155785cde5f709f3576036b872d528b470cc79a9be0b94db539d508a88aaa3"
+			"id": "61155785cde5f709f3576036b872d528b470cc79a9be0b94db539d508a88aaa3",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -2030,7 +2063,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021720,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "e691977e7ff10a6fa140a0c7ff049e2bc07fcdb89fa9802da50157db29501c59"
+			"id": "e691977e7ff10a6fa140a0c7ff049e2bc07fcdb89fa9802da50157db29501c59",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -2040,7 +2074,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021780,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "3ef084e4df6034c1b41ff581fdde62984bd0770929ac7df0d192202d90160166"
+			"id": "3ef084e4df6034c1b41ff581fdde62984bd0770929ac7df0d192202d90160166",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -2050,7 +2085,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021840,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "dca0e7a095e9b177aa14785bed435e1db173fd1dc9612c5f8969b5a7403cbb27"
+			"id": "dca0e7a095e9b177aa14785bed435e1db173fd1dc9612c5f8969b5a7403cbb27",
+			"isRevocable": true
 		},
 		{
 			"amount": "199462057268212",
@@ -2060,7 +2096,8 @@ func TestLiquidity_TestScenariosWithAdditionalRewards(t *testing.T) {
 			"revokeTime": 0,
 			"expirationTime": 1000021900,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "08a6c8cfe318234893700227d3a24d16f94e99b948e573d99b258374a82a45a8"
+			"id": "08a6c8cfe318234893700227d3a24d16f94e99b948e573d99b258374a82a45a8",
+			"isRevocable": true
 		}
 	]
 }`)
@@ -2192,7 +2229,8 @@ t=2001-09-09T03:46:50+0000 lvl=dbug msg="updating contract state" module=embedde
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2213,7 +2251,8 @@ t=2001-09-09T03:46:50+0000 lvl=dbug msg="updating contract state" module=embedde
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		},
 		{
 			"amount": "1000000000",
@@ -2223,7 +2262,8 @@ t=2001-09-09T03:46:50+0000 lvl=dbug msg="updating contract state" module=embedde
 			"revokeTime": 0,
 			"expirationTime": 1000009100,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2330,7 +2370,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2455,7 +2496,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2494,7 +2536,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009080,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2512,7 +2555,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009160,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2530,7 +2574,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009180,
 			"stakeAddress": "z1qrs2lpccnsneglhnnfwvlsj0qncnxjnwlfmjac",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2548,7 +2593,8 @@ t=2001-09-09T03:47:10+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009200,
 			"stakeAddress": "z1qraz4ermhhua89a0h0gxxan4lnzrfutgs6xxe2",
-			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -2794,7 +2840,8 @@ t=2001-09-09T04:47:20+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009220,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "ea9fb366a9592b7a6a78d0e5881bee440d727ee04eb20fafb29628e7c02054b6"
+			"id": "ea9fb366a9592b7a6a78d0e5881bee440d727ee04eb20fafb29628e7c02054b6",
+			"isRevocable": false
 		},
 		{
 			"amount": "1000000000",
@@ -2804,7 +2851,8 @@ t=2001-09-09T04:47:20+0000 lvl=info msg="received donation" module=embedded cont
 			"revokeTime": 0,
 			"expirationTime": 1000009240,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "32dcda291851bcb273b9c2d77d93dfa5a907d6723bdbb07a7854fd8a6411375d"
+			"id": "32dcda291851bcb273b9c2d77d93dfa5a907d6723bdbb07a7854fd8a6411375d",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -3007,7 +3055,8 @@ t=2001-09-09T03:48:40+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"revokeTime": 0,
 			"expirationTime": 1000009240,
 			"stakeAddress": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"id": "d36d9fcef9ec7730d1e1751dca957ecaa47974e92dc2ad2e7eaac8bb3d5e508f"
+			"id": "d36d9fcef9ec7730d1e1751dca957ecaa47974e92dc2ad2e7eaac8bb3d5e508f",
+			"isRevocable": false
 		}
 	]
 }`)
@@ -3037,7 +3086,8 @@ t=2001-09-09T03:48:40+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"revokeTime": 0,
 			"expirationTime": 1000009280,
 			"stakeAddress": "z1qr4pexnnfaexqqz8nscjjcsajy5hdqfkgadvwx",
-			"id": "7d27cb9dff8de7b052861f9651f36db9e6d160f6c8f07d228f10b72dee069762"
+			"id": "7d27cb9dff8de7b052861f9651f36db9e6d160f6c8f07d228f10b72dee069762",
+			"isRevocable": false
 		}
 	]
 }`)
