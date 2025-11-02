@@ -978,7 +978,7 @@ t=2001-09-09T05:17:00+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"expirationTimestamp": 1000003610,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
 			"id": "60be4b855f8b1871ccfbe13b348039c4106a15a902b2e983dc289c809691f545",
-			"isRevocable": false
+			"isRevocable": true
 		}
 	]
 }`)
@@ -1001,7 +1001,7 @@ t=2001-09-09T05:17:00+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 			"expirationTimestamp": 1000003610,
 			"address": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
 			"id": "XXXHASHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-			"isRevocable": false
+			"isRevocable": true
 		}
 	]
 }`)
