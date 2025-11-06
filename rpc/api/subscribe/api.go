@@ -38,7 +38,7 @@ type AccountBlock struct {
 	FromHash  types.Hash    `json:"fromHash"`
 }
 
-func newAccountBlock(block *nom.AccountBlock) []*AccountBlock {
+func newAccountBlockFiltered(block *nom.AccountBlock, topLevelBlocks map[types.Hash]bool) []*AccountBlock {
 	all := make([]*AccountBlock, 1, len(block.DescendantBlocks)+1)
 	all[0] = &AccountBlock{
 		BlockType: block.BlockType,
@@ -48,8 +48,12 @@ func newAccountBlock(block *nom.AccountBlock) []*AccountBlock {
 		ToAddress: block.ToAddress,
 		FromHash:  block.FromBlockHash,
 	}
+	// Only recurse into descendant blocks that are NOT already in the momentum as top-level blocks
+	// This prevents duplicate notifications when embedded contracts return descendant blocks
 	for _, dBlock := range block.DescendantBlocks {
-		all = append(all, newAccountBlock(dBlock)...)
+		if !topLevelBlocks[dBlock.Hash] {
+			all = append(all, newAccountBlockFiltered(dBlock, topLevelBlocks)...)
+		}
 	}
 	return all
 }
@@ -148,9 +152,16 @@ func (s *Server) InsertMomentum(detailed *nom.DetailedMomentum) {
 		s.log.Error("can't insert momentum for broadcast", "reason", "channel is full", "momentum-identifier", detailed.Momentum.Identifier())
 	}
 
+	// Build a set of block hashes that appear as top-level blocks in the momentum
+	// to avoid duplicating descendant blocks that are already stored separately
+	topLevelBlocks := make(map[types.Hash]bool, len(detailed.AccountBlocks))
+	for _, block := range detailed.AccountBlocks {
+		topLevelBlocks[block.Hash] = true
+	}
+
 	abEvents := make([]*AccountBlock, 0, len(detailed.AccountBlocks))
 	for _, block := range detailed.AccountBlocks {
-		abEvents = append(abEvents, newAccountBlock(block)...)
+		abEvents = append(abEvents, newAccountBlockFiltered(block, topLevelBlocks)...)
 	}
 	select {
 	case s.acCh <- abEvents:
