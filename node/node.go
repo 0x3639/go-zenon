@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/zenon-network/go-zenon/common"
+	"github.com/zenon-network/go-zenon/metadata"
 	"github.com/zenon-network/go-zenon/p2p"
 	api "github.com/zenon-network/go-zenon/rpc"
 	rpc "github.com/zenon-network/go-zenon/rpc/server"
@@ -102,6 +103,11 @@ func (node *Node) Start() error {
 	node.lock.Lock()
 	defer node.lock.Unlock()
 
+	// Initialize diagnostic logger
+	if err := common.InitDiagnosticLogger(node.config.DataPath); err != nil {
+		log.Error("failed to initialize diagnostic logger", "reason", err)
+	}
+
 	if err := node.startZenon(); err != nil {
 		return err
 	}
@@ -113,6 +119,9 @@ func (node *Node) Start() error {
 		log.Error("failed to start rpc", "reason", err)
 		return err
 	}
+
+	// Log node diagnostic information
+	node.logDiagnosticInfo()
 
 	return nil
 }
@@ -136,6 +145,11 @@ func (node *Node) Stop() error {
 
 	// Release instance directory lock.
 	node.closeDataDir()
+
+	// Close diagnostic logger
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		diagnosticLogger.Close()
+	}
 
 	return nil
 }
@@ -216,4 +230,58 @@ func (node *Node) closeDataDir() {
 		}
 		node.dataDirLock = nil
 	}
+}
+
+func (node *Node) logDiagnosticInfo() {
+	diagnosticLogger := common.GetDiagnosticLogger()
+	if diagnosticLogger == nil {
+		return
+	}
+
+	// Determine node role and collect info
+	role := "node"
+	pillarName := "none"
+	producerAddr := "none"
+	if node.config.Producer != nil && node.config.Producer.Address != "" {
+		role = "pillar"
+		producerAddr = node.config.Producer.Address
+		// Note: pillar name would require querying embedded contract storage
+		// For now, we log the producer address which can be cross-referenced
+	}
+
+	// Get P2P node ID
+	nodeID := "unknown"
+	if node.server != nil && node.server.Self() != nil {
+		nodeID = node.server.Self().ID.String()
+	}
+
+	// Get listen address
+	listenAddr := node.server.ListenAddr
+	if listenAddr == "" {
+		listenAddr = "OUTBOUND-ONLY"
+	}
+
+	// Get peer counts
+	netConfig := node.config.makeNetConfig()
+	staticPeers := 0 // Static nodes not used in current config
+	bootstrapPeers := len(netConfig.Seeders)
+
+	// Get chain identifier
+	chainID := int64(0)
+	if node.z != nil {
+		chainID = int64(node.z.Chain().ChainIdentifier())
+	}
+
+	// Log node info
+	diagnosticLogger.LogNodeInfo(
+		nodeID,
+		role,
+		pillarName,
+		producerAddr,
+		listenAddr,
+		staticPeers,
+		bootstrapPeers,
+		chainID,
+		metadata.Version,
+	)
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/zenon-network/go-zenon/chain/nom"
+	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/p2p"
 	"github.com/zenon-network/go-zenon/protocol/downloader"
@@ -185,6 +186,14 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		return err
 	}
 	defer pm.removePeer(p.id)
+
+	// Diagnostic logging: log peer connection and current active peers
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		// Log individual peer connection (connection type will be logged in p2p/server.go)
+		// Log active peers list
+		peerIDs := pm.peers.AllPeerIDs()
+		diagnosticLogger.LogActivePeers(peerIDs, len(peerIDs))
+	}
 
 	// Register the peer in the downloader. If the downloader considers it banned, we disconnect
 	if err := pm.downloader.RegisterPeer(p.id, p.version, p.Head(), p.RequestHashes, p.RequestHashesFromNumber, p.RequestBlocks); err != nil {
@@ -416,6 +425,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			p.MarkTransaction(tx.Hash)
+
+			// Diagnostic logging: track transaction reception
+			if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+				diagnosticLogger.LogTxReceived(tx.Hash.String(), p.id)
+			}
 		}
 		pm.wg.Add(1)
 		pm.txpool.AddAccountBlocks(txs)
@@ -464,12 +478,21 @@ func (pm *ProtocolManager) BroadcastMomentum(detailed *nom.DetailedMomentum, pro
 func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock) {
 	// Broadcast transaction to a batch of peers not knowing about it
 	peers := pm.peers.PeersWithoutTx(tx.Hash)
+
+	// Diagnostic logging: collect peer IDs for broadcast tracking
+	peerIDs := make([]string, 0, len(peers))
 	for _, p := range peers {
+		peerIDs = append(peerIDs, p.id)
 		if err := p.SendTransactions([]*nom.AccountBlock{tx}); err != nil {
 			log.Debug("failed to propagated account-block", "peer-id", p.id, "reason", err)
 		}
 	}
 	log.Info("propagated account-block to peers", "num-peers", len(peers), "account-block-header", tx.Header())
+
+	// Diagnostic logging: track transaction broadcast with peer details
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		diagnosticLogger.LogTxBroadcast(tx.Hash.String(), len(peers), peerIDs)
+	}
 }
 
 func (pm *ProtocolManager) SyncInfo() *SyncInfo {

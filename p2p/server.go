@@ -677,13 +677,40 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
 func (srv *Server) runPeer(p *Peer) {
 	common.P2PLogger.Debug(fmt.Sprintf("Added %v\n", p))
 
+	// Diagnostic logging: log peer connection with connection type
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		connType := "unknown"
+		if p.rw != nil {
+			if p.rw.flags&inboundConn != 0 {
+				connType = "inbound"
+			} else if p.rw.flags&staticDialedConn != 0 {
+				connType = "static_outbound"
+			} else if p.rw.flags&dynDialedConn != 0 {
+				connType = "dynamic_outbound"
+			} else if p.rw.flags&trustedConn != 0 {
+				connType = "trusted"
+			}
+		}
+		diagnosticLogger.LogPeerConnected(p.ID().String(), p.RemoteAddr().String(), connType)
+	}
+
 	if srv.newPeerHook != nil {
 		srv.newPeerHook(p)
 	}
+
+	// Track connection start time for duration calculation
+	startTime := common.Clock.Now()
+
 	discreason := p.run()
 	// Note: run waits for existing peers to be sent on srv.delpeer
 	// before returning, so this send should not select on srv.quit.
 	srv.delpeer <- p
 
 	common.P2PLogger.Debug(fmt.Sprintf("Removed %v (%v)\n", p, discreason))
+
+	// Diagnostic logging: log peer disconnection with duration
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		duration := common.Clock.Now().Sub(startTime).Seconds()
+		diagnosticLogger.LogPeerDisconnected(p.ID().String(), duration)
+	}
 }

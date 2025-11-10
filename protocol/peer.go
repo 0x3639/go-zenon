@@ -336,6 +336,18 @@ func (ps *peerSet) PeersWithoutTx(hash types.Hash) []*peer {
 	return list
 }
 
+// AllPeerIDs returns a list of all peer IDs in the set.
+func (ps *peerSet) AllPeerIDs() []string {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]string, 0, len(ps.peers))
+	for id := range ps.peers {
+		list = append(list, id)
+	}
+	return list
+}
+
 // BestPeer retrieves the known peer with the currently highest total difficulty.
 func (ps *peerSet) BestPeer() *peer {
 	ps.lock.RLock()

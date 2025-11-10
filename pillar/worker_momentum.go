@@ -2,6 +2,7 @@ package pillar
 
 import (
 	"github.com/zenon-network/go-zenon/chain/nom"
+	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/consensus"
 )
 
@@ -26,8 +27,22 @@ func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTrans
 		Version:         uint64(1),
 	}
 	m.EnsureCache()
-	return w.supervisor.GenerateMomentum(&nom.DetailedMomentum{
+
+	momentumTx, err := w.supervisor.GenerateMomentum(&nom.DetailedMomentum{
 		Momentum:      m,
 		AccountBlocks: blocks,
 	}, w.coinbase.Signer)
+
+	// Diagnostic logging: track momentum production
+	if err == nil && momentumTx != nil {
+		if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+			diagnosticLogger.LogMomentumProduced(
+				momentumTx.Momentum.Hash.String(),
+				momentumTx.Momentum.Height,
+				len(blocks),
+			)
+		}
+	}
+
+	return momentumTx, err
 }

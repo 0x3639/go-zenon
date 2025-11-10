@@ -60,5 +60,18 @@ func (b *broadcaster) CreateAccountBlock(accountBlockTransaction *nom.AccountBlo
 		return
 	}
 
+	// Diagnostic logging: track transaction creation
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		peerCount := b.protocol.peers.Len()
+		diagnosticLogger.LogAccountBlockAdded(
+			accountBlockTransaction.Block.Hash.String(),
+			accountBlockTransaction.Block.Address.String(),
+			accountBlockTransaction.Block.Height,
+			"local_create",
+		)
+		// Broadcast will be logged in handler.go with peer details
+		b.log.Debug("diagnostic: created account block", "hash", accountBlockTransaction.Block.Hash, "peer-count", peerCount)
+	}
+
 	b.protocol.BroadcastAccountBlock(accountBlockTransaction.Block)
 }

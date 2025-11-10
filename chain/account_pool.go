@@ -121,7 +121,21 @@ func (ap *accountPool) addAccountBlockTransaction(transaction *nom.AccountBlockT
 	// fast-forward insert on top of chain
 	if previous == frontierIdentifier {
 		log.Info("fast-forward inserting account-block")
-		return ap.getAccountManager(address).Add(transaction)
+		err := ap.getAccountManager(address).Add(transaction)
+
+		// Diagnostic logging: track account block addition to pool
+		if err == nil {
+			if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+				diagnosticLogger.LogAccountBlockAdded(
+					block.Hash.String(),
+					address.String(),
+					block.Height,
+					"peer_received",
+				)
+			}
+		}
+
+		return err
 	}
 
 	// already inserted
@@ -269,7 +283,24 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 }
 
 func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock {
-	return ap.filterBlocksToCommit(ap.GetAllUncommittedAccountBlocks())
+	blocks := ap.filterBlocksToCommit(ap.GetAllUncommittedAccountBlocks())
+
+	// Diagnostic logging: track momentum content selection
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		addresses := make([]string, 0)
+		addressMap := make(map[string]bool)
+		for _, block := range blocks {
+			addrStr := block.Address.String()
+			if !addressMap[addrStr] {
+				addresses = append(addresses, addrStr)
+				addressMap[addrStr] = true
+			}
+		}
+		// Note: peer count will be logged in pillar/worker_momentum.go
+		diagnosticLogger.LogMomentumContent(len(blocks), addresses, 0)
+	}
+
+	return blocks
 }
 func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock {
 	toCommit := make([]*nom.AccountBlock, 0, len(blocks))
