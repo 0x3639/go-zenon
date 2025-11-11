@@ -23,6 +23,7 @@ var (
 
 // InitDiagnosticLogger initializes the diagnostic logger
 // Writes to dataPath/log/diagnostic.log with both JSON and human-readable formats
+// If diagnostic.log exists, it is renamed to diagnostic.log.YYYY-MM-DD_HH-MM-SS
 func InitDiagnosticLogger(dataPath string) error {
 	var err error
 	diagnosticOnce.Do(func() {
@@ -32,7 +33,21 @@ func InitDiagnosticLogger(dataPath string) error {
 		}
 
 		logFile := filepath.Join(logDir, "diagnostic.log")
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+
+		// Rotate existing log file if it exists
+		if _, statErr := os.Stat(logFile); statErr == nil {
+			// File exists, rename it with timestamp
+			timestamp := time.Now().Format("2006-01-02_15-04-05")
+			archiveName := fmt.Sprintf("diagnostic.log.%s", timestamp)
+			archivePath := filepath.Join(logDir, archiveName)
+			if renameErr := os.Rename(logFile, archivePath); renameErr != nil {
+				// If rename fails, continue anyway - we'll append to existing file
+				fmt.Printf("Warning: Failed to rotate diagnostic log: %v\n", renameErr)
+			}
+		}
+
+		// Create new log file with restricted permissions (owner only)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return
 		}

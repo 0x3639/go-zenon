@@ -367,6 +367,41 @@ The diagnostic logging does not interfere with:
 - VM embedded contract tests
 - Chain synchronization tests
 
+## Log File Management
+
+### Automatic Log Rotation
+
+**On Node Startup:**
+- If `diagnostic.log` exists, it is automatically renamed to `diagnostic.log.YYYY-MM-DD_HH-MM-SS`
+- A fresh `diagnostic.log` is created for the current session
+- Previous logs are preserved with timestamps
+
+**Example:**
+```
+log/
+  diagnostic.log                    # Current session
+  diagnostic.log.2025-11-11_10-15-30  # Previous session
+  diagnostic.log.2025-11-10_14-22-45  # Older session
+```
+
+**Benefits:**
+- Each node restart gets a clean log file
+- Historical logs preserved for analysis
+- Easy to correlate logs with node restarts
+- No risk of unbounded file growth in single file
+
+### Log File Permissions
+
+For security, diagnostic logs are created with **0600 permissions** (owner read/write only).
+
+This protects sensitive network information including:
+- Peer IDs and IP addresses
+- Network topology data
+- Transaction timing information
+- Mempool state
+
+**Recommendation:** Keep diagnostic logs private and do not share publicly without sanitization.
+
 ## Safety Guarantees
 
 ### What This Branch Does NOT Do
@@ -391,6 +426,8 @@ The diagnostic logging does not interfere with:
 ✅ Writes to separate diagnostic log file
 ✅ Uses read-only data access
 ✅ Maintains 100% compatibility with master
+✅ Rotates logs on startup (preserves old logs)
+✅ Restricts log file permissions for security
 
 ## Verification
 
