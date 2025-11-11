@@ -170,19 +170,42 @@ func (d *DiagnosticLogger) LogAccountBlockAdded(txHash, address string, height u
 }
 
 // LogMomentumContent logs the content selected for momentum production
-func (d *DiagnosticLogger) LogMomentumContent(txCount int, addresses []string, peerCount int) {
+func (d *DiagnosticLogger) LogMomentumContent(txCount int, addresses []string, peerCount int, txHashes []string, totalMempoolSize int, selectionTimeMs int64) {
 	d.log("MOMENTUM_CONTENT", map[string]interface{}{
-		"tx_count":   txCount,
-		"addresses":  addresses,
-		"peer_count": peerCount,
+		"tx_count":           txCount,
+		"addresses":          addresses,
+		"peer_count":         peerCount,
+		"tx_hashes":          txHashes,
+		"total_mempool_size": totalMempoolSize,
+		"selection_time_ms":  selectionTimeMs,
 	})
 }
 
 // LogMomentumProduced logs when a momentum is produced
-func (d *DiagnosticLogger) LogMomentumProduced(momentumHash string, height uint64, txCount int) {
+func (d *DiagnosticLogger) LogMomentumProduced(momentumHash string, height uint64, txCount int, productionTimeMs int64) {
 	d.log("MOMENTUM_PRODUCED", map[string]interface{}{
-		"momentum_hash": momentumHash,
-		"height":        height,
-		"tx_count":      txCount,
+		"momentum_hash":      momentumHash,
+		"height":             height,
+		"tx_count":           txCount,
+		"production_time_ms": productionTimeMs,
+	})
+}
+
+// LogMempoolSnapshot logs periodic snapshot of mempool state
+func (d *DiagnosticLogger) LogMempoolSnapshot(totalTxCount int, addressCount int, addressList []string) {
+	d.log("MEMPOOL_SNAPSHOT", map[string]interface{}{
+		"total_tx_count": totalTxCount,
+		"address_count":  addressCount,
+		"addresses":      addressList,
+	})
+}
+
+// LogTxFiltered logs transactions that were filtered/excluded from momentum
+func (d *DiagnosticLogger) LogTxFiltered(reason string, txCount int, txHashes []string, addresses []string) {
+	d.log("TX_FILTERED", map[string]interface{}{
+		"reason":    reason,
+		"tx_count":  txCount,
+		"tx_hashes": txHashes,
+		"addresses": addresses,
 	})
 }

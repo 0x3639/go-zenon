@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -25,8 +26,9 @@ type chain struct {
 	*momentumPool
 	*momentumEventManager
 
-	chainManager db.Manager
-	insert       sync.Mutex
+	chainManager       db.Manager
+	insert             sync.Mutex
+	mempoolSnapshotQuit chan struct{}
 }
 
 func NewChain(chainManager db.Manager, genesis store.Genesis) *chain {
@@ -86,11 +88,62 @@ func (c *chain) Start() error {
 	c.log.Info("starting ...")
 	defer c.log.Info("started")
 
+	// Start periodic mempool snapshot logging
+	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+		c.mempoolSnapshotQuit = make(chan struct{})
+		go c.periodicMempoolSnapshot()
+		c.log.Info("started mempool snapshot logging")
+	}
+
 	return nil
+}
+
+// periodicMempoolSnapshot logs mempool state every 10 seconds
+func (c *chain) periodicMempoolSnapshot() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.logMempoolSnapshot()
+		case <-c.mempoolSnapshotQuit:
+			c.log.Info("stopped mempool snapshot logging")
+			return
+		}
+	}
+}
+
+func (c *chain) logMempoolSnapshot() {
+	diagnosticLogger := common.GetDiagnosticLogger()
+	if diagnosticLogger == nil {
+		return
+	}
+
+	allBlocks := c.accountPool.GetAllUncommittedAccountBlocks()
+	totalTxCount := len(allBlocks)
+
+	addressMap := make(map[string]bool)
+	addresses := make([]string, 0)
+
+	for _, block := range allBlocks {
+		addrStr := block.Address.String()
+		if !addressMap[addrStr] {
+			addresses = append(addresses, addrStr)
+			addressMap[addrStr] = true
+		}
+	}
+
+	diagnosticLogger.LogMempoolSnapshot(totalTxCount, len(addresses), addresses)
 }
 func (c *chain) Stop() error {
 	c.log.Info("stopping ...")
 	defer c.log.Info("stopped")
+
+	// Stop mempool snapshot logging
+	if c.mempoolSnapshotQuit != nil {
+		close(c.mempoolSnapshotQuit)
+	}
 
 	c.UnRegister(c.accountPool)
 

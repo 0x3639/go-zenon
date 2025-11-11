@@ -282,22 +282,38 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 	return nil
 }
 
-func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock {
-	blocks := ap.filterBlocksToCommit(ap.GetAllUncommittedAccountBlocks())
+func (ap *accountPool) GetNewMomentumContent(peerCount int) []*nom.AccountBlock {
+	startTime := common.Clock.Now()
+
+	allUncommittedBlocks := ap.GetAllUncommittedAccountBlocks()
+	totalMempoolSize := len(allUncommittedBlocks)
+	blocks := ap.filterBlocksToCommit(allUncommittedBlocks)
+
+	selectionTimeMs := common.Clock.Now().Sub(startTime).Milliseconds()
 
 	// Diagnostic logging: track momentum content selection
 	if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
 		addresses := make([]string, 0)
 		addressMap := make(map[string]bool)
+		txHashes := make([]string, 0, len(blocks))
+
 		for _, block := range blocks {
+			txHashes = append(txHashes, block.Hash.String())
 			addrStr := block.Address.String()
 			if !addressMap[addrStr] {
 				addresses = append(addresses, addrStr)
 				addressMap[addrStr] = true
 			}
 		}
-		// Note: peer count will be logged in pillar/worker_momentum.go
-		diagnosticLogger.LogMomentumContent(len(blocks), addresses, 0)
+
+		diagnosticLogger.LogMomentumContent(
+			len(blocks),
+			addresses,
+			peerCount,
+			txHashes,
+			totalMempoolSize,
+			selectionTimeMs,
+		)
 	}
 
 	return blocks
@@ -305,16 +321,53 @@ func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock {
 func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock {
 	toCommit := make([]*nom.AccountBlock, 0, len(blocks))
 	batch := make([]*nom.AccountBlock, 0, MaxAccountBlocksInMomentum)
+	filtered := make([]*nom.AccountBlock, 0)
+	filterReason := ""
+
 	for index := range blocks {
 		batch = append(batch, blocks[index])
 		if blocks[index].BlockType != nom.BlockTypeContractSend {
 			if len(toCommit)+len(batch) > MaxAccountBlocksInMomentum {
+				// Collect remaining blocks that exceeded the limit
+				filterReason = "exceeds_max_momentum_size"
+				for i := index; i < len(blocks); i++ {
+					filtered = append(filtered, blocks[i])
+				}
 				break
 			}
 			toCommit = append(toCommit, batch...)
 			batch = batch[:0]
 		}
 	}
+
+	// Log any incomplete batches (contract send blocks at end)
+	if len(batch) > 0 {
+		if filterReason == "" {
+			filterReason = "incomplete_contract_batch"
+		}
+		filtered = append(filtered, batch...)
+	}
+
+	// Diagnostic logging: track filtered transactions
+	if len(filtered) > 0 {
+		if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
+			txHashes := make([]string, 0, len(filtered))
+			addressMap := make(map[string]bool)
+			addresses := make([]string, 0)
+
+			for _, block := range filtered {
+				txHashes = append(txHashes, block.Hash.String())
+				addrStr := block.Address.String()
+				if !addressMap[addrStr] {
+					addresses = append(addresses, addrStr)
+					addressMap[addrStr] = true
+				}
+			}
+
+			diagnosticLogger.LogTxFiltered(filterReason, len(filtered), txHashes, addresses)
+		}
+	}
+
 	return toCommit
 }
 

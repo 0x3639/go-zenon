@@ -26,6 +26,10 @@ func (b *broadcaster) SyncInfo() *SyncInfo {
 	return b.protocol.SyncInfo()
 }
 
+func (b *broadcaster) GetPeerCount() int {
+	return b.protocol.peers.Len()
+}
+
 // CreateMomentum is called when our node created a momentum.
 // The momentum will be inserted in the chain and broadcasted.
 func (b *broadcaster) CreateMomentum(momentumTransaction *nom.MomentumTransaction) {

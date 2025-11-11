@@ -7,11 +7,14 @@ import (
 )
 
 func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTransaction, error) {
+	startTime := common.Clock.Now()
+
 	insert := w.chain.AcquireInsert("momentum-generator")
 	defer insert.Unlock()
 
 	store := w.chain.GetFrontierMomentumStore()
-	blocks := w.chain.GetNewMomentumContent()
+	peerCount := w.broadcaster.GetPeerCount()
+	blocks := w.chain.GetNewMomentumContent(peerCount)
 
 	previousMomentum, err := store.GetFrontierMomentum()
 	if err != nil {
@@ -33,6 +36,8 @@ func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTrans
 		AccountBlocks: blocks,
 	}, w.coinbase.Signer)
 
+	productionTimeMs := common.Clock.Now().Sub(startTime).Milliseconds()
+
 	// Diagnostic logging: track momentum production
 	if err == nil && momentumTx != nil {
 		if diagnosticLogger := common.GetDiagnosticLogger(); diagnosticLogger != nil {
@@ -40,6 +45,7 @@ func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTrans
 				momentumTx.Momentum.Hash.String(),
 				momentumTx.Momentum.Height,
 				len(blocks),
+				productionTimeMs,
 			)
 		}
 	}

@@ -53,4 +53,5 @@ type Broadcaster interface {
 	SyncInfo() *SyncInfo
 	CreateMomentum(*nom.MomentumTransaction)
 	CreateAccountBlock(*nom.AccountBlockTransaction)
+	GetPeerCount() int
 }

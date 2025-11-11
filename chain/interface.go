@@ -59,7 +59,7 @@ type AccountPool interface {
 	GetAccountStore(address types.Address, identifier types.HashHeight) store.Account
 	GetFrontierAccountStore(address types.Address) store.Account
 
-	GetNewMomentumContent() []*nom.AccountBlock
+	GetNewMomentumContent(peerCount int) []*nom.AccountBlock
 	GetAllUncommittedAccountBlocks() []*nom.AccountBlock
 	GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 }
