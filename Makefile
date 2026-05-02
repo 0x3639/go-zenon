@@ -1,4 +1,4 @@
-.PHONY: all clean znnd
+.PHONY: all clean znnd docs doc-lint doc-api
 
 GO ?= latest
 
@@ -39,3 +39,23 @@ clean:
 	rm -r $(BUILDDIR)/
 
 all: znnd libznn
+
+# Documentation targets. See docs/STYLE.md for conventions.
+
+docs: ## Serve godoc locally on http://localhost:6060
+	@command -v godoc >/dev/null 2>&1 || { \
+		echo "godoc not found; installing golang.org/x/tools/cmd/godoc..."; \
+		go install golang.org/x/tools/cmd/godoc@latest; \
+	}
+	@echo "godoc serving on http://localhost:6060/pkg/github.com/zenon-network/go-zenon/"
+	godoc -http=:6060
+
+doc-lint: ## Run godoc lint (revive: exported, package-comments)
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found; install from https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	}
+	golangci-lint run --config=.golangci.yml ./...
+
+doc-api: ## Regenerate static markdown API docs under docs/api/
+	./scripts/gen-api-docs.sh
