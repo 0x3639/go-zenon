@@ -54,11 +54,18 @@ type jsonWriter interface {
 	remoteAddr() string
 }
 
+// BlockNumber is the JSON-RPC parameter type used by Ethereum-style
+// "ledger by block height" requests. Negative values encode the
+// magic strings "pending" and "latest"; height 0 doubles as
+// "earliest".
 type BlockNumber int64
 
 const (
-	PendingBlockNumber  = BlockNumber(-2)
-	LatestBlockNumber   = BlockNumber(-1)
+	// PendingBlockNumber selects the not-yet-finalised mempool tip.
+	PendingBlockNumber = BlockNumber(-2)
+	// LatestBlockNumber selects the current chain head.
+	LatestBlockNumber = BlockNumber(-1)
+	// EarliestBlockNumber selects the genesis block.
 	EarliestBlockNumber = BlockNumber(0)
 )
 
@@ -97,10 +104,17 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Int64 returns the wire-level int64 representation. Magic values
+// (Pending = -2, Latest = -1) are returned as-is — callers must
+// branch on the sentinel values themselves.
 func (bn BlockNumber) Int64() int64 {
 	return (int64)(bn)
 }
 
+// BlockNumberOrHash accepts either a BlockNumber or a block hash on
+// the wire — the union type used by ledger queries that may target
+// either a height or a specific block. RequireCanonical (default
+// false) constrains hash-based lookups to the canonical chain.
 type BlockNumberOrHash struct {
 	BlockNumber      *BlockNumber `json:"blockNumber,omitempty"`
 	BlockHash        *common.Hash `json:"blockHash,omitempty"`
@@ -162,6 +176,8 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 	}
 }
 
+// Number returns the contained BlockNumber and true, or the zero
+// BlockNumber and false if the variant carries a hash instead.
 func (bnh *BlockNumberOrHash) Number() (BlockNumber, bool) {
 	if bnh.BlockNumber != nil {
 		return *bnh.BlockNumber, true
@@ -169,6 +185,8 @@ func (bnh *BlockNumberOrHash) Number() (BlockNumber, bool) {
 	return BlockNumber(0), false
 }
 
+// Hash returns the contained block hash and true, or the zero hash
+// and false if the variant carries a number instead.
 func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool) {
 	if bnh.BlockHash != nil {
 		return *bnh.BlockHash, true
@@ -176,6 +194,8 @@ func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool) {
 	return common.Hash{}, false
 }
 
+// BlockNumberOrHashWithNumber wraps a height as a BlockNumberOrHash
+// (hash variant cleared).
 func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash {
 	return BlockNumberOrHash{
 		BlockNumber:      &blockNr,
@@ -184,6 +204,9 @@ func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash {
 	}
 }
 
+// BlockNumberOrHashWithHash wraps a hash as a BlockNumberOrHash;
+// canonical=true forces the lookup to reject hashes that are not on
+// the canonical chain.
 func BlockNumberOrHashWithHash(hash common.Hash, canonical bool) BlockNumberOrHash {
 	return BlockNumberOrHash{
 		BlockNumber:      nil,

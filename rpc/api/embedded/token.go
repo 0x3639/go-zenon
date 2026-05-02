@@ -13,6 +13,8 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// TokenAPI is the "embedded.token" namespace — read access to the
+// token-info registry maintained by the token contract.
 type TokenAPI struct {
 	chain chain.Chain
 	z     zenon.Zenon
@@ -20,6 +22,7 @@ type TokenAPI struct {
 	log   log15.Logger
 }
 
+// NewTokenApi constructs the "embedded.token" namespace handler.
 func NewTokenApi(z zenon.Zenon) *TokenAPI {
 	return &TokenAPI{
 		chain: z.Chain(),
@@ -29,11 +32,14 @@ func NewTokenApi(z zenon.Zenon) *TokenAPI {
 	}
 }
 
+// TokenList is the paginated response shape returned by
+// [TokenAPI.GetAll] / [TokenAPI.GetByOwner].
 type TokenList struct {
 	Count int          `json:"count"`
 	List  []*api.Token `json:"list"`
 }
 
+// GetAll returns every registered token, paginated.
 func (a *TokenAPI) GetAll(pageIndex, pageSize uint32) (*TokenList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -54,6 +60,10 @@ func (a *TokenAPI) GetAll(pageIndex, pageSize uint32) (*TokenList, error) {
 		List:  tokenList[start:end],
 	}, nil
 }
+
+// GetByOwner returns the tokens whose Owner field matches owner.
+// Filters in-memory after fetching the full registry — fine at
+// current scale; revisit if the registry grows large.
 func (a *TokenAPI) GetByOwner(owner types.Address, pageIndex, pageSize uint32) (*TokenList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -82,6 +92,9 @@ func (a *TokenAPI) GetByOwner(owner types.Address, pageIndex, pageSize uint32) (
 		List:  tokenList[start:end],
 	}, nil
 }
+
+// GetByZts returns the token-info record for a single token
+// standard, or nil if the standard is unknown.
 func (a *TokenAPI) GetByZts(zts types.ZenonTokenStandard) (*api.Token, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
 	if err != nil {

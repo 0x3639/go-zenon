@@ -18,12 +18,15 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// SwapApi is the "embedded.swap" namespace — read access to the
+// pillar→coinbase swap accounting maintained by the swap contract.
 type SwapApi struct {
 	chain     chain.Chain
 	consensus consensus.Consensus
 	log       log15.Logger
 }
 
+// NewSwapApi constructs the swap namespace handler.
 func NewSwapApi(z zenon.Zenon) *SwapApi {
 	return &SwapApi{
 		chain:     z.Chain(),
@@ -32,12 +35,17 @@ func NewSwapApi(z zenon.Zenon) *SwapApi {
 	}
 }
 
+// SwapAssetEntry is one (legacy-key, ZNN, QSR) row of swap-asset
+// data, returned by [SwapApi.GetAssetsByKeyIdHash] /
+// [SwapApi.GetAssets].
 type SwapAssetEntry struct {
 	KeyIdHash string   `json:"keyIdHash"`
 	Znn       *big.Int `json:"znn"`
 	Qsr       *big.Int `json:"qsr"`
 }
 
+// SwapAssetEntryMarshal is the JSON-friendly twin with decimal-string
+// amounts.
 type SwapAssetEntryMarshal struct {
 	KeyIdHash string `json:"keyIdHash"`
 	Znn       string `json:"znn"`

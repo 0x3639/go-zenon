@@ -13,11 +13,14 @@ import (
 	"sort"
 )
 
+// LiquidityApi is the "embedded.liquidity" namespace — read access
+// to liquidity-mining state (stake entries, reward accounting).
 type LiquidityApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// NewLiquidityApi constructs the liquidity namespace handler.
 func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 	return &LiquidityApi{
 		chain: z.Chain(),
@@ -25,6 +28,8 @@ func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 	}
 }
 
+// GetLiquidityInfo returns the global liquidity configuration
+// (administrator, ZNN/QSR reward percentages, accepted token list).
 func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
@@ -39,6 +44,8 @@ func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	return liquidityInfo, nil
 }
 
+// GetSecurityInfo returns the liquidity contract's security
+// parameters (administrator addresses, time-challenges).
 func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {

@@ -31,13 +31,21 @@ import (
 )
 
 const (
+	// maxRequestContentLength caps inbound HTTP request bodies at
+	// 5 MiB to bound memory use per connection.
 	maxRequestContentLength = 1024 * 1024 * 5
-	contentType             = "application/json"
+	// contentType is the canonical Content-Type header value
+	// returned on responses.
+	contentType = "application/json"
 )
 
 // https://www.jsonrpc.org/historical/json-rpc-over-http.html#id13
 var acceptedContentTypes = []string{contentType, "application/json-rpc", "application/jsonrequest"}
 
+// httpConn is the [Client]-side ServerCodec for the HTTP transport.
+// HTTP is request/response so reads block on closeCh until the
+// connection is torn down; the JSON decode happens in sendHTTP /
+// sendBatchHTTP after each POST returns.
 type httpConn struct {
 	client    *http.Client
 	url       string
@@ -200,13 +208,18 @@ func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadClos
 	return resp.Body, nil
 }
 
-// httpServerConn turns a HTTP connection into a Conn.
+// httpServerConn turns a HTTP connection into a Conn — the
+// ServerCodec used by [Server.ServeHTTP] for one request/response
+// cycle. Reads are bounded to maxRequestContentLength.
 type httpServerConn struct {
 	io.Reader
 	io.Writer
 	r *http.Request
 }
 
+// newHTTPServerConn wraps an HTTP request/response pair in a
+// ServerCodec suitable for one-shot processing via
+// Server.serveSingleRequest.
 func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec {
 	body := io.LimitReader(r.Body, maxRequestContentLength)
 	conn := &httpServerConn{Reader: body, Writer: w, r: r}

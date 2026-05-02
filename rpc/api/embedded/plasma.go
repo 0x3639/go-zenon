@@ -19,6 +19,8 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// PlasmaApi is the "embedded.plasma" namespace — read access to
+// plasma fusion entries (anti-spam stake-style mechanism).
 type PlasmaApi struct {
 	chain chain.Chain
 	z     zenon.Zenon
@@ -26,6 +28,7 @@ type PlasmaApi struct {
 	log   log15.Logger
 }
 
+// NewPlasmaApi constructs the plasma namespace handler.
 func NewPlasmaApi(z zenon.Zenon) *PlasmaApi {
 	return &PlasmaApi{
 		chain: z.Chain(),

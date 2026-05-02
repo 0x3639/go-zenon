@@ -10,10 +10,17 @@ import (
 )
 
 const (
-	RpcMaxPageSize  = 1024
+	// RpcMaxPageSize caps the page-size accepted by paginated
+	// endpoints; oversize requests yield [ErrPageSizeParamTooBig].
+	RpcMaxPageSize = 1024
+	// RpcMaxCountSize caps the count parameter on range-style
+	// endpoints; oversize requests yield [ErrCountParamTooBig].
 	RpcMaxCountSize = 1024
 )
 
+// GetRange computes the [start, end) slice indices for a paginated
+// query, clamping to listLen so callers never overrun. start==end is
+// returned for out-of-range pages, signalling an empty result.
 func GetRange(index, count, listLen uint32) (uint32, uint32) {
 	start := index * count
 	if start >= listLen {
@@ -26,6 +33,10 @@ func GetRange(index, count, listLen uint32) (uint32, uint32) {
 	return start, end
 }
 
+// GetFrontierContext returns the current chain head momentum and a
+// read-only VM context bound to addr's frontier state. Used by
+// embedded-contract RPC wrappers that need to call into VM-level
+// view methods at the chain tip.
 func GetFrontierContext(c chain.Chain, addr types.Address) (*nom.Momentum, vm_context.AccountVmContext, error) {
 	store := c.GetFrontierMomentumStore()
 
@@ -42,6 +53,10 @@ func GetFrontierContext(c chain.Chain, addr types.Address) (*nom.Momentum, vm_co
 	return frontier, context, nil
 }
 
+// checkTokenIdValid validates that ts (when non-nil and non-zero)
+// resolves to a known token in the frontier momentum store. Used by
+// PublishRawTransaction to reject blocks that reference a
+// non-existent token before they enter VM dispatch.
 func checkTokenIdValid(chain chain.Chain, ts *types.ZenonTokenStandard) error {
 	store := chain.GetFrontierMomentumStore()
 	if ts != nil && (*ts) != types.ZeroTokenStandard {

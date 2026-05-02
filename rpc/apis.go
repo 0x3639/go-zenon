@@ -9,6 +9,11 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// getApi resolves a single config-style module name to the API
+// descriptors that should be registered on the JSON-RPC server.
+// Unknown module names produce an empty slice (no error) so the node
+// can be configured with arbitrary module lists without aborting on
+// typos.
 func getApi(z zenon.Zenon, p2p *p2p.Server, apiModule string) []rpc.API {
 	switch apiModule {
 	case "ledger":
@@ -111,6 +116,9 @@ func getApi(z zenon.Zenon, p2p *p2p.Server, apiModule string) []rpc.API {
 		return []rpc.API{}
 	}
 }
+
+// GetApis flattens a list of module names into the union of API
+// descriptors they expose.
 func GetApis(z zenon.Zenon, p2p *p2p.Server, apiModule ...string) []rpc.API {
 	var apis []rpc.API
 	for _, m := range apiModule {
@@ -118,6 +126,10 @@ func GetApis(z zenon.Zenon, p2p *p2p.Server, apiModule ...string) []rpc.API {
 	}
 	return apis
 }
+
+// GetPublicApis returns every default-on namespace: ledger,
+// ledgerSubscribe, embedded, and stats. Used as the canonical
+// public-RPC bundle.
 func GetPublicApis(z zenon.Zenon, p2p *p2p.Server) []rpc.API {
 	return GetApis(z, p2p, "ledger", "ledgerSubscribe", "embedded", "stats")
 }

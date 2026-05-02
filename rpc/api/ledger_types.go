@@ -11,25 +11,41 @@ import (
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 )
 
+// DetailedMomentum bundles a momentum with the full content of every
+// account block it confirmed — used by GetDetailedMomentumsByHeight.
 type DetailedMomentum struct {
 	AccountBlocks []*AccountBlock `json:"blocks"`
 	Momentum      *Momentum       `json:"momentum"`
 }
+
+// Momentum is the wire-form momentum, embedding [nom.Momentum] and
+// adding the Producer pillar address derived from the signature.
 type Momentum struct {
 	*nom.Momentum
 	Producer types.Address `json:"producer"`
 }
+
+// MomentumHeader is the lightweight header-only momentum summary
+// (hash + height + timestamp) used by subscription notifications.
 type MomentumHeader struct {
 	Hash      types.Hash `json:"hash"`
 	Height    uint64     `json:"height"`
 	Timestamp int64      `json:"timestamp"`
 }
+
+// AccountBlockConfirmationDetail records when (which momentum) an
+// account block was confirmed, plus the running depth — useful for
+// "N confirmations" checks in clients.
 type AccountBlockConfirmationDetail struct {
 	NumConfirmations  uint64     `json:"numConfirmations"`
 	MomentumHeight    uint64     `json:"momentumHeight"`
 	MomentumHash      types.Hash `json:"momentumHash"`
 	MomentumTimestamp int64      `json:"momentumTimestamp"`
 }
+
+// AccountBlock is the wire-form account block. Embeds the canonical
+// [nom.AccountBlock] and decorates it with the resolved token info,
+// confirmation details, and the paired (send⇄receive) sibling block.
 type AccountBlock struct {
 	nom.AccountBlock
 
@@ -38,6 +54,9 @@ type AccountBlock struct {
 	PairedAccountBlock *AccountBlock                   `json:"pairedAccountBlock"`
 }
 
+// AccountBlockMarshal is the JSON-friendly twin of [AccountBlock]:
+// big.Int values render as decimal strings rather than JSON numbers,
+// avoiding precision loss in browser clients.
 type AccountBlockMarshal struct {
 	nom.AccountBlockMarshal
 	TokenInfo          *TokenMarshal                   `json:"token"`
@@ -45,6 +64,9 @@ type AccountBlockMarshal struct {
 	PairedAccountBlock *AccountBlockMarshal            `json:"pairedAccountBlock"`
 }
 
+// ToAccountBlockMarshal projects an in-memory AccountBlock to its
+// wire-friendly Marshal twin (big.Int → string), recursively
+// covering the paired block and token info.
 func (block *AccountBlock) ToAccountBlockMarshal() *AccountBlockMarshal {
 	aux := &AccountBlockMarshal{
 		AccountBlockMarshal: *block.AccountBlock.ToNomMarshalJson(),
@@ -59,10 +81,15 @@ func (block *AccountBlock) ToAccountBlockMarshal() *AccountBlockMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int values
+// serialise as decimal strings.
 func (block *AccountBlock) MarshalJSON() ([]byte, error) {
 	return json.Marshal(block.ToAccountBlockMarshal())
 }
 
+// UnmarshalJSON is the inverse of MarshalJSON — decodes the wire
+// form back into an in-memory AccountBlock with native big.Int
+// values.
 func (block *AccountBlock) UnmarshalJSON(data []byte) error {
 	aux := new(AccountBlockMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -80,6 +107,9 @@ func (block *AccountBlock) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FromApiMarshalJson reverses [AccountBlock.ToAccountBlockMarshal]:
+// inflates a wire-form AccountBlockMarshal back into an in-memory
+// AccountBlock with native big.Int balances.
 func (a *AccountBlockMarshal) FromApiMarshalJson() *AccountBlock {
 	aux := &AccountBlock{
 		ConfirmationDetail: a.ConfirmationDetail,
@@ -95,11 +125,16 @@ func (a *AccountBlockMarshal) FromApiMarshalJson() *AccountBlock {
 	return aux
 }
 
+// AccountInfo is the response shape of
+// [LedgerApi.GetAccountInfoByAddress] — frontier height plus a
+// per-token balance map.
 type AccountInfo struct {
 	Address        types.Address                             `json:"address"`
 	AccountHeight  uint64                                    `json:"accountHeight"`
 	BalanceInfoMap map[types.ZenonTokenStandard]*BalanceInfo `json:"balanceInfoMap"`
 }
+
+// BalanceInfo is one (token, balance) pair from an AccountInfo.
 type BalanceInfo struct {
 	TokenInfo *Token   `json:"token"`
 	Balance   *big.Int `json:"balance"`
@@ -131,6 +166,9 @@ func (b *BalanceInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Token is the wire-form token descriptor. Mirrors the token info
+// stored on-chain by the embedded token contract; supply fields are
+// big.Int and rendered as decimal strings via [TokenMarshal].
 type Token struct {
 	TokenName          string                   `json:"name"`
 	TokenSymbol        string                   `json:"symbol"`
@@ -145,6 +183,8 @@ type Token struct {
 	IsUtility          bool                     `json:"isUtility"`
 }
 
+// TokenMarshal is the JSON-friendly twin of [Token] — supply fields
+// are decimal strings.
 type TokenMarshal struct {
 	TokenName          string                   `json:"name"`
 	TokenSymbol        string                   `json:"symbol"`
@@ -214,6 +254,10 @@ func (t *TokenMarshal) FromTokenMarshal() *Token {
 	}
 }
 
+// AccountBlockList is the paginated response shape used by every
+// account-block list endpoint. Count is the total matching count;
+// More is true when the underlying query was truncated and another
+// page may follow.
 type AccountBlockList struct {
 	List  []*AccountBlock `json:"list"`
 	Count int             `json:"count"`
@@ -265,18 +309,31 @@ func (abl *AccountBlockList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MomentumList is the response shape for momentum-list endpoints.
+// Count is the chain head height at query time.
 type MomentumList struct {
 	List  []*Momentum `json:"list"`
 	Count int         `json:"count"`
 }
+
+// DetailedMomentumList is MomentumList augmented with each momentum's
+// full account-block content — returned by
+// GetDetailedMomentumsByHeight.
 type DetailedMomentumList struct {
 	List  []*DetailedMomentum `json:"list"`
 	Count int                 `json:"count"`
 }
 
+// ToLedgerBlock returns a deep copy of the embedded ledger
+// AccountBlock — strips the API-only decorations (token info,
+// confirmation, paired block) so the result can be handed to the VM
+// supervisor.
 func (block *AccountBlock) ToLedgerBlock() (*nom.AccountBlock, error) {
 	return block.AccountBlock.Copy(), nil
 }
+
+// ComputeHash returns the canonical hash of the underlying ledger
+// block, ignoring API-only decorations.
 func (block *AccountBlock) ComputeHash() (*types.Hash, error) {
 	lAb, err := block.ToLedgerBlock()
 	if err != nil {
@@ -377,6 +434,9 @@ func (block *AccountBlock) addAllExtraInfo(chain chain.Chain) error {
 	return nil
 }
 
+// momentumListToDetailedList expands every momentum in list with
+// its constituent account blocks, returning the heavyweight
+// DetailedMomentumList shape used by GetDetailedMomentumsByHeight.
 func momentumListToDetailedList(chain chain.Chain, list *MomentumList) (*DetailedMomentumList, error) {
 	ans := &DetailedMomentumList{
 		Count: list.Count,
@@ -400,6 +460,11 @@ func momentumListToDetailedList(chain chain.Chain, list *MomentumList) (*Detaile
 
 	return ans, nil
 }
+
+// ledgerMomentumToRpc projects a chain-layer momentum into the
+// wire-form Momentum, populating the cached Producer address and
+// substituting empty slices for nil Data / Content so the JSON
+// output is stable.
 func ledgerMomentumToRpc(m *nom.Momentum) (*Momentum, error) {
 	if m == nil {
 		return nil, nil
@@ -434,6 +499,10 @@ func ledgerMomentumsToRpc(list []*nom.Momentum) ([]*Momentum, error) {
 
 	return momentums, nil
 }
+
+// ledgerAccountBlockToRpc projects a chain-layer account block to
+// the wire form, eagerly resolving the token info, paired block,
+// and confirmation details.
 func ledgerAccountBlockToRpc(chain chain.Chain, lAb *nom.AccountBlock) (*AccountBlock, error) {
 	rpcBlock := &AccountBlock{
 		AccountBlock: *lAb.Copy(),
@@ -462,6 +531,9 @@ func ledgerAccountBlocksToRpc(chain chain.Chain, list []*nom.AccountBlock) ([]*A
 	}
 	return blocks, nil
 }
+
+// LedgerTokenInfoToRpc projects an embedded-contract TokenInfo to
+// the wire-form Token. Returns nil when input is nil.
 func LedgerTokenInfoToRpc(tokenInfo *definition.TokenInfo) *Token {
 	var rt *Token = nil
 	if tokenInfo != nil {
@@ -487,6 +559,8 @@ func LedgerTokenInfoToRpc(tokenInfo *definition.TokenInfo) *Token {
 	}
 	return rt
 }
+
+// LedgerTokenInfosToRpc maps LedgerTokenInfoToRpc over a slice.
 func LedgerTokenInfosToRpc(list []*definition.TokenInfo) []*Token {
 	tokenInfos := make([]*Token, 0)
 	for _, item := range list {

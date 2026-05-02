@@ -14,6 +14,9 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// NewLedgerApi constructs the "ledger" namespace handler, scoping it
+// to the given Zenon instance. Returned value is registered with the
+// JSON-RPC server in [github.com/zenon-network/go-zenon/rpc.GetApis].
 func NewLedgerApi(z zenon.Zenon) *LedgerApi {
 	api := &LedgerApi{
 		z:     z,
@@ -24,22 +27,39 @@ func NewLedgerApi(z zenon.Zenon) *LedgerApi {
 	return api
 }
 
+// LedgerApi is the "ledger" JSON-RPC namespace. Methods cover
+// account-block and momentum reads plus the publish-transaction
+// write path. Stateless after construction; safe for concurrent use.
 type LedgerApi struct {
 	z     zenon.Zenon
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// Caps for the unreceived-block query — separate from the generic
+// pagination limits because GetUnreceivedBlocksByAddress walks an
+// in-memory mailbox and the cost grows with index*size.
 const (
+	// unreceivedMaxPageIndex caps pageIndex on
+	// GetUnreceivedBlocksByAddress.
 	unreceivedMaxPageIndex = 10
-	unreceivedMaxPageSize  = 50
-	unreceivedQuerySize    = unreceivedMaxPageIndex * unreceivedMaxPageSize
+	// unreceivedMaxPageSize caps pageSize on the same endpoint.
+	unreceivedMaxPageSize = 50
+	// unreceivedQuerySize is the underlying mailbox fetch limit
+	// (max possible result set across all pages).
+	unreceivedQuerySize = unreceivedMaxPageIndex * unreceivedMaxPageSize
 )
 
+// String implements fmt.Stringer for log output.
 func (l LedgerApi) String() string {
 	return "LedgerApi"
 }
 
+// PublishRawTransaction is the write path: validates a client-built
+// account block, runs it through [vm.Supervisor] for state checks,
+// and publishes it via the [zenon.Broadcaster] for chain inclusion.
+// Rejects blocks whose ChainIdentifier does not match this node's
+// chain to prevent cross-network replay.
 func (l *LedgerApi) PublishRawTransaction(block *AccountBlock) error {
 	defer common.RecoverStack()
 	if block == nil {
@@ -73,7 +93,9 @@ func (l *LedgerApi) PublishRawTransaction(block *AccountBlock) error {
 	return nil
 }
 
-// Unconfirmed AccountBlocks
+// GetUnconfirmedBlocksByAddress returns blocks the local node has
+// accepted into its account pool but that have not yet been confirmed
+// by inclusion in a momentum.
 func (l *LedgerApi) GetUnconfirmedBlocksByAddress(address types.Address, pageIndex, pageSize uint32) (*AccountBlockList, error) {
 	if pageSize > RpcMaxPageSize {
 		return nil, ErrPageSizeParamTooBig
@@ -94,7 +116,8 @@ func (l *LedgerApi) GetUnconfirmedBlocksByAddress(address types.Address, pageInd
 	}, nil
 }
 
-// AccountBlocks
+// GetFrontierAccountBlock returns the most recent account block on
+// address's chain (the chain tip), or nil if the account is empty.
 func (l *LedgerApi) GetFrontierAccountBlock(address types.Address) (*AccountBlock, error) {
 	accountStore := l.chain.GetFrontierAccountStore(address)
 	block, err := accountStore.Frontier()
@@ -106,6 +129,9 @@ func (l *LedgerApi) GetFrontierAccountBlock(address types.Address) (*AccountBloc
 	}
 	return ledgerAccountBlockToRpc(l.chain, block)
 }
+
+// GetAccountBlockByHash returns the account block with the given
+// hash, or nil if not found in the frontier momentum store.
 func (l *LedgerApi) GetAccountBlockByHash(blockHash types.Hash) (*AccountBlock, error) {
 	momentumStore := l.chain.GetFrontierMomentumStore()
 	block, err := momentumStore.GetAccountBlockByHash(blockHash)
@@ -119,6 +145,11 @@ func (l *LedgerApi) GetAccountBlockByHash(blockHash types.Hash) (*AccountBlock, 
 
 	return ledgerAccountBlockToRpc(l.chain, block)
 }
+
+// GetAccountBlocksByHeight returns up to count account blocks
+// starting at the given height on address's chain. Returns the
+// empty list if the account has no blocks; rejects height==0 with
+// [ErrHeightParamIsZero].
 func (l *LedgerApi) GetAccountBlocksByHeight(address types.Address, height, count uint64) (*AccountBlockList, error) {
 	if height == 0 {
 		return nil, ErrHeightParamIsZero
@@ -157,6 +188,10 @@ func (l *LedgerApi) GetAccountBlocksByHeight(address types.Address, height, coun
 		Count: int(frontier.Height),
 	}, nil
 }
+
+// GetAccountBlocksByPage returns address's account blocks in
+// reverse-chronological pages. Page 0 is the most recent pageSize
+// blocks; subsequent pages walk backwards toward genesis.
 func (l *LedgerApi) GetAccountBlocksByPage(address types.Address, pageIndex, pageSize uint32) (*AccountBlockList, error) {
 	if pageSize > RpcMaxPageSize {
 		return nil, ErrPageSizeParamTooBig
@@ -200,6 +235,10 @@ func (l *LedgerApi) GetAccountBlocksByPage(address types.Address, pageIndex, pag
 	}
 	return ans, nil
 }
+
+// GetAccountInfoByAddress returns address's frontier height plus a
+// per-token-standard balance map. Tokens whose info is missing from
+// the momentum store are silently skipped.
 func (l *LedgerApi) GetAccountInfoByAddress(address types.Address) (*AccountInfo, error) {
 	l.log.Info("GetAccountInfoByAddress")
 
@@ -242,6 +281,11 @@ func (l *LedgerApi) GetAccountInfoByAddress(address types.Address) (*AccountInfo
 		BalanceInfoMap: balanceInfoMap,
 	}, nil
 }
+
+// GetUnreceivedBlocksByAddress returns send-blocks targeting address
+// that have not yet been receipted. Walks the address's mailbox in
+// the frontier momentum store; capped at unreceivedQuerySize total
+// across all pages.
 func (l *LedgerApi) GetUnreceivedBlocksByAddress(address types.Address, pageIndex, pageSize uint32) (*AccountBlockList, error) {
 	l.log.Info("GetUnreceivedBlocksByAddress", "address", address, "page", pageIndex, "size", pageSize)
 	if pageSize > unreceivedMaxPageSize {
@@ -291,7 +335,7 @@ func (l *LedgerApi) GetUnreceivedBlocksByAddress(address types.Address, pageInde
 	}, nil
 }
 
-// Momentum
+// GetFrontierMomentum returns the current chain head momentum.
 func (l *LedgerApi) GetFrontierMomentum() (*Momentum, error) {
 	momentum, err := l.chain.GetFrontierMomentumStore().GetFrontierMomentum()
 	if err != nil {
@@ -299,6 +343,10 @@ func (l *LedgerApi) GetFrontierMomentum() (*Momentum, error) {
 	}
 	return ledgerMomentumToRpc(momentum)
 }
+
+// GetMomentumBeforeTime returns the highest momentum produced at or
+// before the given Unix timestamp, or nil if none exists (e.g. the
+// timestamp predates genesis).
 func (l *LedgerApi) GetMomentumBeforeTime(timestamp int64) (*Momentum, error) {
 	currentTime := time.Unix(timestamp, 0)
 	momentum, err := l.chain.GetFrontierMomentumStore().GetMomentumBeforeTime(&currentTime)
@@ -308,6 +356,9 @@ func (l *LedgerApi) GetMomentumBeforeTime(timestamp int64) (*Momentum, error) {
 
 	return ledgerMomentumToRpc(momentum)
 }
+
+// GetMomentumByHash returns the momentum with the given hash, or
+// nil if not found.
 func (l *LedgerApi) GetMomentumByHash(hash types.Hash) (*Momentum, error) {
 	block, err := l.chain.GetFrontierMomentumStore().GetMomentumByHash(hash)
 	if err != nil {
@@ -316,6 +367,9 @@ func (l *LedgerApi) GetMomentumByHash(hash types.Hash) (*Momentum, error) {
 	}
 	return ledgerMomentumToRpc(block)
 }
+
+// GetMomentumsByHeight returns up to count consecutive momentums
+// starting at the given height. count is capped at RpcMaxCountSize.
 func (l *LedgerApi) GetMomentumsByHeight(height, count uint64) (*MomentumList, error) {
 	if height == 0 {
 		return nil, ErrHeightParamIsZero
@@ -348,6 +402,9 @@ func (l *LedgerApi) GetMomentumsByHeight(height, count uint64) (*MomentumList, e
 		Count: int(frontier.Height),
 	}, nil
 }
+
+// GetMomentumsByPage returns momentums in reverse-chronological
+// pages. Page 0 is the most recent pageSize momentums.
 func (l *LedgerApi) GetMomentumsByPage(pageIndex, pageSize uint32) (*MomentumList, error) {
 	if pageSize > RpcMaxPageSize {
 		return nil, ErrPageSizeParamTooBig
@@ -384,6 +441,11 @@ func (l *LedgerApi) GetMomentumsByPage(pageIndex, pageSize uint32) (*MomentumLis
 	}
 	return ans, nil
 }
+
+// GetDetailedMomentumsByHeight returns momentums alongside their
+// constituent account blocks. More expensive than
+// GetMomentumsByHeight — used by explorers needing full block
+// content per momentum.
 func (l *LedgerApi) GetDetailedMomentumsByHeight(height, count uint64) (*DetailedMomentumList, error) {
 	l.log.Info("GetDetailedMomentumsByHeight", "height", height, "count", count)
 	if count > RpcMaxCountSize {

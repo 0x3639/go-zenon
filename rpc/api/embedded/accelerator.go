@@ -17,11 +17,15 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// AcceleratorApi is the "embedded.accelerator" namespace — read
+// access to project / phase funding queries on the accelerator
+// contract.
 type AcceleratorApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// NewAcceleratorApi constructs the accelerator namespace handler.
 func NewAcceleratorApi(z zenon.Zenon) *AcceleratorApi {
 	return &AcceleratorApi{
 		chain: z.Chain(),
@@ -29,6 +33,10 @@ func NewAcceleratorApi(z zenon.Zenon) *AcceleratorApi {
 	}
 }
 
+// toProject expands a storage-layer Project into the wire-form
+// [Project], eagerly resolving phase entries and vote breakdowns.
+// Skips phases whose entries fail to load (logged at the storage
+// layer).
 func (a *AcceleratorApi) toProject(context vm_context.AccountVmContext, abiProject *definition.Project) *Project {
 	project := &Project{
 		Id:                  abiProject.Id,

@@ -25,6 +25,9 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+// MetadataApi is the namespace under which the built-in introspection
+// service ([RPCService]) is registered. Clients call rpc_modules to
+// list available namespaces.
 const MetadataApi = "rpc"
 
 // CodecOption specifies which type of messages a codec supports.
@@ -40,7 +43,10 @@ const (
 	OptionSubscriptions = 1 << iota // support pub sub
 )
 
-// Server is an RPC server.
+// Server is an RPC server. Holds a serviceRegistry (registered
+// namespace → method tables), the active codec set so [Server.Stop]
+// can fan out cancellation, and an atomic run flag that gates new
+// request acceptance.
 type Server struct {
 	services serviceRegistry
 	idgen    func() ID
@@ -88,9 +94,10 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 	c.Close()
 }
 
-// serveSingleRequest reads and processes a single RPC request from the given codec. This
-// is used to serve HTTP connections. Subscriptions and reverse calls are not allowed in
-// this mode.
+// serveSingleRequest reads and processes a single RPC request from
+// the given codec. This is used to serve HTTP connections.
+// Subscriptions and reverse calls are disabled in this mode because
+// the request/response lifecycle is bounded by a single HTTP exchange.
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	// Don't serve if server is stopped.
 	if atomic.LoadInt32(&s.run) == 0 {

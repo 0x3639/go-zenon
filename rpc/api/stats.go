@@ -16,12 +16,18 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// StatsApi is the "stats" JSON-RPC namespace. Exposes process / OS
+// / network / sync introspection used by operators and dashboards.
+// Stateless after construction; safe for concurrent use.
 type StatsApi struct {
 	z   zenon.Zenon
 	p2p *p2p.Server
 	log log15.Logger
 }
 
+// NewStatsApi constructs the "stats" namespace handler. The p2p
+// pointer is required for the network-info endpoints; pass the same
+// server that was registered with the node.
 func NewStatsApi(z zenon.Zenon, p2p *p2p.Server) *StatsApi {
 	return &StatsApi{
 		z:   z,
@@ -30,6 +36,10 @@ func NewStatsApi(z zenon.Zenon, p2p *p2p.Server) *StatsApi {
 	}
 }
 
+// OsInfoResponse is the wire shape returned by [StatsApi.OsInfo].
+// All fields default to zero values when the underlying gopsutil
+// probe fails; callers should treat absent values as "unknown"
+// rather than retrying.
 type OsInfoResponse struct {
 	Os              string `json:"os"`
 	Platform        string `json:"platform"`
@@ -42,6 +52,9 @@ type OsInfoResponse struct {
 	NumGoroutine    int    `json:"numGoroutine"`
 }
 
+// OsInfo reports host OS, memory, and Go runtime statistics.
+// gopsutil errors are silently ignored — partial data is preferred
+// over failing the request.
 func (api *StatsApi) OsInfo() (*OsInfoResponse, error) {
 	result := &OsInfoResponse{}
 	stat, e := host.Info()
@@ -64,11 +77,16 @@ func (api *StatsApi) OsInfo() (*OsInfoResponse, error) {
 	return result, nil
 }
 
+// ProcessInfoResponse is the wire shape returned by
+// [StatsApi.ProcessInfo]. Version and Commit are baked into the
+// binary at build time via [github.com/zenon-network/go-zenon/metadata].
 type ProcessInfoResponse struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 }
 
+// ProcessInfo returns the build version and git commit baked into
+// this binary.
 func (api *StatsApi) ProcessInfo() (*ProcessInfoResponse, error) {
 	return &ProcessInfoResponse{
 		Version: metadata.Version,
@@ -76,17 +94,23 @@ func (api *StatsApi) ProcessInfo() (*ProcessInfoResponse, error) {
 	}, nil
 }
 
+// Peer is the wire-form summary of a connected p2p peer.
 type Peer struct {
 	PublicKey string `json:"publicKey"`
 	IP        string `json:"ip"`
 	Name      string `json:"name"`
 }
+
+// NetworkInfoResponse is returned by [StatsApi.NetworkInfo] —
+// reports the local node identity (Self) and connected peer set.
 type NetworkInfoResponse struct {
 	NumPeers int     `json:"numPeers"`
 	Peers    []*Peer `json:"peers"`
 	Self     *Peer   `json:"self"`
 }
 
+// p2pPeerToPeer projects a [p2p.Peer] into the wire-form [Peer].
+// Strips the port suffix from RemoteAddr to produce a bare IP.
 func p2pPeerToPeer(peer *p2p.Peer) (*Peer, error) {
 	ip := peer.RemoteAddr().String()
 	splits := strings.Split(ip, ":")
@@ -96,6 +120,10 @@ func p2pPeerToPeer(peer *p2p.Peer) (*Peer, error) {
 		Name:      peer.Name(),
 	}, nil
 }
+
+// selfToPeer renders the local node as a Peer — IP is hard-coded to
+// loopback because the local listening interface is not meaningful
+// to remote callers.
 func selfToPeer(node *discover.Node) *Peer {
 	return &Peer{
 		PublicKey: node.ID.String(),
@@ -104,6 +132,8 @@ func selfToPeer(node *discover.Node) *Peer {
 	}
 }
 
+// NetworkInfo returns the connected-peer set and the local node's
+// identity.
 func (api *StatsApi) NetworkInfo() (*NetworkInfoResponse, error) {
 	peersRaw := api.p2p.Peers()
 	peers := make([]*Peer, 0, len(peersRaw))
@@ -122,6 +152,8 @@ func (api *StatsApi) NetworkInfo() (*NetworkInfoResponse, error) {
 	}, nil
 }
 
+// SyncInfo reports the broadcaster's view of catch-up progress
+// (Unknown / Syncing / SyncDone / NotEnoughPeers + heights).
 func (api *StatsApi) SyncInfo() (*protocol.SyncInfo, error) {
 	return api.z.Broadcaster().SyncInfo(), nil
 }

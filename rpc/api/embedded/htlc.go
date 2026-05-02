@@ -13,6 +13,8 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// HtlcApi is the "embedded.htlc" namespace — read access to
+// hash-time-locked contract entries.
 type HtlcApi struct {
 	chain chain.Chain
 	z     zenon.Zenon
@@ -20,6 +22,7 @@ type HtlcApi struct {
 	log   log15.Logger
 }
 
+// NewHtlcApi constructs the HTLC namespace handler.
 func NewHtlcApi(z zenon.Zenon) *HtlcApi {
 	return &HtlcApi{
 		chain: z.Chain(),
@@ -29,6 +32,8 @@ func NewHtlcApi(z zenon.Zenon) *HtlcApi {
 	}
 }
 
+// GetById returns the HTLC entry with the given id, or
+// ErrDataNonExistent if no such entry exists.
 func (a *HtlcApi) GetById(id types.Hash) (*definition.HtlcInfo, error) {
 
 	_, context, err := api.GetFrontierContext(a.chain, types.HtlcContract)
@@ -44,6 +49,8 @@ func (a *HtlcApi) GetById(id types.Hash) (*definition.HtlcInfo, error) {
 	return htlcInfo, nil
 }
 
+// GetProxyUnlockStatus reports whether address is currently allowed
+// to act as an HTLC proxy unlocker.
 func (a *HtlcApi) GetProxyUnlockStatus(address types.Address) (bool, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.HtlcContract)
 	if err != nil {

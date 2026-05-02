@@ -11,6 +11,9 @@ import (
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 )
 
+// getDepositedQsr returns the QSR balance fused on contract for
+// address, or nil if no deposit exists. Used by APIs that surface
+// per-user fused-QSR figures (sentinel, stake, etc.).
 func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Address) (*big.Int, error) {
 	_, context, err := api.GetFrontierContext(chain, contract)
 	if err != nil {
@@ -23,6 +26,10 @@ func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Ad
 		return qsrDeposit.Qsr, nil
 	}
 }
+
+// getUncollectedReward returns address's pending reward balance
+// (ZNN + QSR) on contract — i.e., rewards already credited but not
+// yet withdrawn.
 func getUncollectedReward(chain chain.Chain, contract types.Address, address types.Address) (*definition.RewardDeposit, error) {
 	_, context, err := api.GetFrontierContext(chain, contract)
 	if err != nil {
@@ -31,12 +38,17 @@ func getUncollectedReward(chain chain.Chain, contract types.Address, address typ
 	return definition.GetRewardDeposit(context.Storage(), &address)
 }
 
+// RewardHistoryEntry is one (epoch, ZNN, QSR) row of historical
+// reward data — returned by GetFrontierRewardByPage on each
+// reward-bearing namespace (pillar, sentinel, stake).
 type RewardHistoryEntry struct {
 	Epoch int64    `json:"epoch"`
 	Znn   *big.Int `json:"znnAmount"`
 	Qsr   *big.Int `json:"qsrAmount"`
 }
 
+// RewardHistoryEntryMarshal is the JSON-friendly twin of
+// [RewardHistoryEntry] with decimal-string amounts.
 type RewardHistoryEntryMarshal struct {
 	Epoch int64  `json:"epoch"`
 	Znn   string `json:"znnAmount"`
@@ -68,11 +80,17 @@ func (r *RewardHistoryEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// RewardHistoryList is the paginated response shape for
+// reward-history queries.
 type RewardHistoryList struct {
 	Count int64                 `json:"count"`
 	List  []*RewardHistoryEntry `json:"list"`
 }
 
+// getFrontierRewardByPage walks the reward-deposit history backwards
+// from the latest epoch, returning up to pageSize entries per page.
+// Empty epochs (no reward deposit for address) are skipped silently.
+// Shared by every reward-bearing namespace.
 func getFrontierRewardByPage(chain chain.Chain, contract types.Address, address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

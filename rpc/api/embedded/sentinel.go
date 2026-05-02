@@ -12,11 +12,14 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// SentinelApi is the "embedded.sentinel" namespace — read access to
+// the sentinel registry plus reward queries.
 type SentinelApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// SentinelInfo is the wire-form sentinel record.
 type SentinelInfo struct {
 	Owner                 types.Address `json:"owner"`
 	RegistrationTimestamp int64         `json:"registrationTimestamp"`
@@ -24,11 +27,14 @@ type SentinelInfo struct {
 	RevokeCooldown        int64         `json:"revokeCooldown"`
 	Active                bool          `json:"active"`
 }
+
+// SentinelInfoList is the paginated response shape.
 type SentinelInfoList struct {
 	Count int             `json:"count"`
 	List  []*SentinelInfo `json:"list"`
 }
 
+// NewSentinelApi constructs the sentinel namespace handler.
 func NewSentinelApi(z zenon.Zenon) *SentinelApi {
 	return &SentinelApi{
 		chain: z.Chain(),

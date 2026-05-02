@@ -6,13 +6,42 @@
 import "github.com/zenon-network/go-zenon/rpc/api/subscribe"
 ```
 
-Package subscribe implements the RPC subscription channel for momentum, account\-block, and event notifications.
+Package subscribe implements the RPC subscription channel for momentum and account\-block notifications.
 
 ### Overview
 
-subscribe runs a server that fans out chain events to connected RPC clients over WebSocket. It registers as a chain listener, buffers events per subscription, and tears each subscription down when its client disconnects or unsubscribes.
+subscribe runs a singleton [Server](<#Server>) that registers as a chain listener, fans out chain events into per\-subscription channels, and tears each subscription down when its client disconnects or unsubscribes. The [Api](<#Api>) surface \(returned by [GetSubscribeApi](<#GetSubscribeApi>)\) is registered under the "ledger" namespace via the [github.com/zenon\\\-network/go\\\-zenon/rpc](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/>) wiring; the [github.com/zenon\\\-network/go\\\-zenon/rpc/server](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/>) framework transports notifications back to the client over WebSocket.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Subscription Types
+
+- "ledger.momentums" → momentum\-header stream.
+- "ledger.allAccountBlocks" → all account blocks \(firehose\).
+- "ledger.accountBlocksByAddress" → blocks where Address matches.
+- "ledger.unreceivedAccountBlocksByAddress" → unreceived send\-blocks targeting the given address.
+
+### Concurrency
+
+One goroutine \(\[Server.work\]\) owns the subscriptions map; install / uninstall / broadcast all marshal through channels with these buffer sizes:
+
+- acChanSize = 100 \(account\-block events\)
+- mChanSize = 100 \(momentum events\)
+- installSize = 100 \(new subscriptions\)
+- uninstallSize = 100 \(cancellations\)
+
+If a channel fills up, the offending event is logged and dropped — the chain side never blocks waiting on slow subscribers.
+
+### Singleton Pattern
+
+The server is a process\-wide singleton: [GetSubscribeServer](<#GetSubscribeServer>) constructs / returns it; [GetSubscribeApi](<#GetSubscribeApi>) returns its [Api](<#Api>) view. [GetSubscribeApi](<#GetSubscribeApi>) panics if called before [GetSubscribeServer](<#GetSubscribeServer>) / [Server.Start](<#Server.Start>). [Server.Stop](<#Server.Stop>) resets the singleton so subsequent calls can re\-bootstrap \(used by integration tests\).
+
+### Generated Files
+
+None. Files are Zenon\-specific \(no upstream header\).
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/rpc/server](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/>) — pub/sub plumbing \(Notifier, Subscription\).
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — event source via the chain.Listener interface implemented by [Server](<#Server>).
 
 ## Index
 
@@ -56,7 +85,7 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="acChanSize"></a>
+<a name="acChanSize"></a>Channel buffer sizes for the work\-loop fan\-in. Sized for typical chain throughput; overflow drops the event with a log line rather than blocking the chain side.
 
 ```go
 const (
@@ -68,9 +97,9 @@ const (
 ```
 
 <a name="AccountBlock"></a>
-## type [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L32-L39>)
+## type [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L42-L49>)
 
-
+AccountBlock is the lightweight notification\-shape account block — just the fields needed to identify the block and its send/receive direction.
 
 ```go
 type AccountBlock struct {
@@ -84,18 +113,18 @@ type AccountBlock struct {
 ```
 
 <a name="newAccountBlock"></a>
-### func [newAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L41>)
+### func [newAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L54>)
 
 ```go
 func newAccountBlock(block *nom.AccountBlock) []*AccountBlock
 ```
 
-
+newAccountBlock projects a full chain\-layer account block into one or more notification\-shape AccountBlocks, recursively flattening descendant blocks \(contract\-emitted children\).
 
 <a name="Api"></a>
-## type [Api](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L57-L61>)
+## type [Api](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L74-L78>)
 
-
+Api is the client\-facing RPC surface — registered under the "ledger" namespace by [github.com/zenon\\\-network/go\\\-zenon/rpc](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/>). Its methods \(Momentums, AllAccountBlocks, etc.\) install subscriptions on the singleton [Server](<#Server>).
 
 ```go
 type Api struct {
@@ -106,63 +135,63 @@ type Api struct {
 ```
 
 <a name="GetSubscribeApi"></a>
-### func [GetSubscribeApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L96>)
+### func [GetSubscribeApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L125>)
 
 ```go
 func GetSubscribeApi() *Api
 ```
 
-
+GetSubscribeApi returns the [Api](<#Api>) handle for RPC registration. Panics if called before GetSubscribeServer / Server.Start — the node startup sequence guarantees both run first.
 
 <a name="Api.AccountBlocksByAddress"></a>
-### func \(\*Api\) [AccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L280>)
+### func \(\*Api\) [AccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L361>)
 
 ```go
 func (s *Api) AccountBlocksByAddress(ctx context.Context, address types.Address) (*rpc.Subscription, error)
 ```
 
-
+AccountBlocksByAddress opens a subscription on account blocks whose Address \(issuer\) matches the given address.
 
 <a name="Api.AllAccountBlocks"></a>
-### func \(\*Api\) [AllAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L276>)
+### func \(\*Api\) [AllAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L354>)
 
 ```go
 func (s *Api) AllAccountBlocks(ctx context.Context) (*rpc.Subscription, error)
 ```
 
-
+AllAccountBlocks opens a firehose subscription on every committed account block — high\-volume; intended for explorers and indexers, not user wallets.
 
 <a name="Api.Momentums"></a>
-### func \(\*Api\) [Momentums](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L272>)
+### func \(\*Api\) [Momentums](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L346>)
 
 ```go
 func (s *Api) Momentums(ctx context.Context) (*rpc.Subscription, error)
 ```
 
-
+Momentums opens a subscription that fires on every committed momentum.
 
 <a name="Api.UnreceivedAccountBlocksByAddress"></a>
-### func \(\*Api\) [UnreceivedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L284>)
+### func \(\*Api\) [UnreceivedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L370>)
 
 ```go
 func (s *Api) UnreceivedAccountBlocksByAddress(ctx context.Context, address types.Address) (*rpc.Subscription, error)
 ```
 
-
+UnreceivedAccountBlocksByAddress opens a subscription on send blocks whose ToAddress matches address — i.e., new "incoming" transfers the recipient hasn't yet receipted. Useful for wallets auto\-prompting to claim receives.
 
 <a name="Api.subscribe"></a>
-### func \(\*Api\) [subscribe](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L262>)
+### func \(\*Api\) [subscribe](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L334>)
 
 ```go
 func (s *Api) subscribe(ctx context.Context, options *subscriptionOptions) (*rpc.Subscription, error)
 ```
 
-
+subscribe is the shared body of the RPC subscription methods — extracts the [rpc.Notifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/#Notifier>) from ctx, installs the subscription, and returns the rpc.Subscription handle the framework uses to transmit notifications and detect client disconnect.
 
 <a name="BroadcastStats"></a>
-## type [BroadcastStats](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L188-L191>)
+## type [BroadcastStats](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L238-L241>)
 
-
+BroadcastStats is the counter pair logged after each broadcast pass — useful for diagnosing slow subscribers.
 
 ```go
 type BroadcastStats struct {
@@ -172,9 +201,9 @@ type BroadcastStats struct {
 ```
 
 <a name="Momentum"></a>
-## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L28-L31>)
+## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L34-L37>)
 
-
+Momentum is the lightweight notification\-shape momentum \(hash \+ height only\) — clients refetch full content via the regular ledger API if they need it.
 
 ```go
 type Momentum struct {
@@ -184,9 +213,9 @@ type Momentum struct {
 ```
 
 <a name="Server"></a>
-## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L62-L73>)
+## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L85-L96>)
 
-
+Server is the singleton subscription dispatcher. Embeds [Api](<#Api>) so callers of GetSubscribeApi see the install channel without needing the dispatch internals. Implements [chain.Listener](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Listener>) so chain events flow into InsertMomentum / DeleteMomentum and out to subscribed clients.
 
 ```go
 type Server struct {
@@ -213,117 +242,117 @@ var (
 ```
 
 <a name="GetSubscribeServer"></a>
-### func [GetSubscribeServer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L75>)
+### func [GetSubscribeServer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L100>)
 
 ```go
 func GetSubscribeServer(chain chain.Chain) *Server
 ```
 
-
+GetSubscribeServer returns the process\-wide subscription server, constructing it on first call. Idempotent across goroutines.
 
 <a name="Server.DeleteMomentum"></a>
-### func \(\*Server\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L162>)
+### func \(\*Server\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L207>)
 
 ```go
 func (s *Server) DeleteMomentum(*nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum is part of the chain\-listener interface but unused — reorgs don't currently emit retract notifications.
 
 <a name="Server.Init"></a>
-### func \(\*Server\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L108>)
+### func \(\*Server\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L139>)
 
 ```go
 func (s *Server) Init() error
 ```
 
-
+Init initialises the per\-subscription\-type maps. Called by the node lifecycle before Start.
 
 <a name="Server.InsertMomentum"></a>
-### func \(\*Server\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L141>)
+### func \(\*Server\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L183>)
 
 ```go
 func (s *Server) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+InsertMomentum is the chain\-listener callback invoked on each committed momentum. Pushes one momentum event and one batch of account\-block events into the work\-loop channels; full channels drop the event with an error log.
 
 <a name="Server.Start"></a>
-### func \(\*Server\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L116>)
+### func \(\*Server\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L150>)
 
 ```go
 func (s *Server) Start() error
 ```
 
-
+Start registers the server as a chain listener and launches the work\-loop goroutine. After Start, GetSubscribeApi may be called.
 
 <a name="Server.Stop"></a>
-### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L128>)
+### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L166>)
 
 ```go
 func (s *Server) Stop() error
 ```
 
-
+Stop unregisters from the chain, closes the work loop, and resets the singleton so future GetSubscribeServer calls can rebootstrap \(used by integration tests\).
 
 <a name="Server.broadcast"></a>
-### func \(\*Server\) [broadcast](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L201>)
+### func \(\*Server\) [broadcast](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L261>)
 
 ```go
 func (s *Server) broadcast(subscription *Subscription, data interface{}, stats *BroadcastStats)
 ```
 
-
+broadcast notifies one subscriber, uninstalling on the spot if the connection has already closed.
 
 <a name="Server.broadcastBlocks"></a>
-### func \(\*Server\) [broadcastBlocks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L223>)
+### func \(\*Server\) [broadcastBlocks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L291>)
 
 ```go
 func (s *Server) broadcastBlocks(blocks []*AccountBlock)
 ```
 
-
+broadcastBlocks dispatches a batch of account\-block events: firehose to AllAccountBlocksSubscription, per\-address filters to AccountBlocksSubscriptionByAddress, and unreceived\-only filtering \(send blocks only\) to UnreceivedAccountBlocksSubscriptionByAddress.
 
 <a name="Server.broadcastMomentums"></a>
-### func \(\*Server\) [broadcastMomentums](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L210>)
+### func \(\*Server\) [broadcastMomentums](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L273>)
 
 ```go
 func (s *Server) broadcastMomentums(momentum *Momentum)
 ```
 
-
+broadcastMomentums fans a single momentum event out to every subscriber on MomentumsSubscription.
 
 <a name="Server.install"></a>
-### func \(\*Server\) [install](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L193>)
+### func \(\*Server\) [install](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L245>)
 
 ```go
 func (s *Server) install(subscription *Subscription)
 ```
 
-
+install adds subscription to the per\-type map. Called from the work\-loop only.
 
 <a name="Server.uninstall"></a>
-### func \(\*Server\) [uninstall](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L197>)
+### func \(\*Server\) [uninstall](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L254>)
 
 ```go
 func (s *Server) uninstall(subscription *Subscription)
 ```
 
-
+uninstall removes subscription from the per\-type map. Called from the work\-loop only — either via the uninstallCh path \(client disconnect\) or inline from broadcast when a notify fails.
 
 <a name="Server.work"></a>
-### func \(\*Server\) [work](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L165>)
+### func \(\*Server\) [work](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/api.go#L213>)
 
 ```go
 func (s *Server) work()
 ```
 
-
+work is the central event loop: drains install / uninstall / momentum / account\-block channels and dispatches each. Owns the subscriptions map; no other goroutine reads or writes it.
 
 <a name="Subscription"></a>
-## type [Subscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L53-L58>)
+## type [Subscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L88-L93>)
 
-
+Subscription is one connected client's subscription. Bridges the dispatcher \(which calls Notify on chain events\) to the JSON\-RPC framework \(which transports the notification to the client and signals disconnect via rpc.Subscription.Err\(\)\).
 
 ```go
 type Subscription struct {
@@ -335,58 +364,65 @@ type Subscription struct {
 ```
 
 <a name="NewSubscription"></a>
-### func [NewSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L60>)
+### func [NewSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L97>)
 
 ```go
 func NewSubscription(notifier *rpc.Notifier, options *subscriptionOptions) *Subscription
 ```
 
-
+NewSubscription wraps a freshly\-created [rpc.Subscription](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/#Subscription>) from the framework alongside the dispatch options.
 
 <a name="Subscription.Closed"></a>
-### func \(\*Subscription\) [Closed](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L80>)
+### func \(\*Subscription\) [Closed](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L125>)
 
 ```go
 func (s *Subscription) Closed() bool
 ```
 
-
+Closed reports whether the underlying RPC subscription has been torn down — either because the client unsubscribed \(rpc.Err fired\) or the WebSocket connection closed \(notifier.Closed fired\). Cleared notifier is the persistent record of "closed".
 
 <a name="Subscription.Notify"></a>
-### func \(\*Subscription\) [Notify](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L70>)
+### func \(\*Subscription\) [Notify](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L110>)
 
 ```go
 func (s *Subscription) Notify(data interface{})
 ```
 
-
+Notify pushes data to the client over the RPC subscription channel. No\-ops if the subscription has been closed; logs \(does not surface\) transport errors.
 
 <a name="SubscriptionType"></a>
-## type [SubscriptionType](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L13>)
+## type [SubscriptionType](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L16>)
 
-
+SubscriptionType discriminates the four subscription kinds the dispatcher handles. Used as the outer key in \[Server.subscriptions\].
 
 ```go
 type SubscriptionType byte
 ```
 
-<a name="FirstSubscriptionType"></a>
+<a name="FirstSubscriptionType"></a>Subscription type values. FirstSubscriptionType / LastSubscriptionType are the half\-open range bounds used by [Server.Init](<#Server.Init>) to seed the per\-type maps.
 
 ```go
 const (
     FirstSubscriptionType SubscriptionType = iota
+    // AllAccountBlocksSubscription — firehose on every committed
+    // account block.
     AllAccountBlocksSubscription
+    // AccountBlocksSubscriptionByAddress — blocks issued by the
+    // given address.
     AccountBlocksSubscriptionByAddress
+    // UnreceivedAccountBlocksSubscriptionByAddress — send blocks
+    // addressed to the given address.
     UnreceivedAccountBlocksSubscriptionByAddress
+    // MomentumsSubscription — momentum-header notifications.
     MomentumsSubscription
     LastSubscriptionType
 )
 ```
 
 <a name="subscriptionOptions"></a>
-## type [subscriptionOptions](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L24-L28>)
+## type [subscriptionOptions](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L40-L44>)
 
-
+subscriptionOptions captures the parameters of a subscription — the type discriminator plus, for address\-scoped variants, the target address. createTime is recorded for diagnostics.
 
 ```go
 type subscriptionOptions struct {
@@ -397,48 +433,48 @@ type subscriptionOptions struct {
 ```
 
 <a name="NewBlocksByAddressSubscription"></a>
-### func [NewBlocksByAddressSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L39>)
+### func [NewBlocksByAddressSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L63>)
 
 ```go
 func NewBlocksByAddressSubscription(addr types.Address) *subscriptionOptions
 ```
 
-
+NewBlocksByAddressSubscription returns options for an AccountBlocksSubscriptionByAddress filter on addr.
 
 <a name="NewBlocksSubscription"></a>
-### func [NewBlocksSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L36>)
+### func [NewBlocksSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L57>)
 
 ```go
 func NewBlocksSubscription() *subscriptionOptions
 ```
 
-
+NewBlocksSubscription returns options for the firehose AllAccountBlocksSubscription.
 
 <a name="NewMomentumsSubscription"></a>
-### func [NewMomentumsSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L49>)
+### func [NewMomentumsSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L80>)
 
 ```go
 func NewMomentumsSubscription() *subscriptionOptions
 ```
 
-
+NewMomentumsSubscription returns options for a MomentumsSubscription.
 
 <a name="NewToUnreceivedBlocksSubscription"></a>
-### func [NewToUnreceivedBlocksSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L44>)
+### func [NewToUnreceivedBlocksSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L72>)
 
 ```go
 func NewToUnreceivedBlocksSubscription(addr types.Address) *subscriptionOptions
 ```
 
-
+NewToUnreceivedBlocksSubscription returns options for an UnreceivedAccountBlocksSubscriptionByAddress filter on addr \(send blocks where ToAddress == addr\).
 
 <a name="newSubscription"></a>
-### func [newSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L30>)
+### func [newSubscription](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/subscribe/subscription.go#L48>)
 
 ```go
 func newSubscription(subscriptionType SubscriptionType) *subscriptionOptions
 ```
 
-
+newSubscription constructs an options record for the given type with createTime stamped to now.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

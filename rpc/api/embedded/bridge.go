@@ -19,11 +19,15 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// BridgeApi is the "embedded.bridge" namespace — read access to
+// cross-chain bridge state (orchestrator, networks, wraps, unwraps,
+// security parameters, time-challenges).
 type BridgeApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// NewBridgeApi constructs the bridge namespace handler.
 func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 	return &BridgeApi{
 		chain: z.Chain(),
@@ -31,6 +35,8 @@ func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 	}
 }
 
+// GetBridgeInfo returns the global bridge configuration variable
+// (orchestrator address, halted flag, etc.).
 func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -45,6 +51,8 @@ func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	return bridgeInfo, nil
 }
 
+// GetSecurityInfo returns the bridge's security parameters
+// (administrator addresses, soft / hard delays, time-challenges).
 func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {

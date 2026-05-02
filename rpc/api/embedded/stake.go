@@ -16,6 +16,8 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// StakeApi is the "embedded.stake" namespace — read access to ZNN
+// staking entries plus reward queries.
 type StakeApi struct {
 	chain chain.Chain
 	z     zenon.Zenon
@@ -23,6 +25,7 @@ type StakeApi struct {
 	log   log15.Logger
 }
 
+// NewStakeApi constructs the stake namespace handler.
 func NewStakeApi(z zenon.Zenon) *StakeApi {
 	return &StakeApi{
 		chain: z.Chain(),

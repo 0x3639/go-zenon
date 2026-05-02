@@ -332,8 +332,12 @@ const (
 
 ```go
 const (
+    // maxRequestContentLength caps inbound HTTP request bodies at
+    // 5 MiB to bound memory use per connection.
     maxRequestContentLength = 1024 * 1024 * 5
-    contentType             = "application/json"
+    // contentType is the canonical Content-Type header value
+    // returned on responses.
+    contentType = "application/json"
 )
 ```
 
@@ -355,8 +359,11 @@ const (
 
 ```go
 const (
-    PendingBlockNumber  = BlockNumber(-2)
-    LatestBlockNumber   = BlockNumber(-1)
+    // PendingBlockNumber selects the not-yet-finalised mempool tip.
+    PendingBlockNumber = BlockNumber(-2)
+    // LatestBlockNumber selects the current chain head.
+    LatestBlockNumber = BlockNumber(-1)
+    // EarliestBlockNumber selects the genesis block.
     EarliestBlockNumber = BlockNumber(0)
 )
 ```
@@ -373,7 +380,7 @@ const (
 )
 ```
 
-<a name="MetadataApi"></a>
+<a name="MetadataApi"></a>MetadataApi is the namespace under which the built\-in introspection service \([RPCService](<#RPCService>)\) is registered. Clients call rpc\_modules to list available namespaces.
 
 ```go
 const MetadataApi = "rpc"
@@ -654,7 +661,7 @@ func suitableCallbacks(receiver reflect.Value) map[string]*callback
 suitableCallbacks iterates over the methods of the given type. It determines if a method satisfies the criteria for a RPC callback or a subscription callback and adds it to the collection of callbacks. See server documentation for a summary of these criteria.
 
 <a name="validateRequest"></a>
-## func [validateRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L260>)
+## func [validateRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L273>)
 
 ```go
 func validateRequest(r *http.Request) (int, error)
@@ -714,25 +721,25 @@ type BatchElem struct {
 ```
 
 <a name="BlockNumber"></a>
-## type [BlockNumber](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L57>)
+## type [BlockNumber](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L61>)
 
-
+BlockNumber is the JSON\-RPC parameter type used by Ethereum\-style "ledger by block height" requests. Negative values encode the magic strings "pending" and "latest"; height 0 doubles as "earliest".
 
 ```go
 type BlockNumber int64
 ```
 
 <a name="BlockNumber.Int64"></a>
-### func \(BlockNumber\) [Int64](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L100>)
+### func \(BlockNumber\) [Int64](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L110>)
 
 ```go
 func (bn BlockNumber) Int64() int64
 ```
 
-
+Int64 returns the wire\-level int64 representation. Magic values \(Pending = \-2, Latest = \-1\) are returned as\-is — callers must branch on the sentinel values themselves.
 
 <a name="BlockNumber.UnmarshalJSON"></a>
-### func \(\*BlockNumber\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L71>)
+### func \(\*BlockNumber\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L78>)
 
 ```go
 func (bn *BlockNumber) UnmarshalJSON(data []byte) error
@@ -741,9 +748,9 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error
 UnmarshalJSON parses the given JSON fragment into a BlockNumber. It supports: \- "latest", "earliest" or "pending" as string arguments \- the block number Returned errors: \- an invalid block number error when the given argument isn't a known strings \- an out of range error when the given block number is either too little or too large
 
 <a name="BlockNumberOrHash"></a>
-## type [BlockNumberOrHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L104-L108>)
+## type [BlockNumberOrHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L118-L122>)
 
-
+BlockNumberOrHash accepts either a BlockNumber or a block hash on the wire — the union type used by ledger queries that may target either a height or a specific block. RequireCanonical \(default false\) constrains hash\-based lookups to the canonical chain.
 
 ```go
 type BlockNumberOrHash struct {
@@ -754,43 +761,43 @@ type BlockNumberOrHash struct {
 ```
 
 <a name="BlockNumberOrHashWithHash"></a>
-### func [BlockNumberOrHashWithHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L187>)
+### func [BlockNumberOrHashWithHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L210>)
 
 ```go
 func BlockNumberOrHashWithHash(hash common.Hash, canonical bool) BlockNumberOrHash
 ```
 
-
+BlockNumberOrHashWithHash wraps a hash as a BlockNumberOrHash; canonical=true forces the lookup to reject hashes that are not on the canonical chain.
 
 <a name="BlockNumberOrHashWithNumber"></a>
-### func [BlockNumberOrHashWithNumber](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L179>)
+### func [BlockNumberOrHashWithNumber](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L199>)
 
 ```go
 func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash
 ```
 
-
+BlockNumberOrHashWithNumber wraps a height as a BlockNumberOrHash \(hash variant cleared\).
 
 <a name="BlockNumberOrHash.Hash"></a>
-### func \(\*BlockNumberOrHash\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L172>)
+### func \(\*BlockNumberOrHash\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L190>)
 
 ```go
 func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool)
 ```
 
-
+Hash returns the contained block hash and true, or the zero hash and false if the variant carries a number instead.
 
 <a name="BlockNumberOrHash.Number"></a>
-### func \(\*BlockNumberOrHash\) [Number](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L165>)
+### func \(\*BlockNumberOrHash\) [Number](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L181>)
 
 ```go
 func (bnh *BlockNumberOrHash) Number() (BlockNumber, bool)
 ```
 
-
+Number returns the contained BlockNumber and true, or the zero BlockNumber and false if the variant carries a hash instead.
 
 <a name="BlockNumberOrHash.UnmarshalJSON"></a>
-### func \(\*BlockNumberOrHash\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L110>)
+### func \(\*BlockNumberOrHash\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L124>)
 
 ```go
 func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error
@@ -870,7 +877,7 @@ DialContext creates a new RPC client, just like Dial.
 The context is used to cancel or time out the initial connection establishment. It does not affect subsequent interactions with the client.
 
 <a name="DialHTTP"></a>
-### func [DialHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L129>)
+### func [DialHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L137>)
 
 ```go
 func DialHTTP(endpoint string) (*Client, error)
@@ -879,7 +886,7 @@ func DialHTTP(endpoint string) (*Client, error)
 DialHTTP creates a new RPC client that connects to an RPC server over HTTP.
 
 <a name="DialHTTPWithClient"></a>
-### func [DialHTTPWithClient](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L106>)
+### func [DialHTTPWithClient](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L114>)
 
 ```go
 func DialHTTPWithClient(endpoint string, client *http.Client) (*Client, error)
@@ -1160,7 +1167,7 @@ func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error
 send registers op with the dispatch loop, then sends msg on the connection. if sending fails, op is deregistered.
 
 <a name="Client.sendBatchHTTP"></a>
-### func \(\*Client\) [sendBatchHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L149>)
+### func \(\*Client\) [sendBatchHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L157>)
 
 ```go
 func (c *Client) sendBatchHTTP(ctx context.Context, op *requestOp, msgs []*jsonrpcMessage) error
@@ -1169,7 +1176,7 @@ func (c *Client) sendBatchHTTP(ctx context.Context, op *requestOp, msgs []*jsonr
 
 
 <a name="Client.sendHTTP"></a>
-### func \(\*Client\) [sendHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L133>)
+### func \(\*Client\) [sendHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L141>)
 
 ```go
 func (c *Client) sendHTTP(ctx context.Context, op *requestOp, msg interface{}) error
@@ -1302,7 +1309,7 @@ func (sub *ClientSubscription) unmarshal(result json.RawMessage) (interface{}, e
 
 
 <a name="CodecOption"></a>
-## type [CodecOption](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L33>)
+## type [CodecOption](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L36>)
 
 CodecOption specifies which type of messages a codec supports.
 
@@ -1407,7 +1414,7 @@ func (err HTTPError) Error() string
 
 
 <a name="HTTPTimeouts"></a>
-## type [HTTPTimeouts](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L73-L94>)
+## type [HTTPTimeouts](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L81-L102>)
 
 HTTPTimeouts represents the configuration params for the HTTP RPC server.
 
@@ -1545,7 +1552,7 @@ func (n *Notifier) takeSubscription() *Subscription
 takeSubscription returns the subscription \(if one has been created\). No subscription can be created after this call.
 
 <a name="RPCService"></a>
-## type [RPCService](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L133-L135>)
+## type [RPCService](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L140-L142>)
 
 RPCService gives meta information about the server. e.g. gives information about the loaded modules.
 
@@ -1556,7 +1563,7 @@ type RPCService struct {
 ```
 
 <a name="RPCService.Modules"></a>
-### func \(\*RPCService\) [Modules](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L138>)
+### func \(\*RPCService\) [Modules](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L145>)
 
 ```go
 func (s *RPCService) Modules() map[string]string
@@ -1565,9 +1572,9 @@ func (s *RPCService) Modules() map[string]string
 Modules returns the list of RPC services with their version number
 
 <a name="Server"></a>
-## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L44-L49>)
+## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L50-L55>)
 
-Server is an RPC server.
+Server is an RPC server. Holds a serviceRegistry \(registered namespace → method tables\), the active codec set so [Server.Stop](<#Server.Stop>) can fan out cancellation, and an atomic run flag that gates new request acceptance.
 
 ```go
 type Server struct {
@@ -1579,7 +1586,7 @@ type Server struct {
 ```
 
 <a name="NewServer"></a>
-### func [NewServer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L52>)
+### func [NewServer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L58>)
 
 ```go
 func NewServer() *Server
@@ -1597,7 +1604,7 @@ func StartIPCEndpoint(ipcEndpoint string, apis []API) (net.Listener, *Server, er
 StartIPCEndpoint starts an IPC endpoint.
 
 <a name="Server.RegisterName"></a>
-### func \(\*Server\) [RegisterName](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L65>)
+### func \(\*Server\) [RegisterName](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L71>)
 
 ```go
 func (s *Server) RegisterName(name string, receiver interface{}) error
@@ -1606,7 +1613,7 @@ func (s *Server) RegisterName(name string, receiver interface{}) error
 RegisterName creates a service for the given receiver type under the given name. When no methods on the given receiver match the criteria to be either a RPC method or a subscription an error is returned. Otherwise a new service is created and added to the service collection this server provides to clients.
 
 <a name="Server.ServeCodec"></a>
-### func \(\*Server\) [ServeCodec](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L74>)
+### func \(\*Server\) [ServeCodec](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L80>)
 
 ```go
 func (s *Server) ServeCodec(codec ServerCodec, options CodecOption)
@@ -1617,7 +1624,7 @@ ServeCodec reads incoming requests from codec, calls the appropriate callback an
 Note that codec options are no longer supported.
 
 <a name="Server.ServeHTTP"></a>
-### func \(\*Server\) [ServeHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L228>)
+### func \(\*Server\) [ServeHTTP](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L241>)
 
 ```go
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request)
@@ -1635,7 +1642,7 @@ func (s *Server) ServeListener(l net.Listener) error
 ServeListener accepts connections on l, serving JSON\-RPC on them.
 
 <a name="Server.Stop"></a>
-### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L121>)
+### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L128>)
 
 ```go
 func (s *Server) Stop()
@@ -1655,13 +1662,13 @@ WebsocketHandler returns a handler that serves JSON\-RPC to WebSocket connection
 allowedOrigins should be a comma\-separated list of allowed origin URLs. To allow connections with any origin, pass "\*".
 
 <a name="Server.serveSingleRequest"></a>
-### func \(\*Server\) [serveSingleRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L94>)
+### func \(\*Server\) [serveSingleRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/server.go#L101>)
 
 ```go
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec)
 ```
 
-serveSingleRequest reads and processes a single RPC request from the given codec. This is used to serve HTTP connections. Subscriptions and reverse calls are not allowed in this mode.
+serveSingleRequest reads and processes a single RPC request from the given codec. This is used to serve HTTP connections. Subscriptions and reverse calls are disabled in this mode because the request/response lifecycle is bounded by a single HTTP exchange.
 
 <a name="ServerCodec"></a>
 ## type [ServerCodec](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/types.go#L41-L45>)
@@ -1695,13 +1702,13 @@ func NewFuncCodec(conn deadlineCloser, encode, decode func(v interface{}) error)
 NewFuncCodec creates a codec which uses the given functions to read and write. If conn implements ConnRemoteAddr, log messages will use it to include the remote address of the connection.
 
 <a name="newHTTPServerConn"></a>
-### func [newHTTPServerConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L210>)
+### func [newHTTPServerConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L223>)
 
 ```go
 func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec
 ```
 
-
+newHTTPServerConn wraps an HTTP request/response pair in a ServerCodec suitable for one\-shot processing via Server.serveSingleRequest.
 
 <a name="newWebsocketCodec"></a>
 ### func [newWebsocketCodec](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/websocket.go#L242>)
@@ -2049,9 +2056,9 @@ func (h *handler) unsubscribe(ctx context.Context, id ID) (bool, error)
 unsubscribe is the callback function for all \*\_unsubscribe calls.
 
 <a name="httpConn"></a>
-## type [httpConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L41-L48>)
+## type [httpConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L49-L56>)
 
-
+httpConn is the [Client](<#Client>)\-side ServerCodec for the HTTP transport. HTTP is request/response so reads block on closeCh until the connection is torn down; the JSON decode happens in sendHTTP / sendBatchHTTP after each POST returns.
 
 ```go
 type httpConn struct {
@@ -2065,7 +2072,7 @@ type httpConn struct {
 ```
 
 <a name="httpConn.close"></a>
-### func \(\*httpConn\) [close](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L64>)
+### func \(\*httpConn\) [close](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L72>)
 
 ```go
 func (hc *httpConn) close()
@@ -2074,7 +2081,7 @@ func (hc *httpConn) close()
 
 
 <a name="httpConn.closed"></a>
-### func \(\*httpConn\) [closed](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L68>)
+### func \(\*httpConn\) [closed](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L76>)
 
 ```go
 func (hc *httpConn) closed() <-chan interface{}
@@ -2083,7 +2090,7 @@ func (hc *httpConn) closed() <-chan interface{}
 
 
 <a name="httpConn.doRequest"></a>
-### func \(\*httpConn\) [doRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L166>)
+### func \(\*httpConn\) [doRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L174>)
 
 ```go
 func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadCloser, error)
@@ -2092,7 +2099,7 @@ func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadClos
 
 
 <a name="httpConn.readBatch"></a>
-### func \(\*httpConn\) [readBatch](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L59>)
+### func \(\*httpConn\) [readBatch](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L67>)
 
 ```go
 func (hc *httpConn) readBatch() ([]*jsonrpcMessage, bool, error)
@@ -2101,7 +2108,7 @@ func (hc *httpConn) readBatch() ([]*jsonrpcMessage, bool, error)
 
 
 <a name="httpConn.remoteAddr"></a>
-### func \(\*httpConn\) [remoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L55>)
+### func \(\*httpConn\) [remoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L63>)
 
 ```go
 func (hc *httpConn) remoteAddr() string
@@ -2110,7 +2117,7 @@ func (hc *httpConn) remoteAddr() string
 
 
 <a name="httpConn.writeJSON"></a>
-### func \(\*httpConn\) [writeJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L51>)
+### func \(\*httpConn\) [writeJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L59>)
 
 ```go
 func (hc *httpConn) writeJSON(context.Context, interface{}) error
@@ -2119,9 +2126,9 @@ func (hc *httpConn) writeJSON(context.Context, interface{}) error
 httpConn is treated specially by Client.
 
 <a name="httpServerConn"></a>
-## type [httpServerConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L204-L208>)
+## type [httpServerConn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L214-L218>)
 
-httpServerConn turns a HTTP connection into a Conn.
+httpServerConn turns a HTTP connection into a Conn — the ServerCodec used by [Server.ServeHTTP](<#Server.ServeHTTP>) for one request/response cycle. Reads are bounded to maxRequestContentLength.
 
 ```go
 type httpServerConn struct {
@@ -2132,7 +2139,7 @@ type httpServerConn struct {
 ```
 
 <a name="httpServerConn.Close"></a>
-### func \(\*httpServerConn\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L217>)
+### func \(\*httpServerConn\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L230>)
 
 ```go
 func (t *httpServerConn) Close() error
@@ -2141,7 +2148,7 @@ func (t *httpServerConn) Close() error
 Close does nothing and always returns nil.
 
 <a name="httpServerConn.RemoteAddr"></a>
-### func \(\*httpServerConn\) [RemoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L220>)
+### func \(\*httpServerConn\) [RemoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L233>)
 
 ```go
 func (t *httpServerConn) RemoteAddr() string
@@ -2150,7 +2157,7 @@ func (t *httpServerConn) RemoteAddr() string
 RemoteAddr returns the peer address of the underlying connection.
 
 <a name="httpServerConn.SetWriteDeadline"></a>
-### func \(\*httpServerConn\) [SetWriteDeadline](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L225>)
+### func \(\*httpServerConn\) [SetWriteDeadline](<https://github.com/zenon-network/go-zenon/blob/master/rpc/server/http.go#L238>)
 
 ```go
 func (t *httpServerConn) SetWriteDeadline(time.Time) error

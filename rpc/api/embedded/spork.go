@@ -12,6 +12,8 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// SporkApi is the "embedded.spork" namespace — read access to the
+// spork registry (active and pending protocol upgrades).
 type SporkApi struct {
 	chain chain.Chain
 	z     zenon.Zenon
@@ -19,6 +21,7 @@ type SporkApi struct {
 	log   log15.Logger
 }
 
+// NewSporkApi constructs the spork namespace handler.
 func NewSporkApi(z zenon.Zenon) *SporkApi {
 	return &SporkApi{
 		chain: z.Chain(),
@@ -28,11 +31,14 @@ func NewSporkApi(z zenon.Zenon) *SporkApi {
 	}
 }
 
+// SporkList is the paginated response shape.
 type SporkList struct {
 	Count uint32              `json:"count"`
 	List  []*definition.Spork `json:"list"`
 }
 
+// GetAll returns every spork ever registered (active + pending +
+// expired), paginated.
 func (a *SporkApi) GetAll(pageIndex, pageSize uint32) (*SporkList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

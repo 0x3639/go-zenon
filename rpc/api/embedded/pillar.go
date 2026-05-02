@@ -17,12 +17,18 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// PillarApi is the "embedded.pillar" namespace — read access to the
+// pillar registry (registrations, rewards, delegations, election
+// metadata).
 type PillarApi struct {
 	log            log15.Logger
 	chain          chain.Chain
 	consensusCache ConsensusCache
 }
 
+// NewPillarApi constructs the pillar namespace handler. testing=true
+// configures the consensus cache for unit-test usage (smaller window,
+// no momentum store dependency).
 func NewPillarApi(z zenon.Zenon, testing bool) *PillarApi {
 	return &PillarApi{
 		log:            common.RPCLogger.New("module", "embedded_pillar_api"),
@@ -31,8 +37,12 @@ func NewPillarApi(z zenon.Zenon, testing bool) *PillarApi {
 	}
 }
 
+// Pillar status flags reported in [PillarInfo.Type].
 var (
-	PillarActive   uint8 = 1
+	// PillarActive — currently in the elected pillar set.
+	PillarActive uint8 = 1
+	// PillarInActive — registered but not currently elected
+	// (revoked, in cooldown, or below the active rank cut).
 	PillarInActive uint8 = 2
 )
 
