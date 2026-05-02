@@ -1029,7 +1029,7 @@ const (
 )
 ```
 
-<a name="jsonSentinel"></a>
+<a name="jsonSentinel"></a>jsonSentinel is the canonical Solidity\-shaped ABI for the Sentinel contract. The contract shares the common deposit / withdraw / collect\-reward methods \(defined in common.go\) and adds Register / Revoke / Update.
 
 ```go
 const (
@@ -1050,14 +1050,18 @@ const (
 			{"name":"qsrAmount","type":"uint256"}]}
 	]`
 
+    // RegisterSentinelMethodName names the sentinel-registration
+    // method.
     RegisterSentinelMethodName = "Register"
-    RevokeSentinelMethodName   = "Revoke"
+    // RevokeSentinelMethodName names the sentinel-revocation
+    // method.
+    RevokeSentinelMethodName = "Revoke"
 
     sentinelInfoVariableName = "sentinelInfo"
 )
 ```
 
-<a name="_"></a>
+<a name="_"></a>Storage prefix; index 0 is reserved by the storage decorator.
 
 ```go
 const (
@@ -1105,7 +1109,7 @@ const (
 )
 ```
 
-<a name="jsonStake"></a>
+<a name="jsonStake"></a>jsonStake is the canonical Solidity\-shaped ABI for the Stake contract: Stake/Cancel/CollectReward/Update plus the per\-stake storage record \(stakeInfo\).
 
 ```go
 const (
@@ -1125,7 +1129,9 @@ const (
 		]}
 	]`
 
-    StakeMethodName       = "Stake"
+    // StakeMethodName names the lock-and-stake method.
+    StakeMethodName = "Stake"
+    // CancelStakeMethodName names the cancel-and-refund method.
     CancelStakeMethodName = "Cancel"
 
     stakeInfoVariableName = "stakeInfo"
@@ -1313,12 +1319,13 @@ var (
 )
 ```
 
-<a name="ABIStake"></a>
+<a name="ABIStake"></a>ABIStake is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the stake contract.
 
 ```go
 var (
     ABIStake = abi.JSONToABIContract(strings.NewReader(jsonStake))
 
+    // stakeInfoPrefix namespaces per-stake records.
     stakeInfoPrefix = []byte{1}
 )
 ```
@@ -1342,7 +1349,7 @@ var (
 )
 ```
 
-<a name="ABISentinel"></a>
+<a name="ABISentinel"></a>ABISentinel is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the sentinel contract.
 
 ```go
 var (
@@ -1404,22 +1411,22 @@ func IterateLiquidityStakeEntries(context db.DB, f func(entry *LiquidityStakeEnt
 
 
 <a name="IterateSentinelEntries"></a>
-## func [IterateSentinelEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L105>)
+## func [IterateSentinelEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L145>)
 
 ```go
 func IterateSentinelEntries(context db.DB, f func(*SentinelInfo) error) error
 ```
 
-
+IterateSentinelEntries calls f for every sentinel record, stopping early if f returns a non\-nil error.
 
 <a name="IterateStakeEntries"></a>
-## func [IterateStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L121>)
+## func [IterateStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L154>)
 
 ```go
 func IterateStakeEntries(context db.DB, f func(*StakeInfo) error) error
 ```
 
-
+IterateStakeEntries calls f for every stake record. f returning a non\-nil error stops iteration; data\-non\-existent entries are silently skipped.
 
 <a name="getDelegationInfoKey"></a>
 ## func [getDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L285>)
@@ -1548,13 +1555,13 @@ func getRewardDepositKey(address *types.Address) []byte
 
 
 <a name="getStakeInfoKey"></a>
-## func [getStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L70>)
+## func [getStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L88>)
 
 ```go
 func getStakeInfoKey(id types.Hash, address types.Address) []byte
 ```
 
-
+getStakeInfoKey composes the storage key \(\`stakeInfoPrefix || address || id\`\).
 
 <a name="getSwapAssetsKey"></a>
 ## func [getSwapAssetsKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L72>)
@@ -1701,13 +1708,13 @@ func isRewardDepositKey(key []byte) bool
 
 
 <a name="isStakeInfoKey"></a>
-## func [isStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L73>)
+## func [isStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L94>)
 
 ```go
 func isStakeInfoKey(key []byte) bool
 ```
 
-
+isStakeInfoKey reports whether key belongs to the stakeInfo keyspace.
 
 <a name="isTokenInfoKey"></a>
 ## func [isTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L144>)
@@ -1836,13 +1843,13 @@ func unmarshalRewardDepositKey(key []byte) (*types.Address, error)
 
 
 <a name="unmarshalStakeInfoKey"></a>
-## func [unmarshalStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L76>)
+## func [unmarshalStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L100>)
 
 ```go
 func unmarshalStakeInfoKey(key []byte) (*types.Hash, *types.Address, error)
 ```
 
-
+unmarshalStakeInfoKey extracts \(id, address\) from a stakeInfo key.
 
 <a name="unmarshalTokenInfoKey"></a>
 ## func [unmarshalTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L150>)
@@ -3748,9 +3755,9 @@ func (s *SecurityInfoVariable) Save(context db.DB) error
 
 
 <a name="SentinelInfo"></a>
-## type [SentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L49-L55>)
+## type [SentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L69-L75>)
 
-
+SentinelInfo is the on\-chain registration of one sentinel: the owner's address, the wall\-clock timestamps marking registration and \(optional\) revocation, and the locked stakes \(ZNN \+ QSR\). After revocation the amounts are zeroed and the record stays as a tombstone until the corresponding ZNN/QSR refunds clear.
 
 ```go
 type SentinelInfo struct {
@@ -3763,63 +3770,63 @@ type SentinelInfo struct {
 ```
 
 <a name="GetAllSentinelInfo"></a>
-### func [GetAllSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L91>)
+### func [GetAllSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L128>)
 
 ```go
 func GetAllSentinelInfo(context db.DB) []*SentinelInfo
 ```
 
-
+GetAllSentinelInfo enumerates every sentinel record in iteration order.
 
 <a name="GetSentinelInfoByOwner"></a>
-### func [GetSentinelInfoByOwner](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L81>)
+### func [GetSentinelInfoByOwner](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L115>)
 
 ```go
 func GetSentinelInfoByOwner(context db.DB, address types.Address) *SentinelInfo
 ```
 
-
+GetSentinelInfoByOwner returns the sentinel registered to address, or nil if none is.
 
 <a name="parseSentinelInfo"></a>
-### func [parseSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L76>)
+### func [parseSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L107>)
 
 ```go
 func parseSentinelInfo(data []byte) *SentinelInfo
 ```
 
-
+parseSentinelInfo decodes a sentinel record from data. Panics on malformed input.
 
 <a name="SentinelInfo.Data"></a>
-### func \(\*SentinelInfo\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L63>)
+### func \(\*SentinelInfo\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L89>)
 
 ```go
 func (sentinel *SentinelInfo) Data() []byte
 ```
 
-
+Data returns the sentinel ABI\-encoded for storage.
 
 <a name="SentinelInfo.Delete"></a>
-### func \(\*SentinelInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L60>)
+### func \(\*SentinelInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L84>)
 
 ```go
 func (sentinel *SentinelInfo) Delete(context db.DB)
 ```
 
-
+Delete removes sentinel from context's storage.
 
 <a name="SentinelInfo.Save"></a>
-### func \(\*SentinelInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L57>)
+### func \(\*SentinelInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L79>)
 
 ```go
 func (sentinel *SentinelInfo) Save(context db.DB)
 ```
 
-
+Save writes sentinel into context's storage. Panics on write failure.
 
 <a name="SentinelInfoKey"></a>
-## type [SentinelInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L46-L48>)
+## type [SentinelInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L60-L62>)
 
-
+SentinelInfoKey carries just the owner field — the key half of a [SentinelInfo](<#SentinelInfo>) record. Used internally to compute the storage key without instantiating the full record.
 
 ```go
 type SentinelInfoKey struct {
@@ -3828,13 +3835,13 @@ type SentinelInfoKey struct {
 ```
 
 <a name="SentinelInfoKey.Key"></a>
-### func \(\*SentinelInfoKey\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L72>)
+### func \(\*SentinelInfoKey\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L101>)
 
 ```go
 func (sentinel *SentinelInfoKey) Key() []byte
 ```
 
-
+Key returns the database key for this sentinel \(\`sentinelInfoPrefix || owner\`\).
 
 <a name="SetAdditionalRewardParam"></a>
 ## type [SetAdditionalRewardParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L302-L305>)
@@ -3952,45 +3959,45 @@ func (spork *Spork) Save(context db.DB)
 Save writes spork into context's storage under its keyspace. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on write failure.
 
 <a name="StakeByExpirationTime"></a>
-## type [StakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L166>)
+## type [StakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L203>)
 
-
+StakeByExpirationTime sorts a slice of [StakeInfo](<#StakeInfo>) by ascending ExpirationTime, breaking ties on Id. Implements [sort.Interface](<https://pkg.go.dev/sort/#Interface>).
 
 ```go
 type StakeByExpirationTime []*StakeInfo
 ```
 
 <a name="StakeByExpirationTime.Len"></a>
-### func \(StakeByExpirationTime\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L168>)
+### func \(StakeByExpirationTime\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L206>)
 
 ```go
 func (a StakeByExpirationTime) Len() int
 ```
 
-
+Len returns the number of stake entries in a.
 
 <a name="StakeByExpirationTime.Less"></a>
-### func \(StakeByExpirationTime\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L170>)
+### func \(StakeByExpirationTime\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L212>)
 
 ```go
 func (a StakeByExpirationTime) Less(i, j int) bool
 ```
 
-
+Less reports whether entry i sorts before entry j.
 
 <a name="StakeByExpirationTime.Swap"></a>
-### func \(StakeByExpirationTime\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L169>)
+### func \(StakeByExpirationTime\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L209>)
 
 ```go
 func (a StakeByExpirationTime) Swap(i, j int)
 ```
 
-
+Swap exchanges entries i and j.
 
 <a name="StakeInfo"></a>
-## type [StakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L44-L52>)
+## type [StakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L57-L65>)
 
-
+StakeInfo is one stake record: how much ZNN was locked, the weight derived from the chosen duration, the wall\-clock window the stake covers, the optional revoke timestamp, and the address \+ id derived from the storage key during decoding. WeightedAmount is the input to staking\-reward distribution; longer\-duration stakes weigh more per ZNN.
 
 ```go
 type StakeInfo struct {
@@ -4005,49 +4012,49 @@ type StakeInfo struct {
 ```
 
 <a name="GetStakeInfo"></a>
-### func [GetStakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L113>)
+### func [GetStakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L142>)
 
 ```go
 func GetStakeInfo(context db.DB, id types.Hash, address types.Address) (*StakeInfo, error)
 ```
 
-
+GetStakeInfo returns the stake record for \(id, address\).
 
 <a name="GetStakeListByAddress"></a>
-### func [GetStakeListByAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L146>)
+### func [GetStakeListByAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L181>)
 
 ```go
 func GetStakeListByAddress(context db.DB, address types.Address) ([]*StakeInfo, *big.Int, *big.Int, error)
 ```
 
-Returns all \*active\* stake entries for an address
+GetStakeListByAddress returns all \*active\* stake entries for an address \(RevokeTime == 0\), the summed Amount, and the summed WeightedAmount. Used by the staking\-reward distribution.
 
 <a name="parseStakeInfo"></a>
-### func [parseStakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L94>)
+### func [parseStakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L121>)
 
 ```go
 func parseStakeInfo(key []byte, data []byte) (*StakeInfo, error)
 ```
 
-
+parseStakeInfo decodes a \(key, data\) pair into a [StakeInfo](<#StakeInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="StakeInfo.Delete"></a>
-### func \(\*StakeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L66>)
+### func \(\*StakeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L82>)
 
 ```go
 func (stake *StakeInfo) Delete(context db.DB) error
 ```
 
-
+Delete removes stake from context's storage.
 
 <a name="StakeInfo.Save"></a>
-### func \(\*StakeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L54>)
+### func \(\*StakeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L68>)
 
 ```go
 func (stake *StakeInfo) Save(context db.DB) error
 ```
 
-
+Save writes stake into context's storage.
 
 <a name="SwapAssets"></a>
 ## type [SwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L51-L55>)

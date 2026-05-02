@@ -11,17 +11,26 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// plasmaLog is the per-contract logger; tagged with `contract=plasma`.
 var (
 	plasmaLog = common.EmbeddedLogger.New("contract", "plasma")
 )
 
+// FuseMethod implements QSR fusing: locks the caller's QSR for
+// [constants.FuseExpiration] momentums, granting plasma to the
+// supplied beneficiary in proportion to the locked amount.
 type FuseMethod struct {
 	MethodName string
 }
 
+// GetPlasma returns the simple-call plasma cost.
 func (p *FuseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock checks the call carries QSR (not ZNN), the
+// amount meets [constants.FuseMinAmount] and is a whole multiple
+// of [constants.CostPerFusionUnit].
 func (p *FuseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(types.Address)
@@ -44,6 +53,11 @@ func (p *FuseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIPlasma.PackMethod(p.MethodName, param)
 	return err
 }
+
+// ReceiveBlock persists a [definition.FusionInfo] keyed by the
+// originating send hash and increments the per-beneficiary
+// [definition.FusedAmount] counter so the plasma layer can read
+// the total in O(1).
 func (p *FuseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -74,13 +88,21 @@ func (p *FuseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock
 	return nil, nil
 }
 
+// CancelFuseMethod implements unfusing: releases a previously-fused
+// QSR position once its ExpirationHeight has elapsed and refunds
+// the QSR back to the original owner.
 type CancelFuseMethod struct {
 	MethodName string
 }
 
+// GetPlasma returns the with-withdraw plasma cost (the receive
+// emits one descendant refund).
 func (p *CancelFuseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock decodes the target fusion id and rejects calls
+// that carry value.
 func (p *CancelFuseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(types.Hash)
@@ -96,6 +118,12 @@ func (p *CancelFuseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIPlasma.PackMethod(p.MethodName, param)
 	return err
 }
+
+// ReceiveBlock looks up the fusion record, refuses if its
+// ExpirationHeight has not been reached
+// ([constants.RevokeNotDue]), and emits a descendant QSR refund to
+// the caller. Updates the per-beneficiary cumulative counter
+// (deleting it if it would reach zero).
 func (p *CancelFuseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

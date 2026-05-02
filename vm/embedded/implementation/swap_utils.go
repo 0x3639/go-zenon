@@ -15,17 +15,28 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// swapUtilsLog is the per-helper logger.
 var swapUtilsLog = common.EmbeddedLogger.New("contract", "swap-utils-log")
 
+// Canonical pre-image strings for the secp256k1 messages signed
+// during legacy-asset retrieval and legacy-pillar registration.
+// The on-chain verifier rebuilds the message exactly from these
+// constants plus the caller's public key and Zenon address.
 const (
 	hashHeader          = "Zenon secp256k1 signature:"
 	assetsMessage       = "ZNN swap retrieve assets"
 	legacyPillarMessage = "ZNN swap retrieve legacy pillar"
 
-	SwapRetrieveAssets       = 1
+	// SwapRetrieveAssets selects the assets-retrieval message.
+	SwapRetrieveAssets = 1
+	// SwapRetrieveLegacyPillar selects the legacy-pillar
+	// registration message.
 	SwapRetrieveLegacyPillar = 2
 )
 
+// toOldSignature converts a go-ethereum-style 65-byte signature
+// (r || s || v) into the legacy ZNN-style format (header byte first,
+// where header = v + 31), base64-encoded.
 func toOldSignature(signature []byte) string {
 	// transform signature in old znn-style signature
 	header := signature[64]
@@ -34,6 +45,9 @@ func toOldSignature(signature []byte) string {
 	return base64.StdEncoding.EncodeToString(signature)
 }
 
+// PubKeyToKeyId derives the legacy key id for an uncompressed
+// secp256k1 public key: RIPEMD160(SHA256(compressedPubKey)).
+// Mirrors the legacy chain's address-derivation rule.
 func PubKeyToKeyId(pubKey []byte) []byte {
 	A := new(big.Int).SetBytes(pubKey[1:33])
 	B := new(big.Int).SetBytes(pubKey[33:])
@@ -45,6 +59,8 @@ func PubKeyToKeyId(pubKey []byte) []byte {
 	return ripe.Sum(nil)
 }
 
+// PubKeyToKeyIdHash hashes the key id to a [types.Hash] suitable
+// as a swap-entry key.
 func PubKeyToKeyIdHash(pubKey []byte) types.Hash {
 	keyId := PubKeyToKeyId(pubKey)
 	sha := sha256.New()
@@ -52,7 +68,9 @@ func PubKeyToKeyIdHash(pubKey []byte) types.Hash {
 	return types.BytesToHashPanic(sha.Sum(nil))
 }
 
-// SignRetrieveAssetsMessage is used for in contract tests
+// SignRetrieveAssetsMessage signs the canonical assets-retrieval
+// message for tests. Production signers (clients) build the same
+// message and sign with the legacy private key.
 func SignRetrieveAssetsMessage(address types.Address, prv []byte, pub string) (string, error) {
 	// config message & verify against expected message
 	message := GetSwapMessage(assetsMessage, pub, address)
@@ -65,7 +83,8 @@ func SignRetrieveAssetsMessage(address types.Address, prv []byte, pub string) (s
 	return toOldSignature(signature), nil
 }
 
-// SignLegacyPillarMessage is used for in contract tests
+// SignLegacyPillarMessage signs the canonical legacy-pillar
+// message for tests.
 func SignLegacyPillarMessage(address types.Address, prv []byte, pub string) (string, error) {
 	// config message & verify against expected message
 	message := GetSwapMessage(legacyPillarMessage, pub, address)
@@ -78,11 +97,18 @@ func SignLegacyPillarMessage(address types.Address, prv []byte, pub string) (str
 	return toOldSignature(signature), nil
 }
 
+// serializeString prepends the byte length to txt — a length-prefix
+// encoding compatible with the legacy chain's message-signing
+// format.
 func serializeString(txt string) []byte {
 	y := append([]byte(""), byte(len(txt)))
 	return append(y, []byte(txt)...)
 }
 
+// GetSwapMessage builds the canonical message bytes that the
+// legacy private key must sign. Format:
+//
+//	double-SHA256(serialize(hashHeader) || serialize(operation || pub || addr))
 func GetSwapMessage(operationMessage string, pubKey string, addr types.Address) []byte {
 	var data []byte
 	data = append(data, serializeString(hashHeader)...)
@@ -92,6 +118,11 @@ func GetSwapMessage(operationMessage string, pubKey string, addr types.Address) 
 	return b[:]
 }
 
+// CheckSwapSignature recovers the secp256k1 public key from
+// signatureStr and confirms it matches pubKeyStr. messageType
+// selects the operation pre-image. Returns one of
+// [constants.ErrInvalidB64Decode], [constants.ErrInvalidSwapCode],
+// or [constants.ErrInvalidSignature] on failure.
 func CheckSwapSignature(messageType int, addr types.Address, pubKeyStr string, signatureStr string) (bool, error) {
 	pubKey, err := base64.StdEncoding.DecodeString(pubKeyStr)
 	if err != nil {

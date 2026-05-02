@@ -378,7 +378,7 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="hashHeader"></a>
+<a name="hashHeader"></a>Canonical pre\-image strings for the secp256k1 messages signed during legacy\-asset retrieval and legacy\-pillar registration. The on\-chain verifier rebuilds the message exactly from these constants plus the caller's public key and Zenon address.
 
 ```go
 const (
@@ -386,7 +386,10 @@ const (
     assetsMessage       = "ZNN swap retrieve assets"
     legacyPillarMessage = "ZNN swap retrieve legacy pillar"
 
-    SwapRetrieveAssets       = 1
+    // SwapRetrieveAssets selects the assets-retrieval message.
+    SwapRetrieveAssets = 1
+    // SwapRetrieveLegacyPillar selects the legacy-pillar
+    // registration message.
     SwapRetrieveLegacyPillar = 2
 )
 ```
@@ -441,7 +444,7 @@ var (
 )
 ```
 
-<a name="plasmaLog"></a>
+<a name="plasmaLog"></a>plasmaLog is the per\-contract logger; tagged with \`contract=plasma\`.
 
 ```go
 var (
@@ -449,7 +452,7 @@ var (
 )
 ```
 
-<a name="sentinelLog"></a>
+<a name="sentinelLog"></a>sentinelLog is the per\-contract logger; tagged with \`contract=sentinel\`.
 
 ```go
 var (
@@ -465,7 +468,7 @@ var (
 )
 ```
 
-<a name="stakeLog"></a>
+<a name="stakeLog"></a>stakeLog is the per\-contract logger; tagged with \`contract=stake\`.
 
 ```go
 var (
@@ -473,7 +476,7 @@ var (
 )
 ```
 
-<a name="swapLog"></a>
+<a name="swapLog"></a>swapLog is the per\-contract logger; tagged with \`contract=swap\`.
 
 ```go
 var (
@@ -481,13 +484,13 @@ var (
 )
 ```
 
-<a name="swapUtilsLog"></a>
+<a name="swapUtilsLog"></a>swapUtilsLog is the per\-helper logger.
 
 ```go
 var swapUtilsLog = common.EmbeddedLogger.New("contract", "swap-utils-log")
 ```
 
-<a name="tokenLog"></a>
+<a name="tokenLog"></a>tokenLog is the per\-contract logger; tagged with \`contract=token\`.
 
 ```go
 var (
@@ -496,13 +499,13 @@ var (
 ```
 
 <a name="ApplyDecay"></a>
-## func [ApplyDecay](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L19>)
+## func [ApplyDecay](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L26>)
 
 ```go
 func ApplyDecay(deposit *definition.SwapAssets, currentEpoch int)
 ```
 
-
+ApplyDecay reduces a swap deposit's redeemable ZNN/QSR according to the decay schedule: full value before [constants.SwapAssetDecayEpochsOffset](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SwapAssetDecayEpochsOffset>), then drops by [constants.SwapAssetDecayTickValuePercentage](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SwapAssetDecayTickValuePercentage>) every [constants.SwapAssetDecayTickEpochs](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SwapAssetDecayTickEpochs>) epochs until zero. Mutates deposit in place.
 
 <a name="CanPerformAction"></a>
 ## func [CanPerformAction](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L58>)
@@ -590,13 +593,13 @@ func CheckSecurityInitialized(context vm_context.AccountVmContext) (*definition.
 
 
 <a name="CheckSwapSignature"></a>
-## func [CheckSwapSignature](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L95>)
+## func [CheckSwapSignature](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L126>)
 
 ```go
 func CheckSwapSignature(messageType int, addr types.Address, pubKeyStr string, signatureStr string) (bool, error)
 ```
 
-
+CheckSwapSignature recovers the secp256k1 public key from signatureStr and confirms it matches pubKeyStr. messageType selects the operation pre\-image. Returns one of [constants.ErrInvalidB64Decode](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrInvalidB64Decode>), [constants.ErrInvalidSwapCode](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrInvalidSwapCode>), or [constants.ErrInvalidSignature](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrInvalidSignature>) on failure.
 
 <a name="GetBasicMethodMessage"></a>
 ## func [GetBasicMethodMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L883>)
@@ -644,22 +647,31 @@ func GetQsrCostForNextPillar(context vm_context.AccountVmContext) (*big.Int, err
 GetQsrCostForNextPillar returns PillarQsrStakeBaseAmount \* PillarQsrStakeIncreaseAmount \* len\(definition.NormalPillarType\)
 
 <a name="GetSentinelRevokeStatus"></a>
-## func [GetSentinelRevokeStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L21>)
+## func [GetSentinelRevokeStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L35>)
 
 ```go
 func GetSentinelRevokeStatus(registrationTime int64, m *nom.Momentum) (bool, int64)
 ```
 
-GetSentinelRevokeStatus returns true, timeWhileCanRevoke if sentinel \*can\* be revoked GetSentinelRevokeStatus returns false, timeUntilCanRevoke if sentinel \*can't\* be revoked
+GetSentinelRevokeStatus returns whether a sentinel registered at registrationTime can be revoked at the supplied momentum, plus the time delta until/while revocation is permitted.
+
+Sentinels follow a repeating \(lock, revoke\-window\) cycle of length [constants.SentinelLockTimeWindow](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SentinelLockTimeWindow>) \+ [constants.SentinelRevokeTimeWindow](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SentinelRevokeTimeWindow>). Within the lock segment revocation is blocked; within the revoke\-window segment it is allowed. The returned int64 is the seconds\-until\-revoke in the blocked case, or seconds\-while\-can\-revoke in the allowed case.
+
+- returns true, timeWhileCanRevoke if sentinel \*can\* be revoked.
+- returns false, timeUntilCanRevoke if sentinel \*can't\* be revoked.
 
 <a name="GetSwapMessage"></a>
-## func [GetSwapMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L86>)
+## func [GetSwapMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L112>)
 
 ```go
 func GetSwapMessage(operationMessage string, pubKey string, addr types.Address) []byte
 ```
 
+GetSwapMessage builds the canonical message bytes that the legacy private key must sign. Format:
 
+```
+double-SHA256(serialize(hashHeader) || serialize(operation || pub || addr))
+```
 
 <a name="GetUnwrapTokenRequestMessage"></a>
 ## func [GetUnwrapTokenRequestMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L346>)
@@ -716,40 +728,40 @@ func PillarGetRevokeStatus(old *definition.PillarInfo, m *nom.Momentum) (bool, i
 PillarGetRevokeStatus returns status and cooldown. If Pillar \*can\* be revoked, returns \- true, timeWhileCanRevoke If Pillar \*can't\* be revoked, returns \- false, timeUntilCanRevoke
 
 <a name="PubKeyToKeyId"></a>
-## func [PubKeyToKeyId](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L37>)
+## func [PubKeyToKeyId](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L51>)
 
 ```go
 func PubKeyToKeyId(pubKey []byte) []byte
 ```
 
-
+PubKeyToKeyId derives the legacy key id for an uncompressed secp256k1 public key: RIPEMD160\(SHA256\(compressedPubKey\)\). Mirrors the legacy chain's address\-derivation rule.
 
 <a name="PubKeyToKeyIdHash"></a>
-## func [PubKeyToKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L48>)
+## func [PubKeyToKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L64>)
 
 ```go
 func PubKeyToKeyIdHash(pubKey []byte) types.Hash
 ```
 
-
+PubKeyToKeyIdHash hashes the key id to a [types.Hash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Hash>) suitable as a swap\-entry key.
 
 <a name="SignLegacyPillarMessage"></a>
-## func [SignLegacyPillarMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L69>)
+## func [SignLegacyPillarMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L88>)
 
 ```go
 func SignLegacyPillarMessage(address types.Address, prv []byte, pub string) (string, error)
 ```
 
-SignLegacyPillarMessage is used for in contract tests
+SignLegacyPillarMessage signs the canonical legacy\-pillar message for tests.
 
 <a name="SignRetrieveAssetsMessage"></a>
-## func [SignRetrieveAssetsMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L56>)
+## func [SignRetrieveAssetsMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L74>)
 
 ```go
 func SignRetrieveAssetsMessage(address types.Address, prv []byte, pub string) (string, error)
 ```
 
-SignRetrieveAssetsMessage is used for in contract tests
+SignRetrieveAssetsMessage signs the canonical assets\-retrieval message for tests. Production signers \(clients\) build the same message and sign with the legacy private key.
 
 <a name="TimeChallenge"></a>
 ## func [TimeChallenge](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L439>)
@@ -905,13 +917,13 @@ func checkSporkMetaDataStatic(sporkInfo *definition.Spork) error
 checkSporkMetaDataStatic enforces the static name/description length bounds. Returns [constants.ErrForbiddenParam](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrForbiddenParam>) on violation.
 
 <a name="checkToken"></a>
-## func [checkToken](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L23>)
+## func [checkToken](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L33>)
 
 ```go
 func checkToken(param definition.IssueParam) error
 ```
 
-
+checkToken validates the issuance parameters: name length and charset, symbol charset \(uppercase A\-Z \+ digits, no \`ZNN\`/\`QSR\` reservation\), domain shape, decimals, and the supply / max\-supply / mintability invariants.
 
 <a name="checkUnwrapMetadataStatic"></a>
 ## func [checkUnwrapMetadataStatic](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L369>)
@@ -959,22 +971,22 @@ func computePillarsRewardForEpoch(context vm_context.AccountVmContext, epoch uin
 raw reward for all pillars in one epoch
 
 <a name="computeSentinelRewardsForEpoch"></a>
-## func [computeSentinelRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L206>)
+## func [computeSentinelRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L267>)
 
 ```go
 func computeSentinelRewardsForEpoch(context vm_context.AccountVmContext, epoch uint64) error
 ```
 
-
+computeSentinelRewardsForEpoch divides the per\-epoch sentinel reward pool \(ZNN \+ QSR\) evenly across qualifying sentinels \(those that pass the 90% uptime test\). Each qualifying sentinel receives \`pool × weight / cumulatedSentinel\`; weights are 0/1 so the math reduces to equal\-share among qualifiers.
 
 <a name="computeStakeRewardsForEpoch"></a>
-## func [computeStakeRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L191>)
+## func [computeStakeRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L239>)
 
 ```go
 func computeStakeRewardsForEpoch(context vm_context.AccountVmContext, epoch uint64) error
 ```
 
-
+computeStakeRewardsForEpoch divides the per\-epoch QSR pool proportionally to each stake's \[getWeightedStake\] contribution. Revoked\-and\-past\-end stakes are deleted to keep storage bounded.
 
 <a name="getWeightedLiquidityStake"></a>
 ## func [getWeightedLiquidityStake](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L526>)
@@ -995,58 +1007,60 @@ func getWeightedLiquidityStakeAmount(amount *big.Int, stakingTime int64) *big.In
 
 
 <a name="getWeightedSentinel"></a>
-## func [getWeightedSentinel](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L191>)
+## func [getWeightedSentinel](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L246>)
 
 ```go
 func getWeightedSentinel(info *definition.SentinelInfo, startTime, endTime int64) *big.Int
 ```
 
-returns 0/1 depending on whenever the sentinel has a 90% percent uptime
+getWeightedSentinel returns 1 if the sentinel was active for at least 90% of the supplied epoch window, otherwise 0. Used as a uniform\-weight uptime metric: only sentinels that meet the 90% threshold split the per\-epoch reward pool.
 
 <a name="getWeightedStake"></a>
-## func [getWeightedStake](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L176>)
+## func [getWeightedStake](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L221>)
 
 ```go
 func getWeightedStake(info *definition.StakeInfo, startTime, endTime int64) *big.Int
 ```
 
-weighted stake amount over time
+getWeightedStake returns the time\-weighted stake amount for one stake's contribution to a given epoch window: \`min\(end, revoke or end\) \- max\(start, stakeStart\)\) × WeightedAmount\`. Stakes that don't overlap the window contribute zero.
 
 <a name="getWeightedStakeAmount"></a>
-## func [getWeightedStakeAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L22>)
+## func [getWeightedStakeAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L33>)
 
 ```go
 func getWeightedStakeAmount(amount *big.Int, stakingTime int64) *big.Int
 ```
 
+getWeightedStakeAmount computes the time\-weighted stake amount.
 
+Formula: \`\(9 \+ duration/StakeTimeUnit\) × amount / 10\` — so a 1\-unit stake weighs 1.0× its principal, a 2\-unit stake weighs 1.1×, and a 12\-unit stake weighs 2.1×. Longer durations earn more rewards per locked ZNN.
 
 <a name="newTokenID"></a>
-## func [newTokenID](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L70>)
+## func [newTokenID](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L84>)
 
 ```go
 func newTokenID(sendBlockHash types.Hash) types.ZenonTokenStandard
 ```
 
-
+newTokenID derives a deterministic [types.ZenonTokenStandard](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZenonTokenStandard>) from the originating send\-block hash. Different sends produce different IDs.
 
 <a name="serializeString"></a>
-## func [serializeString](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L81>)
+## func [serializeString](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L103>)
 
 ```go
 func serializeString(txt string) []byte
 ```
 
-
+serializeString prepends the byte length to txt — a length\-prefix encoding compatible with the legacy chain's message\-signing format.
 
 <a name="toOldSignature"></a>
-## func [toOldSignature](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L29>)
+## func [toOldSignature](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L40>)
 
 ```go
 func toOldSignature(signature []byte) string
 ```
 
-
+toOldSignature converts a go\-ethereum\-style 65\-byte signature \(r || s || v\) into the legacy ZNN\-style format \(header byte first, where header = v \+ 31\), base64\-encoded.
 
 <a name="updateLiquidityRewards"></a>
 ## func [updateLiquidityRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L87>)
@@ -1076,22 +1090,22 @@ func updatePillarRewards(context vm_context.AccountVmContext) error
 
 
 <a name="updateSentinelRewards"></a>
-## func [updateSentinelRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L255>)
+## func [updateSentinelRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L320>)
 
 ```go
 func updateSentinelRewards(context vm_context.AccountVmContext) error
 ```
 
-
+updateSentinelRewards walks every still\-unprocessed epoch and computes its reward distribution, stopping when \[checkAndPerformUpdateEpoch\] reports the next epoch is too recent.
 
 <a name="updateStakeRewards"></a>
-## func [updateStakeRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L236>)
+## func [updateStakeRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L288>)
 
 ```go
 func updateStakeRewards(context vm_context.AccountVmContext) error
 ```
 
-
+updateStakeRewards walks every still\-unprocessed epoch and computes its reward distribution, stopping when \[checkAndPerformUpdateEpoch\] reports the next epoch is too recent.
 
 <a name="ActivateSporkMethod"></a>
 ## type [ActivateSporkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L132-L134>)
@@ -1217,9 +1231,9 @@ func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) 
 
 
 <a name="BurnMethod"></a>
-## type [BurnMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L239-L241>)
+## type [BurnMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L281-L283>)
 
-
+BurnMethod implements per\-token burning: anyone may burn a token when [definition.TokenInfo.IsBurnable](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#TokenInfo.IsBurnable>) is true; the token's owner may always burn it. Non\-mintable tokens have their MaxSupply reduced in lockstep so the cap stays accurate.
 
 ```go
 type BurnMethod struct {
@@ -1228,31 +1242,31 @@ type BurnMethod struct {
 ```
 
 <a name="BurnMethod.GetPlasma"></a>
-### func \(\*BurnMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L243>)
+### func \(\*BurnMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L286>)
 
 ```go
 func (p *BurnMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="BurnMethod.ReceiveBlock"></a>
-### func \(\*BurnMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L260>)
+### func \(\*BurnMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L310>)
 
 ```go
 func (p *BurnMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock validates the burn authority, reduces TotalSupply \(and MaxSupply for non\-mintable tokens\), and debits the contract's cached balance.
 
 <a name="BurnMethod.ValidateSendBlock"></a>
-### func \(\*BurnMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L246>)
+### func \(\*BurnMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L292>)
 
 ```go
 func (p *BurnMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires a positive transferred amount \(the tokens to burn\) and an empty argument list.
 
 <a name="BurnZnnMethod"></a>
 ## type [BurnZnnMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L182-L184>)
@@ -1302,9 +1316,9 @@ func (p *BurnZnnMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="CancelFuseMethod"></a>
-## type [CancelFuseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L77-L79>)
+## type [CancelFuseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L94-L96>)
 
-
+CancelFuseMethod implements unfusing: releases a previously\-fused QSR position once its ExpirationHeight has elapsed and refunds the QSR back to the original owner.
 
 ```go
 type CancelFuseMethod struct {
@@ -1313,31 +1327,31 @@ type CancelFuseMethod struct {
 ```
 
 <a name="CancelFuseMethod.GetPlasma"></a>
-### func \(\*CancelFuseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L81>)
+### func \(\*CancelFuseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L100>)
 
 ```go
 func (p *CancelFuseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the with\-withdraw plasma cost \(the receive emits one descendant refund\).
 
 <a name="CancelFuseMethod.ReceiveBlock"></a>
-### func \(\*CancelFuseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L99>)
+### func \(\*CancelFuseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L127>)
 
 ```go
 func (p *CancelFuseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock looks up the fusion record, refuses if its ExpirationHeight has not been reached \([constants.RevokeNotDue](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#RevokeNotDue>)\), and emits a descendant QSR refund to the caller. Updates the per\-beneficiary cumulative counter \(deleting it if it would reach zero\).
 
 <a name="CancelFuseMethod.ValidateSendBlock"></a>
-### func \(\*CancelFuseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L84>)
+### func \(\*CancelFuseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L106>)
 
 ```go
 func (p *CancelFuseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock decodes the target fusion id and rejects calls that carry value.
 
 <a name="CancelLiquidityStakeMethod"></a>
 ## type [CancelLiquidityStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L427-L429>)
@@ -1378,9 +1392,9 @@ func (p *CancelLiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) 
 
 
 <a name="CancelStakeMethod"></a>
-## type [CancelStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L76-L78>)
+## type [CancelStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L100-L102>)
 
-
+CancelStakeMethod implements stake cancellation: refunds the locked ZNN once ExpirationTime has elapsed. The stake record is kept \(with Amount zeroed and RevokeTime set\) so the reward distributor can still credit pre\-revocation epochs accurately.
 
 ```go
 type CancelStakeMethod struct {
@@ -1389,31 +1403,31 @@ type CancelStakeMethod struct {
 ```
 
 <a name="CancelStakeMethod.GetPlasma"></a>
-### func \(\*CancelStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L80>)
+### func \(\*CancelStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L106>)
 
 ```go
 func (p *CancelStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the with\-withdraw plasma cost \(cancellation emits one descendant ZNN refund\).
 
 <a name="CancelStakeMethod.ReceiveBlock"></a>
-### func \(\*CancelStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L98>)
+### func \(\*CancelStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L131>)
 
 ```go
 func (p *CancelStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock looks up the stake, refuses if its ExpirationTime has not been reached \([constants.RevokeNotDue](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#RevokeNotDue>)\), zeroes the amount \(signaling "already refunded"\) and emits the refund.
 
 <a name="CancelStakeMethod.ValidateSendBlock"></a>
-### func \(\*CancelStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L83>)
+### func \(\*CancelStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L112>)
 
 ```go
 func (p *CancelStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock decodes the target stake id and rejects value\-bearing calls.
 
 <a name="ChangeAdministratorLiquidity"></a>
 ## type [ChangeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L917-L919>)
@@ -1958,9 +1972,9 @@ func (p *FundMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="FuseMethod"></a>
-## type [FuseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L18-L20>)
+## type [FuseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L22-L24>)
 
-
+FuseMethod implements QSR fusing: locks the caller's QSR for [constants.FuseExpiration](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#FuseExpiration>) momentums, granting plasma to the supplied beneficiary in proportion to the locked amount.
 
 ```go
 type FuseMethod struct {
@@ -1969,31 +1983,31 @@ type FuseMethod struct {
 ```
 
 <a name="FuseMethod.GetPlasma"></a>
-### func \(\*FuseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L22>)
+### func \(\*FuseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L27>)
 
 ```go
 func (p *FuseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="FuseMethod.ReceiveBlock"></a>
-### func \(\*FuseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L47>)
+### func \(\*FuseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L61>)
 
 ```go
 func (p *FuseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock persists a [definition.FusionInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#FusionInfo>) keyed by the originating send hash and increments the per\-beneficiary [definition.FusedAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#FusedAmount>) counter so the plasma layer can read the total in O\(1\).
 
 <a name="FuseMethod.ValidateSendBlock"></a>
-### func \(\*FuseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L25>)
+### func \(\*FuseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/plasma.go#L34>)
 
 ```go
 func (p *FuseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock checks the call carries QSR \(not ZNN\), the amount meets [constants.FuseMinAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#FuseMinAmount>) and is a whole multiple of [constants.CostPerFusionUnit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#CostPerFusionUnit>).
 
 <a name="HaltMethod"></a>
 ## type [HaltMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L902-L904>)
@@ -2034,9 +2048,9 @@ func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="IssueMethod"></a>
-## type [IssueMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L19-L21>)
+## type [IssueMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L25-L27>)
 
-
+IssueMethod implements ZTS\-token issuance: charges [constants.TokenIssueAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#TokenIssueAmount>) ZNN as a fee, registers a new [definition.TokenInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#TokenInfo>) keyed by a hash of the originating send, and emits a descendant transfer of the initial total supply to the issuer.
 
 ```go
 type IssueMethod struct {
@@ -2045,31 +2059,31 @@ type IssueMethod struct {
 ```
 
 <a name="IssueMethod.GetPlasma"></a>
-### func \(\*IssueMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L74>)
+### func \(\*IssueMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L90>)
 
 ```go
 func (p *IssueMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the with\-withdraw plasma cost \(issuance emits one descendant transfer\).
 
 <a name="IssueMethod.ReceiveBlock"></a>
-### func \(\*IssueMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L108>)
+### func \(\*IssueMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L133>)
 
 ```go
 func (p *IssueMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock registers the new token \(rejecting duplicate IDs with [constants.ErrIDNotUnique](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrIDNotUnique>)\), credits the contract's balance with TotalSupply, and emits a descendant transfer of the supply to the issuer.
 
 <a name="IssueMethod.ValidateSendBlock"></a>
-### func \(\*IssueMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L77>)
+### func \(\*IssueMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L97>)
 
 ```go
 func (p *IssueMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires exactly [constants.TokenIssueAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#TokenIssueAmount>) ZNN as the issuance fee and checks the parameters via \[checkToken\].
 
 <a name="LegacyRegisterMethod"></a>
 ## type [LegacyRegisterMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L202-L204>)
@@ -2148,9 +2162,9 @@ func (p *LiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="MintMethod"></a>
-## type [MintMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L156-L158>)
+## type [MintMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L184-L186>)
 
-
+MintMethod implements per\-token minting. Owner authority varies: ZNN/QSR may only be minted by an embedded contract \(e.g., swap, staking rewards\); other tokens require their owner.
 
 ```go
 type MintMethod struct {
@@ -2159,31 +2173,31 @@ type MintMethod struct {
 ```
 
 <a name="MintMethod.GetPlasma"></a>
-### func \(\*MintMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L160>)
+### func \(\*MintMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L189>)
 
 ```go
 func (p *MintMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the with\-withdraw plasma cost.
 
 <a name="MintMethod.ReceiveBlock"></a>
-### func \(\*MintMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L179>)
+### func \(\*MintMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L217>)
 
 ```go
 func (p *MintMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock checks IsMintable, the MaxSupply ceiling, the caller's authority \(embedded for ZNN/QSR; owner for everything else\), credits the supply, and emits a descendant transfer to the recipient. Embedded recipients receive a Donate\-encoded payload so the receive triggers their donation hook.
 
 <a name="MintMethod.ValidateSendBlock"></a>
-### func \(\*MintMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L163>)
+### func \(\*MintMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L195>)
 
 ```go
 func (p *MintMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock decodes the \(token, amount, recipient\) tuple and rejects zero amounts or value\-bearing calls.
 
 <a name="NominateGuardiansLiquidity"></a>
 ## type [NominateGuardiansLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L998-L1000>)
@@ -2452,9 +2466,9 @@ func (p *RegisterMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="RegisterSentinelMethod"></a>
-## type [RegisterSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L30-L32>)
+## type [RegisterSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L48-L50>)
 
-
+RegisterSentinelMethod implements sentinel registration: locks [constants.SentinelZnnRegisterAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SentinelZnnRegisterAmount>) ZNN \(sent with the call\) and consumes [constants.SentinelQsrDepositAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SentinelQsrDepositAmount>) from the caller's prior QSR deposit.
 
 ```go
 type RegisterSentinelMethod struct {
@@ -2463,31 +2477,31 @@ type RegisterSentinelMethod struct {
 ```
 
 <a name="RegisterSentinelMethod.GetPlasma"></a>
-### func \(\*RegisterSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L34>)
+### func \(\*RegisterSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L53>)
 
 ```go
 func (method *RegisterSentinelMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="RegisterSentinelMethod.ReceiveBlock"></a>
-### func \(\*RegisterSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L51>)
+### func \(\*RegisterSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L77>)
 
 ```go
 func (method *RegisterSentinelMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock rejects re\-registration \([constants.ErrAlreadyRegistered](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrAlreadyRegistered>)\) and missing QSR deposit, then persists a fresh [definition.SentinelInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#SentinelInfo>).
 
 <a name="RegisterSentinelMethod.ValidateSendBlock"></a>
-### func \(\*RegisterSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L37>)
+### func \(\*RegisterSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L59>)
 
 ```go
 func (method *RegisterSentinelMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires exactly the configured ZNN registration amount.
 
 <a name="RemoveNetworkMethod"></a>
 ## type [RemoveNetworkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L561-L563>)
@@ -2604,9 +2618,9 @@ func (p *RevokeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="RevokeSentinelMethod"></a>
-## type [RevokeSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L85-L87>)
+## type [RevokeSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L115-L117>)
 
-
+RevokeSentinelMethod implements revocation: refunds the locked ZNN/QSR back to the owner and marks the sentinel record as revoked. Only allowed within the revoke\-window phase of the sentinel cycle \(see [GetSentinelRevokeStatus](<#GetSentinelRevokeStatus>)\).
 
 ```go
 type RevokeSentinelMethod struct {
@@ -2615,31 +2629,31 @@ type RevokeSentinelMethod struct {
 ```
 
 <a name="RevokeSentinelMethod.GetPlasma"></a>
-### func \(\*RevokeSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L89>)
+### func \(\*RevokeSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L121>)
 
 ```go
 func (method *RevokeSentinelMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the double\-withdraw plasma cost \(revocation emits both ZNN and QSR refund descendants\).
 
 <a name="RevokeSentinelMethod.ReceiveBlock"></a>
-### func \(\*RevokeSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L106>)
+### func \(\*RevokeSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L148>)
 
 ```go
 func (method *RevokeSentinelMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock checks the revoke\-window gate and emits two descendant refunds \(ZNN, QSR\). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) for unknown sentinels, [constants.ErrAlreadyRevoked](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrAlreadyRevoked>) for double\-revoke, [constants.RevokeNotDue](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#RevokeNotDue>) when the lock window has not yet expired.
 
 <a name="RevokeSentinelMethod.ValidateSendBlock"></a>
-### func \(\*RevokeSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L92>)
+### func \(\*RevokeSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L127>)
 
 ```go
 func (method *RevokeSentinelMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires no transferred value and an empty argument list.
 
 <a name="RevokeUnwrapRequestMethod"></a>
 ## type [RevokeUnwrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1459-L1461>)
@@ -3022,9 +3036,9 @@ func (p *SetTokenTupleMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="StakeMethod"></a>
-## type [StakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L18-L20>)
+## type [StakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L23-L25>)
 
-
+StakeMethod implements ZNN staking: locks the caller's ZNN for a chosen duration and persists a [definition.StakeInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#StakeInfo>) keyed by the originating send hash. The duration determines the weight \(and therefore the share of staking\-reward distribution\).
 
 ```go
 type StakeMethod struct {
@@ -3033,36 +3047,36 @@ type StakeMethod struct {
 ```
 
 <a name="StakeMethod.GetPlasma"></a>
-### func \(\*StakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L29>)
+### func \(\*StakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L41>)
 
 ```go
 func (p *StakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="StakeMethod.ReceiveBlock"></a>
-### func \(\*StakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L50>)
+### func \(\*StakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L70>)
 
 ```go
 func (p *StakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock persists the [definition.StakeInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#StakeInfo>) for the new stake. The Id is the originating send\-block hash.
 
 <a name="StakeMethod.ValidateSendBlock"></a>
-### func \(\*StakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L32>)
+### func \(\*StakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L49>)
 
 ```go
 func (p *StakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires the call to carry at least [constants.StakeMinAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#StakeMinAmount>) ZNN and a duration that is a whole multiple of [constants.StakeTimeUnitSec](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#StakeTimeUnitSec>) within the \[Min, Max\] bounds.
 
 <a name="SwapRetrieveAssetsMethod"></a>
-## type [SwapRetrieveAssetsMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L39-L41>)
+## type [SwapRetrieveAssetsMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L51-L53>)
 
-
+SwapRetrieveAssetsMethod implements the legacy\-claim retrieval flow: a holder of a legacy\-chain key signs the canonical swap message, this contract verifies the signature, applies the decay schedule, mints the redeemed ZNN/QSR amounts via the token contract, and zeroes out the swap entry.
 
 ```go
 type SwapRetrieveAssetsMethod struct {
@@ -3071,31 +3085,31 @@ type SwapRetrieveAssetsMethod struct {
 ```
 
 <a name="SwapRetrieveAssetsMethod.GetPlasma"></a>
-### func \(\*SwapRetrieveAssetsMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L43>)
+### func \(\*SwapRetrieveAssetsMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L57>)
 
 ```go
 func (p *SwapRetrieveAssetsMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the double\-withdraw plasma cost \(the receive emits up to two descendant Mint calls — one ZNN, one QSR\).
 
 <a name="SwapRetrieveAssetsMethod.ReceiveBlock"></a>
-### func \(\*SwapRetrieveAssetsMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L64>)
+### func \(\*SwapRetrieveAssetsMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L89>)
 
 ```go
 func (p *SwapRetrieveAssetsMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock looks up the swap entry by the legacy\-key id hash, applies the epoch\-based decay, emits up to two descendant \[TokenContract\] mint calls \(one for ZNN, one for QSR\), and zeroes the storage entry. Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if the entry does not exist or is already drained.
 
 <a name="SwapRetrieveAssetsMethod.ValidateSendBlock"></a>
-### func \(\*SwapRetrieveAssetsMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L46>)
+### func \(\*SwapRetrieveAssetsMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap.go#L64>)
 
 ```go
 func (p *SwapRetrieveAssetsMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock decodes the \(publicKey, signature\) pair, verifies the signature against the canonical swap message, and rejects calls that carry value.
 
 <a name="UndelegateMethod"></a>
 ## type [UndelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L720-L722>)
@@ -3402,9 +3416,9 @@ func (p *UpdateEmbeddedPillarMethod) ValidateSendBlock(block *nom.AccountBlock) 
 
 
 <a name="UpdateEmbeddedSentinelMethod"></a>
-## type [UpdateEmbeddedSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L153-L155>)
+## type [UpdateEmbeddedSentinelMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L197-L199>)
 
-
+UpdateEmbeddedSentinelMethod is the periodic\-update entry point: advances the per\-epoch reward computation.
 
 ```go
 type UpdateEmbeddedSentinelMethod struct {
@@ -3413,36 +3427,36 @@ type UpdateEmbeddedSentinelMethod struct {
 ```
 
 <a name="UpdateEmbeddedSentinelMethod.GetPlasma"></a>
-### func \(\*UpdateEmbeddedSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L157>)
+### func \(\*UpdateEmbeddedSentinelMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L202>)
 
 ```go
 func (method *UpdateEmbeddedSentinelMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="UpdateEmbeddedSentinelMethod.ReceiveBlock"></a>
-### func \(\*UpdateEmbeddedSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L174>)
+### func \(\*UpdateEmbeddedSentinelMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L226>)
 
 ```go
 func (method *UpdateEmbeddedSentinelMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock advances the per\-epoch reward computation via \[updateSentinelRewards\]. Rate\-limited by \[checkAndPerformUpdate\].
 
 <a name="UpdateEmbeddedSentinelMethod.ValidateSendBlock"></a>
-### func \(\*UpdateEmbeddedSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L160>)
+### func \(\*UpdateEmbeddedSentinelMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L208>)
 
 ```go
 func (method *UpdateEmbeddedSentinelMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires no transferred value and an empty argument list.
 
 <a name="UpdateEmbeddedStakeMethod"></a>
-## type [UpdateEmbeddedStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L140-L142>)
+## type [UpdateEmbeddedStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L175-L177>)
 
-
+UpdateEmbeddedStakeMethod is the periodic\-update entry point: advances the per\-epoch staking\-reward computation.
 
 ```go
 type UpdateEmbeddedStakeMethod struct {
@@ -3451,31 +3465,31 @@ type UpdateEmbeddedStakeMethod struct {
 ```
 
 <a name="UpdateEmbeddedStakeMethod.GetPlasma"></a>
-### func \(\*UpdateEmbeddedStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L144>)
+### func \(\*UpdateEmbeddedStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L180>)
 
 ```go
 func (p *UpdateEmbeddedStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="UpdateEmbeddedStakeMethod.ReceiveBlock"></a>
-### func \(\*UpdateEmbeddedStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L161>)
+### func \(\*UpdateEmbeddedStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L202>)
 
 ```go
 func (p *UpdateEmbeddedStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock advances the per\-epoch reward computation via \[updateStakeRewards\]. Rate\-limited by \[checkAndPerformUpdate\].
 
 <a name="UpdateEmbeddedStakeMethod.ValidateSendBlock"></a>
-### func \(\*UpdateEmbeddedStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L147>)
+### func \(\*UpdateEmbeddedStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/stake.go#L185>)
 
 ```go
 func (p *UpdateEmbeddedStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock requires no value and no arguments.
 
 <a name="UpdatePhaseMethod"></a>
 ## type [UpdatePhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L427-L429>)
@@ -3592,9 +3606,9 @@ func (method *UpdateRewardEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.
 
 
 <a name="UpdateTokenMethod"></a>
-## type [UpdateTokenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L288-L290>)
+## type [UpdateTokenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L342-L344>)
 
-
+UpdateTokenMethod implements metadata rotation: only the current owner may transfer ownership or flip the mintable/burnable flags. Once IsMintable is set to false it cannot be flipped back — and MaxSupply collapses to TotalSupply.
 
 ```go
 type UpdateTokenMethod struct {
@@ -3603,31 +3617,31 @@ type UpdateTokenMethod struct {
 ```
 
 <a name="UpdateTokenMethod.GetPlasma"></a>
-### func \(\*UpdateTokenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L292>)
+### func \(\*UpdateTokenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L347>)
 
 ```go
 func (p *UpdateTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="UpdateTokenMethod.ReceiveBlock"></a>
-### func \(\*UpdateTokenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L310>)
+### func \(\*UpdateTokenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L374>)
 
 ```go
 func (p *UpdateTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock applies the metadata changes, enforcing the one\-way IsMintable=false transition. Returns [constants.ErrPermissionDenied](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrPermissionDenied>) when the caller is not the owner, [constants.ErrForbiddenParam](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrForbiddenParam>) when attempting to re\-enable IsMintable after it has been turned off.
 
 <a name="UpdateTokenMethod.ValidateSendBlock"></a>
-### func \(\*UpdateTokenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L295>)
+### func \(\*UpdateTokenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L353>)
 
 ```go
 func (p *UpdateTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock decodes the update parameters and rejects value\-bearing calls.
 
 <a name="UpdateWrapRequestMethod"></a>
 ## type [UpdateWrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L270-L272>)

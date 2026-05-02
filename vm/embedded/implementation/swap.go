@@ -12,10 +12,17 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// swapLog is the per-contract logger; tagged with `contract=swap`.
 var (
 	swapLog = common.EmbeddedLogger.New("contract", "swap")
 )
 
+// ApplyDecay reduces a swap deposit's redeemable ZNN/QSR according
+// to the decay schedule: full value before
+// [constants.SwapAssetDecayEpochsOffset], then drops by
+// [constants.SwapAssetDecayTickValuePercentage] every
+// [constants.SwapAssetDecayTickEpochs] epochs until zero. Mutates
+// deposit in place.
 func ApplyDecay(deposit *definition.SwapAssets, currentEpoch int) {
 	percentageToGive := 100
 	if currentEpoch < constants.SwapAssetDecayEpochsOffset {
@@ -36,13 +43,24 @@ func ApplyDecay(deposit *definition.SwapAssets, currentEpoch int) {
 	deposit.Qsr.Div(deposit.Qsr, common.Big100)
 }
 
+// SwapRetrieveAssetsMethod implements the legacy-claim retrieval
+// flow: a holder of a legacy-chain key signs the canonical swap
+// message, this contract verifies the signature, applies the decay
+// schedule, mints the redeemed ZNN/QSR amounts via the token
+// contract, and zeroes out the swap entry.
 type SwapRetrieveAssetsMethod struct {
 	MethodName string
 }
 
+// GetPlasma returns the double-withdraw plasma cost (the receive
+// emits up to two descendant Mint calls — one ZNN, one QSR).
 func (p *SwapRetrieveAssetsMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWDoubleWithdraw, nil
 }
+
+// ValidateSendBlock decodes the (publicKey, signature) pair,
+// verifies the signature against the canonical swap message, and
+// rejects calls that carry value.
 func (p *SwapRetrieveAssetsMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.ParamRetrieveAssets)
@@ -61,6 +79,13 @@ func (p *SwapRetrieveAssetsMethod) ValidateSendBlock(block *nom.AccountBlock) er
 	block.Data, err = definition.ABISwap.PackMethod(p.MethodName, param.PublicKey, param.Signature)
 	return err
 }
+
+// ReceiveBlock looks up the swap entry by the legacy-key id hash,
+// applies the epoch-based decay, emits up to two descendant
+// [TokenContract] mint calls (one for ZNN, one for QSR), and
+// zeroes the storage entry. Returns
+// [constants.ErrDataNonExistent] if the entry does not exist or is
+// already drained.
 func (p *SwapRetrieveAssetsMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
