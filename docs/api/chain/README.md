@@ -10,9 +10,35 @@ Package chain is the ledger orchestration layer of the Network of Momentum.
 
 ### Overview
 
-chain owns the dual\-ledger primitives — an account pool of per\-account block chains and a momentum pool of consensus blocks — and serializes all mutations through a single insert lock. All inserts pass through here: account blocks from RPC and from contract execution, and momentums from the elected pillar or from peer sync.
+chain owns the dual\-ledger primitives — an in\-memory pool of uncommitted account blocks and a persistent pool of committed momentums — and serializes every mutation through one global insert lock. All inserts pass through here:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- account blocks from RPC and from contract execution \(\[accountPool.AddAccountBlockTransaction\]\);
+- momentums from the elected pillar or from peer sync \(\[momentumPool.AddMomentumTransaction\]\).
+
+The momentum\-event manager broadcasts insert and delete events to subscribers \(the account pool itself, the broadcaster, RPC subscriptions\). A spork\-not\-implemented detection at boot and on every momentum insert will terminate the binary so an out\-of\-date node cannot continue to operate against an upgraded chain.
+
+### Key Concepts
+
+- Chain — the public surface composing genesis store, account pool, momentum pool, and event manager into one handle.
+- Insert lock — the single mutex serializing every mutation. Held via \[Chain.AcquireInsert\]; the returned [sync.Locker](<https://pkg.go.dev/sync/#Locker>) is a one\-shot handle that panics on Lock\(\).
+- Account pool — per\-address managers holding uncommitted blocks on top of the stable layer. Inserts may rollback uncommitted blocks via the \[higherPriority\] tie\-break \(TotalPlasma / BasePlasma ratio, hash as final tie\-break\) but never confirmed ones.
+- Momentum pool — persistent versioned chain managed via [common/db.Manager](<https://pkg.go.dev/common/db/#Manager>); commit and rollback both broadcast events.
+- Stable interface — abstracts the persistent layer the account pool reads from. The momentum pool implements it; tests can substitute a mock.
+- GotAllActiveSporksImplemented — boot\- and per\-momentum check that aborts the node if any active spork is unrecognized.
+- MomentumEventListener — observers of insert/delete; run synchronously on the broadcaster's goroutine.
+
+### Concurrency
+
+Every public method on [Chain](<#Chain>) is safe for concurrent use. The account pool and momentum pool each have their own internal mutex on top of the global insert lock so reads do not block on mutations. Listener callbacks run with the source pool's mutex temporarily released to keep listener re\-entry safe.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — interface contracts the chain hands out \(Account, AccountMailbox, Momentum, Genesis\).
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>), \[.../chain/account/mailbox\], \[.../chain/momentum\], \[.../chain/genesis\] — implementations the chain composes.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — block model.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — versioned LevelDB layer.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — runs against the stores chain hands out.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>) — registers as a [MomentumEventListener](<#MomentumEventListener>) to broadcast new momentums to peers.
 
 ## Index
 
@@ -106,20 +132,32 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="ErrFailedToAddAccountBlockTransaction"></a>
+<a name="ErrFailedToAddAccountBlockTransaction"></a>Sentinel errors returned by \[AccountPool.AddAccountBlockTransaction\] and the constant capping how many account blocks a single momentum may commit.
 
 ```go
 var (
+    // ErrFailedToAddAccountBlockTransaction is the umbrella sentinel
+    // for any account-pool insert failure; the wrapped error carries
+    // the specific reason.
     ErrFailedToAddAccountBlockTransaction = errors.Errorf("failed to insert account-block-transaction")
-    ErrPlasmaRatioIsWorse                 = errors.Errorf("plasma ratio is smaller for current block")
-    ErrHashTieBreak                       = errors.Errorf("hash tie-break is worse for current block")
+    // ErrPlasmaRatioIsWorse signals that an inbound block has a worse
+    // plasma price (TotalPlasma/BasePlasma ratio) than the block
+    // already at the same height. See [higherPriority].
+    ErrPlasmaRatioIsWorse = errors.Errorf("plasma ratio is smaller for current block")
+    // ErrHashTieBreak signals that an inbound block has the same plasma
+    // price as the existing block but a numerically larger hash; the
+    // smaller hash wins.
+    ErrHashTieBreak = errors.Errorf("hash tie-break is worse for current block")
 
-    // MaxAccountBlocksInMomentum takes into account batched account-blocks
+    // MaxAccountBlocksInMomentum is the cap on the [nom.Momentum.Content]
+    // list. Counts every batched contract send (descendants count
+    // individually toward the cap), even though they ride along with a
+    // parent receive in the wire form.
     MaxAccountBlocksInMomentum = 100
 )
 ```
 
-<a name="inserterLog"></a>
+<a name="inserterLog"></a>inserterLog is the dedicated log handle for chain insert\-lock acquisitions. Logging at this granularity makes lock contention easy to spot in production traces without polluting the main chain log.
 
 ```go
 var (
@@ -128,27 +166,31 @@ var (
 ```
 
 <a name="GotAllActiveSporksImplemented"></a>
-## func [GotAllActiveSporksImplemented](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L123>)
+## func [GotAllActiveSporksImplemented](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L154>)
 
 ```go
 func GotAllActiveSporksImplemented(store store.Momentum) (justNow *definition.Spork, unimplemented []*definition.Spork, err error)
 ```
 
-Checks whatever or not all active sporks are implemented
+GotAllActiveSporksImplemented inspects the spork records in store and reports two things: the spork \(if any\) whose enforcement height matches the current frontier \(i.e., just activated this momentum\), and any active spork this binary does not recognize.
+
+Used by chain.Init \(boot\-time check\) and \[momentumPool.AddMomentumTransaction\] \(per\-momentum check\) to refuse to operate against an upgraded chain that needs a newer binary.
 
 <a name="higherPriority"></a>
-## func [higherPriority](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L84>)
+## func [higherPriority](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L126>)
 
 ```go
 func higherPriority(a, b *nom.AccountBlock) error
 ```
 
+higherPriority compares two competing account blocks at the same height. The winner is the block with the higher plasma price \(TotalPlasma/BasePlasma ratio\), with the smaller hash as deterministic tie\-breaker. Returns nil when a is strictly better than b, otherwise one of [ErrPlasmaRatioIsWorse](<#ErrFailedToAddAccountBlockTransaction>) or [ErrHashTieBreak](<#ErrFailedToAddAccountBlockTransaction>).
 
+The cross\-multiply form avoids floating\-point and integer\-overflow concerns while remaining branch\-free.
 
 <a name="AccountPool"></a>
-## type [AccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L46-L65>)
+## type [AccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L94-L132>)
 
-
+AccountPool is the read/write surface for the in\-memory layer of uncommitted account blocks that sit on top of the persistent chain. Inserts may rollback uncommitted blocks but never confirmed ones.
 
 ```go
 type AccountPool interface {
@@ -161,36 +203,65 @@ type AccountPool interface {
     //  - the account-block with the biggest TotalPlasma/BasePlasma is selected
     //  - the account-block with the smallest hash
     AddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
+    // ForceAddAccountBlockTransaction inserts unconditionally, skipping
+    // the [higherPriority] tie-break. Used by tests and by the genesis
+    // loader; production paths use [AddAccountBlockTransaction].
     ForceAddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
 
+    // GetPatch returns the forward patch for the given (address,
+    // identifier) pair, or nil when the identifier is not in the pool.
     GetPatch(address types.Address, identifier types.HashHeight) db.Patch
+    // GetAccountStore returns a [store.Account] view at identifier, or
+    // nil when the identifier is older than the stable store or absent
+    // from the pool.
     GetAccountStore(address types.Address, identifier types.HashHeight) store.Account
+    // GetFrontierAccountStore returns a [store.Account] view of the
+    // pool's frontier for address (committed + uncommitted blocks).
     GetFrontierAccountStore(address types.Address) store.Account
 
+    // GetNewMomentumContent returns the slice of uncommitted account
+    // blocks the next momentum should commit, capped at
+    // [MaxAccountBlocksInMomentum] and respecting batched-descendant
+    // boundaries (a parent receive and its contract sends are committed
+    // together or not at all).
     GetNewMomentumContent() []*nom.AccountBlock
+    // GetAllUncommittedAccountBlocks enumerates every uncommitted
+    // account block currently in the pool, across all addresses.
     GetAllUncommittedAccountBlocks() []*nom.AccountBlock
+    // GetUncommittedAccountBlocksByAddress returns the uncommitted
+    // blocks for one address only.
     GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 }
 ```
 
 <a name="NewAccountPool"></a>
-### func [NewAccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L328>)
+### func [NewAccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L441>)
 
 ```go
 func NewAccountPool(stable Stable) AccountPool
 ```
 
-
+NewAccountPool wraps \[newAccountPool\] in the [AccountPool](<#AccountPool>) interface for callers outside this package \(notably the genesis loader\).
 
 <a name="Chain"></a>
-## type [Chain](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L12-L26>)
+## type [Chain](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L20-L42>)
 
+Chain is the public surface of the chain subsystem. It composes the genesis store, the account pool, the momentum pool, and the momentum event manager into one handle so consumers \(verifier, VM, RPC, protocol\) can reach every chain\-state primitive through a single interface.
 
+Concurrency: every method is safe for concurrent use; mutations serialize through the chain insert lock obtained via \[Chain.AcquireInsert\].
 
 ```go
 type Chain interface {
+    // Init prepares the chain: cross-checks the embedded genesis against
+    // what is on disk, registers the account-pool listener with the
+    // momentum-event manager, and refuses to start when an active spork
+    // is unrecognized by this binary.
     Init() error
+    // Start currently a no-op alongside Init; reserved for future
+    // background-loop wiring.
     Start() error
+    // Stop unregisters the account-pool listener and closes the
+    // underlying database manager.
     Stop() error
 
     // AcquireInsert is used to limit insert operations in a global way inside the chain module.
@@ -206,59 +277,82 @@ type Chain interface {
 ```
 
 <a name="MomentumEventListener"></a>
-## type [MomentumEventListener](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L28-L31>)
+## type [MomentumEventListener](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L49-L56>)
 
-
+MomentumEventListener is the contract a subsystem implements to observe momentum\-chain mutations. The chain layer broadcasts InsertMomentum after a momentum is committed and DeleteMomentum after one is rolled back. Listeners run on the chain's broadcast goroutine — heavy work should be deferred.
 
 ```go
 type MomentumEventListener interface {
+    // InsertMomentum is called once per committed momentum, after the
+    // underlying database mutation has succeeded.
     InsertMomentum(*nom.DetailedMomentum)
+    // DeleteMomentum is called once per rolled-back momentum, after the
+    // rollback has been applied.
     DeleteMomentum(*nom.DetailedMomentum)
 }
 ```
 
 <a name="MomentumEventManager"></a>
-## type [MomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L33-L36>)
+## type [MomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L61-L69>)
 
-
+MomentumEventManager is the registration surface for [MomentumEventListener](<#MomentumEventListener>). The account pool, the broadcaster, and the RPC subscription server all register through this interface.
 
 ```go
 type MomentumEventManager interface {
+    // Register adds listener to the broadcast list. Idempotent on
+    // pointer equality is the caller's responsibility — registering the
+    // same listener twice will cause two broadcasts per event.
     Register(MomentumEventListener)
+    // UnRegister removes listener (by pointer equality) from the
+    // broadcast list. No-op if listener is not registered.
     UnRegister(MomentumEventListener)
 }
 ```
 
 <a name="MomentumPool"></a>
-## type [MomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L38-L44>)
+## type [MomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L73-L89>)
 
-
+MomentumPool is the read/write surface for the global momentum chain. Mutations require the chain insert lock; readers do not.
 
 ```go
 type MomentumPool interface {
+    // AddMomentumTransaction commits a [nom.MomentumTransaction] onto
+    // the frontier. The insertLocker must be the [sync.Locker] returned
+    // by [Chain.AcquireInsert]; it is used as a tag for logging and to
+    // signal that the caller already holds the global insert lock.
     AddMomentumTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error
+    // RollbackTo reverses momentums down to identifier. Used by the
+    // reorg path; nothing is committed below identifier.
     RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error
 
+    // GetFrontierMomentumStore returns a [store.Momentum] view of the
+    // most recent committed momentum.
     GetFrontierMomentumStore() store.Momentum
+    // GetMomentumStore returns a [store.Momentum] view at identifier,
+    // or nil if the identifier is unknown or has been pruned.
     GetMomentumStore(identifier types.HashHeight) store.Momentum
 }
 ```
 
 <a name="Stable"></a>
-## type [Stable](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L28-L30>)
+## type [Stable](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L47-L51>)
 
-
+Stable abstracts the persistent layer the account pool layers uncommitted state on top of. The momentum pool implements this interface; tests can substitute a mock to drive the pool against synthetic state.
 
 ```go
 type Stable interface {
+    // GetStableAccountDB returns the persistent [db.DB] view of
+    // address's account chain at the most recent committed momentum.
     GetStableAccountDB(address types.Address) db.DB
 }
 ```
 
 <a name="accountPool"></a>
-## type [accountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L32-L37>)
+## type [accountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L59-L64>)
 
+accountPool holds the in\-memory, uncommitted account\-block state per address. Each address has its own [db.Manager](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Manager>) \(created lazily on first touch\) sitting on top of the stable store.
 
+Concurrency: every public method takes ap.changes; the pool is safe for concurrent use.
 
 ```go
 type accountPool struct {
@@ -270,180 +364,185 @@ type accountPool struct {
 ```
 
 <a name="newAccountPool"></a>
-### func [newAccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L321>)
+### func [newAccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L431>)
 
 ```go
 func newAccountPool(stable Stable) *accountPool
 ```
 
-
+newAccountPool constructs an \[accountPool\] backed by stable. Internal constructor used by [NewChain](<#NewChain>); external callers use [NewAccountPool](<#NewAccountPool>).
 
 <a name="accountPool.AddAccountBlockTransaction"></a>
-### func \(\*accountPool\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L94>)
+### func \(\*accountPool\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L141>)
 
 ```go
 func (ap *accountPool) AddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
 ```
 
-
+AddAccountBlockTransaction commits transaction onto the pool's frontier for transaction.Block.Address. Caller must hold the chain insert lock \(the insertLocker argument\). Inserts may rollback uncommitted blocks above the new block's height when the new block wins the \[higherPriority\] tie\-break.
 
 <a name="accountPool.DeleteMomentum"></a>
-### func \(\*accountPool\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L215>)
+### func \(\*accountPool\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L300>)
 
 ```go
 func (ap *accountPool) DeleteMomentum(*nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum implements [MomentumEventListener](<#MomentumEventListener>): drops every per\-address manager so the pool re\-derives its state from the new stable frontier on next access.
 
 <a name="accountPool.ForceAddAccountBlockTransaction"></a>
-### func \(\*accountPool\) [ForceAddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L102>)
+### func \(\*accountPool\) [ForceAddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L153>)
 
 ```go
 func (ap *accountPool) ForceAddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
 ```
 
-
+ForceAddAccountBlockTransaction is the unconditional variant of \[AddAccountBlockTransaction\]; it bypasses the \[higherPriority\] tie\-break. Used by tests and the genesis loader.
 
 <a name="accountPool.GetAccountStore"></a>
-### func \(\*accountPool\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L171>)
+### func \(\*accountPool\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L239>)
 
 ```go
 func (ap *accountPool) GetAccountStore(address types.Address, identifier types.HashHeight) store.Account
 ```
 
-
+GetAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) view at identifier. Returns nil when identifier is older than the stable store \(rolled off the pool\) or when no such version is retained.
 
 <a name="accountPool.GetAllUncommittedAccountBlocks"></a>
-### func \(\*accountPool\) [GetAllUncommittedAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L290>)
+### func \(\*accountPool\) [GetAllUncommittedAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L391>)
 
 ```go
 func (ap *accountPool) GetAllUncommittedAccountBlocks() []*nom.AccountBlock
 ```
 
-
+GetAllUncommittedAccountBlocks enumerates every uncommitted account block currently in the pool, across all addresses.
 
 <a name="accountPool.GetFrontierAccountStore"></a>
-### func \(\*accountPool\) [GetFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L193>)
+### func \(\*accountPool\) [GetFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L264>)
 
 ```go
 func (ap *accountPool) GetFrontierAccountStore(address types.Address) store.Account
 ```
 
-
+GetFrontierAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) view of the pool's frontier \(committed \+ uncommitted blocks\) for address.
 
 <a name="accountPool.GetNewMomentumContent"></a>
-### func \(\*accountPool\) [GetNewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L271>)
+### func \(\*accountPool\) [GetNewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L364>)
 
 ```go
 func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock
 ```
 
-
+GetNewMomentumContent returns the slice of uncommitted account blocks the next momentum should commit, capped at [MaxAccountBlocksInMomentum](<#ErrFailedToAddAccountBlockTransaction>) and respecting batched\-descendant boundaries.
 
 <a name="accountPool.GetPatch"></a>
-### func \(\*accountPool\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L165>)
+### func \(\*accountPool\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L229>)
 
 ```go
 func (ap *accountPool) GetPatch(address types.Address, identifier types.HashHeight) db.Patch
 ```
 
-
+GetPatch returns the forward patch the pool committed at identifier for address, or nil when identifier is not in the pool.
 
 <a name="accountPool.GetUncommittedAccountBlocksByAddress"></a>
-### func \(\*accountPool\) [GetUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L301>)
+### func \(\*accountPool\) [GetUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L405>)
 
 ```go
 func (ap *accountPool) GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 ```
 
-
+GetUncommittedAccountBlocksByAddress returns the uncommitted blocks for one address only.
 
 <a name="accountPool.InsertMomentum"></a>
-### func \(\*accountPool\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L207>)
+### func \(\*accountPool\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L288>)
 
 ```go
 func (ap *accountPool) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+InsertMomentum implements [MomentumEventListener](<#MomentumEventListener>): when a momentum is committed the pool prunes any per\-address managers whose blocks are now finalized and re\-applies any still\-uncommitted blocks on top of the new stable layer.
 
 <a name="accountPool.addAccountBlockTransaction"></a>
-### func \(\*accountPool\) [addAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L110>)
+### func \(\*accountPool\) [addAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L172>)
 
 ```go
 func (ap *accountPool) addAccountBlockTransaction(transaction *nom.AccountBlockTransaction, forceAdd bool) error
 ```
 
+addAccountBlockTransaction is the internal insert path shared by \[AddAccountBlockTransaction\] and \[ForceAddAccountBlockTransaction\]. Caller must hold ap.changes. Behavior:
 
+- Fast\-forward append when previous matches the current frontier.
+- Idempotent return when the block is already inserted.
+- Reject when the block is older than the stable store or its previous\-hash linkage is broken \(via \[canRollback\]\).
+- Conditional rollback \+ insert when a higher\-priority block supersedes a lower\-priority one \(skipped under forceAdd\).
 
 <a name="accountPool.canRollback"></a>
-### func \(\*accountPool\) [canRollback](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L48>)
+### func \(\*accountPool\) [canRollback](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L82>)
 
 ```go
 func (ap *accountPool) canRollback(block *nom.AccountBlock) error
 ```
 
-
+canRollback reports whether the in\-flight block can replace the uncommitted entry currently sitting at its height. Refuses when the proposed identifier is older than the stable store \(already finalized\) or when its previous hash does not match the chain at height\-1. Returns nil when a rollback is permissible.
 
 <a name="accountPool.filterBlocksToCommit"></a>
-### func \(\*accountPool\) [filterBlocksToCommit](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L274>)
+### func \(\*accountPool\) [filterBlocksToCommit](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L373>)
 
 ```go
 func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock
 ```
 
-
+filterBlocksToCommit walks blocks accumulating batches of blocks terminating at non\-[nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) entries. A batch is admitted only if the running total stays under [MaxAccountBlocksInMomentum](<#ErrFailedToAddAccountBlockTransaction>); otherwise the loop stops short to avoid fragmenting a parent receive from its descendants.
 
 <a name="accountPool.getAccountManager"></a>
-### func \(\*accountPool\) [getAccountManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L39>)
+### func \(\*accountPool\) [getAccountManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L68>)
 
 ```go
 func (ap *accountPool) getAccountManager(address types.Address) db.Manager
 ```
 
-
+getAccountManager returns address's per\-address manager, creating it lazily atop the stable store on first request.
 
 <a name="accountPool.getFrontierAccountStore"></a>
-### func \(\*accountPool\) [getFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L203>)
+### func \(\*accountPool\) [getFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L280>)
 
 ```go
 func (ap *accountPool) getFrontierAccountStore(address types.Address) store.Account
 ```
 
-
+getFrontierAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) over the pool's frontier \(committed \+ uncommitted\) for address. Caller must hold ap.changes.
 
 <a name="accountPool.getStableAccountStore"></a>
-### func \(\*accountPool\) [getStableAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L200>)
+### func \(\*accountPool\) [getStableAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L273>)
 
 ```go
 func (ap *accountPool) getStableAccountStore(address types.Address) store.Account
 ```
 
-
+getStableAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) over the stable \(committed\) frontier for address. Caller must hold ap.changes.
 
 <a name="accountPool.getUncommittedAccountBlocksByAddress"></a>
-### func \(\*accountPool\) [getUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L307>)
+### func \(\*accountPool\) [getUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L415>)
 
 ```go
 func (ap *accountPool) getUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 ```
 
-
+getUncommittedAccountBlocksByAddress is the locked\-caller variant of \[GetUncommittedAccountBlocksByAddress\]; caller must hold ap.changes. Walks every height between the stable frontier and the pool frontier.
 
 <a name="accountPool.rebuild"></a>
-### func \(\*accountPool\) [rebuild](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L221>)
+### func \(\*accountPool\) [rebuild](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L311>)
 
 ```go
 func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error
 ```
 
-
+rebuild walks every per\-address manager, snapshots its uncommitted blocks, recreates the manager on top of the new stable layer, and re\-applies the uncommitted blocks. Used by \[InsertMomentum\] to keep the pool consistent with the persistent chain after a commit.
 
 <a name="chain"></a>
-## type [chain](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L20-L30>)
+## type [chain](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L27-L37>)
 
-
+chain is the [Chain](<#Chain>) implementation. It composes the genesis store, the in\-memory account pool, the persistent momentum pool, and the momentum\-event manager. The single insert mutex serializes every mutation and is exposed to callers via chain.AcquireInsert.
 
 ```go
 type chain struct {
@@ -460,315 +559,327 @@ type chain struct {
 ```
 
 <a name="NewChain"></a>
-### func [NewChain](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L32>)
+### func [NewChain](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L41>)
 
 ```go
 func NewChain(chainManager db.Manager, genesis store.Genesis) *chain
 ```
 
-
+NewChain wires the components together and returns a \*chain. Callers outside the package should treat the return value as a [Chain](<#Chain>).
 
 <a name="chain.AcquireInsert"></a>
-### func \(\*chain\) [AcquireInsert](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L124>)
+### func \(\*chain\) [AcquireInsert](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L157>)
 
 ```go
 func (c *chain) AcquireInsert(reason string) sync.Locker
 ```
 
-
+AcquireInsert blocks until the global insert lock is available, then returns an \[inserter\] sync.Locker tagged with reason for log lines. The returned locker is single\-use: calling Lock\(\) on it panics, only Unlock\(\) is valid. Mutation methods on [Chain](<#Chain>) check that the locker is non\-nil but do not validate its identity — passing a different sync.Locker is a programmer error.
 
 <a name="chain.AddAccountBlockTransaction"></a>
-### func \(chain\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L94>)
+### func \(chain\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L141>)
 
 ```go
 func (ap chain) AddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
 ```
 
-
+AddAccountBlockTransaction commits transaction onto the pool's frontier for transaction.Block.Address. Caller must hold the chain insert lock \(the insertLocker argument\). Inserts may rollback uncommitted blocks above the new block's height when the new block wins the \[higherPriority\] tie\-break.
 
 <a name="chain.AddMomentumTransaction"></a>
-### func \(chain\) [AddMomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L28>)
+### func \(chain\) [AddMomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L46>)
 
 ```go
 func (c chain) AddMomentumTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error
 ```
 
+AddMomentumTransaction commits transaction onto the chain frontier, broadcasts InsertMomentum to listeners, and inspects the resulting state for two spork\-related conditions:
 
+- Activation: a freshly activated spork prints a congratulations banner.
+- Unimplemented: an active on\-chain spork this binary does not recognize is fatal — the node logs at Crit level and terminates with exit code 2.
+
+Caller must hold the chain insert lock \(the insertLocker argument\).
 
 <a name="chain.DeleteMomentum"></a>
-### func \(chain\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L215>)
+### func \(chain\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L300>)
 
 ```go
 func (ap chain) DeleteMomentum(*nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum implements [MomentumEventListener](<#MomentumEventListener>): drops every per\-address manager so the pool re\-derives its state from the new stable frontier on next access.
 
 <a name="chain.ForceAddAccountBlockTransaction"></a>
-### func \(chain\) [ForceAddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L102>)
+### func \(chain\) [ForceAddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L153>)
 
 ```go
 func (ap chain) ForceAddAccountBlockTransaction(insertLocker sync.Locker, transaction *nom.AccountBlockTransaction) error
 ```
 
-
+ForceAddAccountBlockTransaction is the unconditional variant of \[AddAccountBlockTransaction\]; it bypasses the \[higherPriority\] tie\-break. Used by tests and the genesis loader.
 
 <a name="chain.GetAccountStore"></a>
-### func \(chain\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L171>)
+### func \(chain\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L239>)
 
 ```go
 func (ap chain) GetAccountStore(address types.Address, identifier types.HashHeight) store.Account
 ```
 
-
+GetAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) view at identifier. Returns nil when identifier is older than the stable store \(rolled off the pool\) or when no such version is retained.
 
 <a name="chain.GetAllUncommittedAccountBlocks"></a>
-### func \(chain\) [GetAllUncommittedAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L290>)
+### func \(chain\) [GetAllUncommittedAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L391>)
 
 ```go
 func (ap chain) GetAllUncommittedAccountBlocks() []*nom.AccountBlock
 ```
 
-
+GetAllUncommittedAccountBlocks enumerates every uncommitted account block currently in the pool, across all addresses.
 
 <a name="chain.GetFrontierAccountStore"></a>
-### func \(chain\) [GetFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L193>)
+### func \(chain\) [GetFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L264>)
 
 ```go
 func (ap chain) GetFrontierAccountStore(address types.Address) store.Account
 ```
 
-
+GetFrontierAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) view of the pool's frontier \(committed \+ uncommitted blocks\) for address.
 
 <a name="chain.GetFrontierMomentumStore"></a>
-### func \(chain\) [GetFrontierMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L161>)
+### func \(chain\) [GetFrontierMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L198>)
 
 ```go
 func (c chain) GetFrontierMomentumStore() store.Momentum
 ```
 
-
+GetFrontierMomentumStore returns the locked variant of \[getFrontierStore\].
 
 <a name="chain.GetMomentumStore"></a>
-### func \(chain\) [GetMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L166>)
+### func \(chain\) [GetMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L206>)
 
 ```go
 func (c chain) GetMomentumStore(identifier types.HashHeight) store.Momentum
 ```
 
-
+GetMomentumStore returns a [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) view at identifier, or nil when the identifier is unknown or has been pruned.
 
 <a name="chain.GetNewMomentumContent"></a>
-### func \(chain\) [GetNewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L271>)
+### func \(chain\) [GetNewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L364>)
 
 ```go
 func (ap chain) GetNewMomentumContent() []*nom.AccountBlock
 ```
 
-
+GetNewMomentumContent returns the slice of uncommitted account blocks the next momentum should commit, capped at [MaxAccountBlocksInMomentum](<#ErrFailedToAddAccountBlockTransaction>) and respecting batched\-descendant boundaries.
 
 <a name="chain.GetPatch"></a>
-### func \(chain\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L165>)
+### func \(chain\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L229>)
 
 ```go
 func (ap chain) GetPatch(address types.Address, identifier types.HashHeight) db.Patch
 ```
 
-
+GetPatch returns the forward patch the pool committed at identifier for address, or nil when identifier is not in the pool.
 
 <a name="chain.GetStableAccountDB"></a>
-### func \(chain\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L176>)
+### func \(chain\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L220>)
 
 ```go
 func (c chain) GetStableAccountDB(address types.Address) db.DB
 ```
 
-
+GetStableAccountDB satisfies the [Stable](<#Stable>) interface for the account pool: returns the persistent [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) view of address at the most recent committed momentum.
 
 <a name="chain.GetUncommittedAccountBlocksByAddress"></a>
-### func \(chain\) [GetUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L301>)
+### func \(chain\) [GetUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L405>)
 
 ```go
 func (ap chain) GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 ```
 
-
+GetUncommittedAccountBlocksByAddress returns the uncommitted blocks for one address only.
 
 <a name="chain.Init"></a>
-### func \(\*chain\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L44>)
+### func \(\*chain\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L59>)
 
 ```go
 func (c *chain) Init() error
 ```
 
-
+Init brings the chain up: checks the embedded genesis against the on\-disk chain, sets [types.SporkAddress](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#SporkAddress>) from the genesis config, registers the account\-pool listener, prints the current frontier, and refuses to start when an on\-chain active spork is not implemented by this binary \(binary terminates with exit code 2 to make the upgrade requirement obvious\).
 
 <a name="chain.InsertMomentum"></a>
-### func \(chain\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L207>)
+### func \(chain\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L288>)
 
 ```go
 func (ap chain) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+InsertMomentum implements [MomentumEventListener](<#MomentumEventListener>): when a momentum is committed the pool prunes any per\-address managers whose blocks are now finalized and re\-applies any still\-uncommitted blocks on top of the new stable layer.
 
 <a name="chain.Register"></a>
-### func \(chain\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L37>)
+### func \(chain\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L55>)
 
 ```go
 func (em chain) Register(listener MomentumEventListener)
 ```
 
-
+Register appends listener to the broadcast list. The same listener may be registered multiple times — the caller is responsible for idempotency.
 
 <a name="chain.RollbackTo"></a>
-### func \(chain\) [RollbackTo](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L78>)
+### func \(chain\) [RollbackTo](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L102>)
 
 ```go
 func (c chain) RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error
 ```
 
+RollbackTo reverses every momentum down to identifier \(inclusive\), broadcasting DeleteMomentum for each one removed. Refuses if the chain at identifier.Height does not match identifier.Hash.
 
+Caller must hold the chain insert lock \(the insertLocker argument\).
 
 <a name="chain.Start"></a>
-### func \(\*chain\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L85>)
+### func \(\*chain\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L103>)
 
 ```go
 func (c *chain) Start() error
 ```
 
-
+Start is currently a no\-op; the chain has no background loops of its own. Reserved for future use.
 
 <a name="chain.Stop"></a>
-### func \(\*chain\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L91>)
+### func \(\*chain\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L112>)
 
 ```go
 func (c *chain) Stop() error
 ```
 
-
+Stop unregisters the account\-pool listener and closes the underlying database manager. Safe to call exactly once.
 
 <a name="chain.UnRegister"></a>
-### func \(chain\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
+### func \(chain\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L64>)
 
 ```go
 func (em chain) UnRegister(listener MomentumEventListener)
 ```
 
-
+UnRegister removes the first occurrence of listener \(by pointer equality\) from the broadcast list. No\-op if listener is not present.
 
 <a name="chain.addAccountBlockTransaction"></a>
-### func \(chain\) [addAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L110>)
+### func \(chain\) [addAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L172>)
 
 ```go
 func (ap chain) addAccountBlockTransaction(transaction *nom.AccountBlockTransaction, forceAdd bool) error
 ```
 
+addAccountBlockTransaction is the internal insert path shared by \[AddAccountBlockTransaction\] and \[ForceAddAccountBlockTransaction\]. Caller must hold ap.changes. Behavior:
 
+- Fast\-forward append when previous matches the current frontier.
+- Idempotent return when the block is already inserted.
+- Reject when the block is older than the stable store or its previous\-hash linkage is broken \(via \[canRollback\]\).
+- Conditional rollback \+ insert when a higher\-priority block supersedes a lower\-priority one \(skipped under forceAdd\).
 
 <a name="chain.broadcastDeleteMomentum"></a>
-### func \(chain\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L28>)
+### func \(chain\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
 
 ```go
 func (em chain) broadcastDeleteMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastDeleteMomentum invokes \[MomentumEventListener.DeleteMomentum\] on every registered listener. Called by \[momentumPool.RollbackTo\] after each rollback step.
 
 <a name="chain.broadcastInsertMomentum"></a>
-### func \(chain\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L20>)
+### func \(chain\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L31>)
 
 ```go
 func (em chain) broadcastInsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastInsertMomentum invokes \[MomentumEventListener.InsertMomentum\] on every registered listener. Called by \[momentumPool.AddMomentumTransaction\] after the underlying database mutation succeeds.
 
 <a name="chain.canRollback"></a>
-### func \(chain\) [canRollback](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L48>)
+### func \(chain\) [canRollback](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L82>)
 
 ```go
 func (ap chain) canRollback(block *nom.AccountBlock) error
 ```
 
-
+canRollback reports whether the in\-flight block can replace the uncommitted entry currently sitting at its height. Refuses when the proposed identifier is older than the stable store \(already finalized\) or when its previous hash does not match the chain at height\-1. Returns nil when a rollback is permissible.
 
 <a name="chain.checkGenesisCompatibility"></a>
-### func \(\*chain\) [checkGenesisCompatibility](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L100>)
+### func \(\*chain\) [checkGenesisCompatibility](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L127>)
 
 ```go
 func (c *chain) checkGenesisCompatibility() error
 ```
 
-
+checkGenesisCompatibility reconciles the embedded genesis with the on\-disk chain. If the chain is empty, the genesis transaction is inserted. If the chain has a height\-1 momentum, its hash must match the embedded genesis — otherwise the node refuses to start. The remediation message points operators at "remove the database manually", which is the only way to recover from a genesis swap.
 
 <a name="chain.filterBlocksToCommit"></a>
-### func \(chain\) [filterBlocksToCommit](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L274>)
+### func \(chain\) [filterBlocksToCommit](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L373>)
 
 ```go
 func (ap chain) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock
 ```
 
-
+filterBlocksToCommit walks blocks accumulating batches of blocks terminating at non\-[nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) entries. A batch is admitted only if the running total stays under [MaxAccountBlocksInMomentum](<#ErrFailedToAddAccountBlockTransaction>); otherwise the loop stops short to avoid fragmenting a parent receive from its descendants.
 
 <a name="chain.getAccountManager"></a>
-### func \(chain\) [getAccountManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L39>)
+### func \(chain\) [getAccountManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L68>)
 
 ```go
 func (ap chain) getAccountManager(address types.Address) db.Manager
 ```
 
-
+getAccountManager returns address's per\-address manager, creating it lazily atop the stable store on first request.
 
 <a name="chain.getFrontierAccountStore"></a>
-### func \(chain\) [getFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L203>)
+### func \(chain\) [getFrontierAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L280>)
 
 ```go
 func (ap chain) getFrontierAccountStore(address types.Address) store.Account
 ```
 
-
+getFrontierAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) over the pool's frontier \(committed \+ uncommitted\) for address. Caller must hold ap.changes.
 
 <a name="chain.getFrontierStore"></a>
-### func \(chain\) [getFrontierStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L154>)
+### func \(chain\) [getFrontierStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L188>)
 
 ```go
 func (c chain) getFrontierStore() store.Momentum
 ```
 
-
+getFrontierStore returns a [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) view of the chain manager's current frontier, or nil when the manager is shutting down. Caller must hold c.changes.
 
 <a name="chain.getStableAccountStore"></a>
-### func \(chain\) [getStableAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L200>)
+### func \(chain\) [getStableAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L273>)
 
 ```go
 func (ap chain) getStableAccountStore(address types.Address) store.Account
 ```
 
-
+getStableAccountStore returns a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) over the stable \(committed\) frontier for address. Caller must hold ap.changes.
 
 <a name="chain.getUncommittedAccountBlocksByAddress"></a>
-### func \(chain\) [getUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L307>)
+### func \(chain\) [getUncommittedAccountBlocksByAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L415>)
 
 ```go
 func (ap chain) getUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 ```
 
-
+getUncommittedAccountBlocksByAddress is the locked\-caller variant of \[GetUncommittedAccountBlocksByAddress\]; caller must hold ap.changes. Walks every height between the stable frontier and the pool frontier.
 
 <a name="chain.rebuild"></a>
-### func \(chain\) [rebuild](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L221>)
+### func \(chain\) [rebuild](<https://github.com/zenon-network/go-zenon/blob/master/chain/account_pool.go#L311>)
 
 ```go
 func (ap chain) rebuild(detailed *nom.DetailedMomentum) error
 ```
 
-
+rebuild walks every per\-address manager, snapshots its uncommitted blocks, recreates the manager on top of the new stable layer, and re\-applies the uncommitted blocks. Used by \[InsertMomentum\] to keep the pool consistent with the persistent chain after a commit.
 
 <a name="inserter"></a>
-## type [inserter](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L135-L138>)
+## type [inserter](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L171-L174>)
 
-
+inserter is the [sync.Locker](<https://pkg.go.dev/sync/#Locker>) returned by chain.AcquireInsert. It wraps the chain's insert mutex with a reason string used for logging at acquire/release boundaries.
 
 ```go
 type inserter struct {
@@ -778,27 +889,29 @@ type inserter struct {
 ```
 
 <a name="inserter.Lock"></a>
-### func \(\*inserter\) [Lock](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L140>)
+### func \(\*inserter\) [Lock](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L179>)
 
 ```go
 func (i *inserter) Lock()
 ```
 
-
+Lock panics — an inserter handle has already locked the mutex; the only valid operation is Unlock. The panic catches programmer errors where a caller treats the handle as a fresh locker.
 
 <a name="inserter.Unlock"></a>
-### func \(\*inserter\) [Unlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L143>)
+### func \(\*inserter\) [Unlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/chain.go#L186>)
 
 ```go
 func (i *inserter) Unlock()
 ```
 
-
+Unlock releases the underlying mutex and clears the handle so a subsequent Unlock would dereference nil and panic loudly. One\-shot by design.
 
 <a name="momentumEventManager"></a>
-## type [momentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L9-L12>)
+## type [momentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L16-L19>)
 
+momentumEventManager is the [MomentumEventManager](<#MomentumEventManager>) implementation: a dynamic list of \[MomentumEventListener\]s that the momentum pool broadcasts insert and delete events to.
 
+Concurrency: register/unregister/broadcast all take changes; the manager is safe for concurrent use. Listeners run synchronously on the broadcaster's goroutine — heavy work should be deferred.
 
 ```go
 type momentumEventManager struct {
@@ -808,54 +921,56 @@ type momentumEventManager struct {
 ```
 
 <a name="newMomentumEventManager"></a>
-### func [newMomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L14>)
+### func [newMomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L22>)
 
 ```go
 func newMomentumEventManager() *momentumEventManager
 ```
 
-
+newMomentumEventManager returns a fresh manager with no listeners.
 
 <a name="momentumEventManager.Register"></a>
-### func \(\*momentumEventManager\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L37>)
+### func \(\*momentumEventManager\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L55>)
 
 ```go
 func (em *momentumEventManager) Register(listener MomentumEventListener)
 ```
 
-
+Register appends listener to the broadcast list. The same listener may be registered multiple times — the caller is responsible for idempotency.
 
 <a name="momentumEventManager.UnRegister"></a>
-### func \(\*momentumEventManager\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
+### func \(\*momentumEventManager\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L64>)
 
 ```go
 func (em *momentumEventManager) UnRegister(listener MomentumEventListener)
 ```
 
-
+UnRegister removes the first occurrence of listener \(by pointer equality\) from the broadcast list. No\-op if listener is not present.
 
 <a name="momentumEventManager.broadcastDeleteMomentum"></a>
-### func \(\*momentumEventManager\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L28>)
+### func \(\*momentumEventManager\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
 
 ```go
 func (em *momentumEventManager) broadcastDeleteMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastDeleteMomentum invokes \[MomentumEventListener.DeleteMomentum\] on every registered listener. Called by \[momentumPool.RollbackTo\] after each rollback step.
 
 <a name="momentumEventManager.broadcastInsertMomentum"></a>
-### func \(\*momentumEventManager\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L20>)
+### func \(\*momentumEventManager\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L31>)
 
 ```go
 func (em *momentumEventManager) broadcastInsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastInsertMomentum invokes \[MomentumEventListener.InsertMomentum\] on every registered listener. Called by \[momentumPool.AddMomentumTransaction\] after the underlying database mutation succeeds.
 
 <a name="momentumPool"></a>
-## type [momentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L20-L26>)
+## type [momentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L27-L33>)
 
+momentumPool is the persistent half of the chain: it owns the versioned [db.Manager](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Manager>) backing the momentum chain and emits momentum\-event broadcasts on insert and rollback.
 
+Concurrency: every public method takes c.changes; the pool is safe for concurrent use. Broadcasts run with the mutex temporarily released so listeners cannot deadlock against a re\-entry into the pool.
 
 ```go
 type momentumPool struct {
@@ -868,102 +983,109 @@ type momentumPool struct {
 ```
 
 <a name="NewMomentumPool"></a>
-### func [NewMomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L182>)
+### func [NewMomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L229>)
 
 ```go
 func NewMomentumPool(chainManager db.Manager, genesis store.Genesis) *momentumPool
 ```
 
-
+NewMomentumPool wires a fresh \[momentumPool\] around chainManager and the supplied genesis. Used by [NewChain](<#NewChain>); external callers should go through [NewChain](<#NewChain>) rather than constructing pools directly.
 
 <a name="momentumPool.AddMomentumTransaction"></a>
-### func \(\*momentumPool\) [AddMomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L28>)
+### func \(\*momentumPool\) [AddMomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L46>)
 
 ```go
 func (c *momentumPool) AddMomentumTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error
 ```
 
+AddMomentumTransaction commits transaction onto the chain frontier, broadcasts InsertMomentum to listeners, and inspects the resulting state for two spork\-related conditions:
 
+- Activation: a freshly activated spork prints a congratulations banner.
+- Unimplemented: an active on\-chain spork this binary does not recognize is fatal — the node logs at Crit level and terminates with exit code 2.
+
+Caller must hold the chain insert lock \(the insertLocker argument\).
 
 <a name="momentumPool.GetFrontierMomentumStore"></a>
-### func \(\*momentumPool\) [GetFrontierMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L161>)
+### func \(\*momentumPool\) [GetFrontierMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L198>)
 
 ```go
 func (c *momentumPool) GetFrontierMomentumStore() store.Momentum
 ```
 
-
+GetFrontierMomentumStore returns the locked variant of \[getFrontierStore\].
 
 <a name="momentumPool.GetMomentumStore"></a>
-### func \(\*momentumPool\) [GetMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L166>)
+### func \(\*momentumPool\) [GetMomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L206>)
 
 ```go
 func (c *momentumPool) GetMomentumStore(identifier types.HashHeight) store.Momentum
 ```
 
-
+GetMomentumStore returns a [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) view at identifier, or nil when the identifier is unknown or has been pruned.
 
 <a name="momentumPool.GetStableAccountDB"></a>
-### func \(\*momentumPool\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L176>)
+### func \(\*momentumPool\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L220>)
 
 ```go
 func (c *momentumPool) GetStableAccountDB(address types.Address) db.DB
 ```
 
-
+GetStableAccountDB satisfies the [Stable](<#Stable>) interface for the account pool: returns the persistent [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) view of address at the most recent committed momentum.
 
 <a name="momentumPool.Register"></a>
-### func \(momentumPool\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L37>)
+### func \(momentumPool\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L55>)
 
 ```go
 func (em momentumPool) Register(listener MomentumEventListener)
 ```
 
-
+Register appends listener to the broadcast list. The same listener may be registered multiple times — the caller is responsible for idempotency.
 
 <a name="momentumPool.RollbackTo"></a>
-### func \(\*momentumPool\) [RollbackTo](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L78>)
+### func \(\*momentumPool\) [RollbackTo](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L102>)
 
 ```go
 func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error
 ```
 
+RollbackTo reverses every momentum down to identifier \(inclusive\), broadcasting DeleteMomentum for each one removed. Refuses if the chain at identifier.Height does not match identifier.Hash.
 
+Caller must hold the chain insert lock \(the insertLocker argument\).
 
 <a name="momentumPool.UnRegister"></a>
-### func \(momentumPool\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
+### func \(momentumPool\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L64>)
 
 ```go
 func (em momentumPool) UnRegister(listener MomentumEventListener)
 ```
 
-
+UnRegister removes the first occurrence of listener \(by pointer equality\) from the broadcast list. No\-op if listener is not present.
 
 <a name="momentumPool.broadcastDeleteMomentum"></a>
-### func \(momentumPool\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L28>)
+### func \(momentumPool\) [broadcastDeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L43>)
 
 ```go
 func (em momentumPool) broadcastDeleteMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastDeleteMomentum invokes \[MomentumEventListener.DeleteMomentum\] on every registered listener. Called by \[momentumPool.RollbackTo\] after each rollback step.
 
 <a name="momentumPool.broadcastInsertMomentum"></a>
-### func \(momentumPool\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L20>)
+### func \(momentumPool\) [broadcastInsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_events.go#L31>)
 
 ```go
 func (em momentumPool) broadcastInsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+broadcastInsertMomentum invokes \[MomentumEventListener.InsertMomentum\] on every registered listener. Called by \[momentumPool.AddMomentumTransaction\] after the underlying database mutation succeeds.
 
 <a name="momentumPool.getFrontierStore"></a>
-### func \(\*momentumPool\) [getFrontierStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L154>)
+### func \(\*momentumPool\) [getFrontierStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum_pool.go#L188>)
 
 ```go
 func (c *momentumPool) getFrontierStore() store.Momentum
 ```
 
-
+getFrontierStore returns a [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) view of the chain manager's current frontier, or nil when the manager is shutting down. Caller must hold c.changes.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

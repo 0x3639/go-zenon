@@ -17,6 +17,13 @@ import (
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 )
 
+// momentumPool is the persistent half of the chain: it owns the
+// versioned [db.Manager] backing the momentum chain and emits
+// momentum-event broadcasts on insert and rollback.
+//
+// Concurrency: every public method takes c.changes; the pool is safe
+// for concurrent use. Broadcasts run with the mutex temporarily released
+// so listeners cannot deadlock against a re-entry into the pool.
 type momentumPool struct {
 	*momentumEventManager
 	chainManager db.Manager
@@ -25,6 +32,17 @@ type momentumPool struct {
 	changes      sync.Mutex
 }
 
+// AddMomentumTransaction commits transaction onto the chain frontier,
+// broadcasts InsertMomentum to listeners, and inspects the resulting
+// state for two spork-related conditions:
+//
+//   - Activation: a freshly activated spork prints a congratulations
+//     banner.
+//   - Unimplemented: an active on-chain spork this binary does not
+//     recognize is fatal — the node logs at Crit level and terminates
+//     with exit code 2.
+//
+// Caller must hold the chain insert lock (the insertLocker argument).
 func (c *momentumPool) AddMomentumTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error {
 	c.log.Info("inserting new momentum", "identifier", transaction.Momentum.Identifier())
 	if insertLocker == nil {
@@ -75,6 +93,12 @@ func (c *momentumPool) AddMomentumTransaction(insertLocker sync.Locker, transact
 
 	return nil
 }
+
+// RollbackTo reverses every momentum down to identifier (inclusive),
+// broadcasting DeleteMomentum for each one removed. Refuses if the
+// chain at identifier.Height does not match identifier.Hash.
+//
+// Caller must hold the chain insert lock (the insertLocker argument).
 func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error {
 	c.log.Info("rollbacking momentums", "to-identifier", identifier)
 	if insertLocker == nil {
@@ -119,7 +143,14 @@ func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.Has
 	return nil
 }
 
-// Checks whatever or not all active sporks are implemented
+// GotAllActiveSporksImplemented inspects the spork records in store and
+// reports two things: the spork (if any) whose enforcement height
+// matches the current frontier (i.e., just activated this momentum),
+// and any active spork this binary does not recognize.
+//
+// Used by [chain.Init] (boot-time check) and
+// [momentumPool.AddMomentumTransaction] (per-momentum check) to refuse
+// to operate against an upgraded chain that needs a newer binary.
 func GotAllActiveSporksImplemented(store store.Momentum) (justNow *definition.Spork, unimplemented []*definition.Spork, err error) {
 	momentum, err := store.GetFrontierMomentum()
 	if err != nil {
@@ -151,6 +182,9 @@ func GotAllActiveSporksImplemented(store store.Momentum) (justNow *definition.Sp
 	return justNow, unimplemented, nil
 }
 
+// getFrontierStore returns a [store.Momentum] view of the chain
+// manager's current frontier, or nil when the manager is shutting down.
+// Caller must hold c.changes.
 func (c *momentumPool) getFrontierStore() store.Momentum {
 	if momentumDB := c.chainManager.Frontier(); momentumDB == nil {
 		return nil
@@ -158,11 +192,17 @@ func (c *momentumPool) getFrontierStore() store.Momentum {
 		return momentum.NewStore(c.genesis, momentumDB)
 	}
 }
+
+// GetFrontierMomentumStore returns the locked variant of
+// [getFrontierStore].
 func (c *momentumPool) GetFrontierMomentumStore() store.Momentum {
 	c.changes.Lock()
 	defer c.changes.Unlock()
 	return c.getFrontierStore()
 }
+
+// GetMomentumStore returns a [store.Momentum] view at identifier, or
+// nil when the identifier is unknown or has been pruned.
 func (c *momentumPool) GetMomentumStore(identifier types.HashHeight) store.Momentum {
 	c.changes.Lock()
 	defer c.changes.Unlock()
@@ -173,12 +213,19 @@ func (c *momentumPool) GetMomentumStore(identifier types.HashHeight) store.Momen
 
 	return momentum.NewStore(c.genesis, momentumDB)
 }
+
+// GetStableAccountDB satisfies the [Stable] interface for the account
+// pool: returns the persistent [db.DB] view of address at the most
+// recent committed momentum.
 func (c *momentumPool) GetStableAccountDB(address types.Address) db.DB {
 	c.changes.Lock()
 	defer c.changes.Unlock()
 	return c.getFrontierStore().GetAccountDB(address)
 }
 
+// NewMomentumPool wires a fresh [momentumPool] around chainManager and
+// the supplied genesis. Used by [NewChain]; external callers should go
+// through [NewChain] rather than constructing pools directly.
 func NewMomentumPool(chainManager db.Manager, genesis store.Genesis) *momentumPool {
 	return &momentumPool{
 		momentumEventManager: newMomentumEventManager(),
