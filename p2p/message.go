@@ -65,6 +65,10 @@ func (msg Msg) Discard() error {
 	return err
 }
 
+// MsgReader is the read side of a framed message stream. Returned
+// errors are typically transport- or framing-level; a Msg whose
+// payload encodes an unparseable subprotocol message is reported via
+// Msg.Decode.
 type MsgReader interface {
 	ReadMsg() (Msg, error)
 }
@@ -108,8 +112,10 @@ func SendItems(w MsgWriter, msgcode uint64, elems ...interface{}) error {
 	return Send(w, msgcode, elems)
 }
 
-// netWrapper wraps a MsgReadWriter with locks around
-// ReadMsg/WriteMsg and applies read/write deadlines.
+// netWrapper wraps a MsgReadWriter with locks around ReadMsg/WriteMsg
+// and applies read/write deadlines pulled from rtimeout / wtimeout.
+// Used in tests to compose timeout enforcement onto an arbitrary
+// transport.
 type netWrapper struct {
 	rmu, wmu sync.Mutex
 
@@ -132,9 +138,11 @@ func (rw *netWrapper) WriteMsg(msg Msg) error {
 	return rw.wrapped.WriteMsg(msg)
 }
 
-// eofSignal wraps a reader with eof signaling. the eof channel is
-// closed when the wrapped reader returns an error or when count bytes
-// have been read.
+// eofSignal wraps a reader with EOF signalling: when the wrapped
+// reader returns an error or count bytes have been consumed, a single
+// value is sent on eof. The MsgPipe sender uses this to know when the
+// receiver has finished draining a message payload, so it can safely
+// release the next write.
 type eofSignal struct {
 	wrapped io.Reader
 	count   uint32 // number of bytes left

@@ -9,23 +9,45 @@ import (
 	"github.com/zenon-network/go-zenon/p2p/discover"
 )
 
+// Default network configuration values applied by [node] when a
+// concrete [Net] field is left unset.
 const (
+	// DefaultNodeName is the user-agent string advertised in
+	// protoHandshake.Name when no override is configured.
 	DefaultNodeName = "znn-node"
 
+	// DefaultListenHost binds to all interfaces.
 	DefaultListenHost = "0.0.0.0"
+	// DefaultListenPort is the canonical Zenon devp2p TCP port.
 	DefaultListenPort = 35995
-	DefaultHTTPPort   = 35997
-	DefaultWSPort     = 35998
+	// DefaultHTTPPort is the JSON-RPC HTTP listen port.
+	DefaultHTTPPort = 35997
+	// DefaultWSPort is the JSON-RPC WebSocket listen port.
+	DefaultWSPort = 35998
 
-	DefaultMinPeers          = 8
-	DefaultMaxPeers          = 60
-	DefaultMaxPendingPeers   = 10
+	// DefaultMinPeers is the floor before the dialer aggressively
+	// solicits new peers.
+	DefaultMinPeers = 8
+	// DefaultMaxPeers caps the simultaneous connected peers.
+	DefaultMaxPeers = 60
+	// DefaultMaxPendingPeers caps concurrent in-flight handshakes.
+	DefaultMaxPendingPeers = 10
+	// DefaultMinConnectedPeers is the dynamic-dial target — Server.run
+	// will keep trying to fill up to this many dynamic peers.
 	DefaultMinConnectedPeers = 16
 
-	DefaultNetDirName        = "network"
+	// DefaultNetDirName is the subdirectory under DataDir holding
+	// p2p state (node DB, persisted private key).
+	DefaultNetDirName = "network"
+	// DefaultNetPrivateKeyFile is the filename within DefaultNetDirName
+	// where the persistent secp256k1 private key is stored.
 	DefaultNetPrivateKeyFile = "network-private-key"
 )
 
+// DefaultSeeders is the embedded bootstrap list for the Alphanet —
+// each entry is a fully-formed enode URL (secp256k1 pubkey @ host:port).
+// Used by [Net.Nodes] to seed the discovery table when no override is
+// supplied.
 var (
 	DefaultSeeders = []string{
 		"enode://f0e3e1f507c7cc5a2d2cf0eb173c204c820786c7cecbc0118d1cf76e5eaba90348ce57e5c9dee35c27a40f5a44dafc61b8996f00bb33647c66f66c997ce6592b@206.188.197.194:35995",
@@ -147,6 +169,10 @@ var (
 	}
 )
 
+// Net is the Zenon-specific p2p configuration consumed by [node].
+// Mirrors the relevant subset of [Server] fields plus the seeder list
+// and key-file path. Translation to a [Server] happens during node
+// startup.
 type Net struct {
 	// This field must be set to a valid secp256k1 private key.
 	privateKey *ecdsa.PrivateKey
@@ -220,6 +246,10 @@ func (c *Net) PrivateKey() *ecdsa.PrivateKey {
 	}
 	return key
 }
+
+// Nodes parses the configured Seeders into discover.Node values for
+// use as bootstrap candidates. Returns the first parse error
+// encountered.
 func (c *Net) Nodes() ([]*discover.Node, error) {
 	var err error
 	nodes := make([]*discover.Node, len(c.Seeders))

@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package nat provides access to common network port mapping protocols.
 package nat
 
 import (
@@ -92,7 +91,12 @@ func Parse(spec string) (Interface, error) {
 }
 
 const (
-	mapTimeout        = 20 * time.Minute
+	// mapTimeout is the lifetime negotiated for each port mapping.
+	// Longer than mapUpdateInterval so a single missed refresh tick
+	// does not leave the mapping unreachable.
+	mapTimeout = 20 * time.Minute
+	// mapUpdateInterval is the cadence at which Map refreshes the
+	// mapping with the gateway.
 	mapUpdateInterval = 15 * time.Minute
 )
 
@@ -136,6 +140,9 @@ func ExtIP(ip net.IP) Interface {
 	return extIP(ip)
 }
 
+// extIP is a stub Interface returning a fixed external IP and
+// no-oping mapping operations. Used when the operator has set up
+// port forwarding manually.
 type extIP net.IP
 
 func (n extIP) ExternalIP() (net.IP, error) { return net.IP(n), nil }
@@ -195,6 +202,10 @@ type autodisc struct {
 	found Interface
 }
 
+// startautodisc kicks off the background discovery goroutine and
+// returns an Interface wrapper that will lazily block on first use
+// until discovery either finds a backend or fails. what is a label
+// used in error messages and the String() form of the wrapper.
 func startautodisc(what string, doit func() Interface) Interface {
 	// TODO: monitor network configuration and rerun doit when it changes.
 	ad := &autodisc{what: what, doit: doit}

@@ -10,13 +10,38 @@ Package discover finds peers on the network using a Kademlia\-style distributed 
 
 ### Overview
 
-discover keeps a routing table of known nodes keyed by node ID, refreshes it through periodic find\-node queries, and exposes the result to the p2p server so it can dial new peers as needed.
+discover is a port of the go\-ethereum devp2p discovery v4 protocol. Each node maintains a routing [Table](<#Table>) of known peers keyed by node ID \(a 512\-bit secp256k1 public key\), refreshes it through periodic FindNode lookups, and exposes the result so the [github.com/zenon\\\-network/go\\\-zenon/p2p](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/>) dialer can pull dial candidates.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+The on\-the\-wire packets \(\[ping\], \[pong\], \[findnode\], \[neighbors\]\) travel over UDP, signed with the local secp256k1 key so the sender's node ID can be recovered. Each packet carries an absolute \[expiration\]=20s timestamp to bound replay windows.
 
-Package discover implements the Node Discovery Protocol.
+### Routing Table
 
-The Node Discovery protocol provides a way to find RLPx nodes that can be connected to. It uses a Kademlia\-like protocol to maintain a distributed database of the IDs and endpoints of all listening nodes.
+The table is split into \[nBuckets\]=257 k\-buckets indexed by the log distance \(\[logdist\]\) between \[Table.self\] and the candidate's node\-ID hash. Each bucket holds up to \[bucketSize\]=16 entries, ordered by recency of activity. Insertion uses the standard "ping the oldest entry; if it responds, the newcomer is dropped" LRU\-eviction rule \(see \[Table.pingreplace\]\).
+
+### Bonding
+
+Before answering a FindNode request, both sides must complete a ping/pong exchange — the "bond". This protects against IP\-spoofing amplification attacks \(a forged FindNode would otherwise yield a large neighbors packet to the spoofed victim\). The bonding workflow is implemented in \[Table.bond\] / \[Table.pingpong\]; concurrency is capped via \[maxBondingPingPongs\]=16 slots.
+
+### Lookups
+
+[Table.Lookup](<#Table.Lookup>) performs the standard Kademlia search: pick the \[alpha\]=3 closest known nodes to the target, ask them for their closest neighbors, fold the responses into a result set sorted by distance, and repeat until no closer node is returned. Findnode failures are tracked in \[nodeDB\] and after \[maxFindnodeFailures\]=5 the entry is evicted via \[Table.del\].
+
+### Persistence
+
+Known nodes survive restarts in a leveldb\-backed \[nodeDB\]. The schema is documented in database.go \(lastping, lastpong, findfail counters per node\-ID\). Entries unseen for \[nodeDBNodeExpiration\]=24h are dropped by the periodic expirer.
+
+### Concurrency
+
+One UDP read goroutine \(\[udp.readLoop\]\) decodes inbound packets; one event\-loop goroutine \(\[udp.loop\]\) dispatches them against a pending\-reply queue keyed on \(NodeID, packet\-type\). Lookups, bonding, and refreshes spawn additional goroutines tracked by the \[Table.wg\] WaitGroup so [Table.Close](<#Table.Close>) can drain them.
+
+### Generated Files
+
+None. The .go files in this package carry the original go\-ethereum LGPL\-3.0\+ headers.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/p2p](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/>) — consumes this package via the discoverTable interface to drive outbound dialing.
+- [github.com/zenon\\\-network/go\\\-zenon/p2p/nat](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/nat/>) — used by [ListenUDP](<#ListenUDP>) to map the discovery UDP port through NAT.
 
 ## Index
 
@@ -123,60 +148,89 @@ The Node Discovery protocol provides a way to find RLPx nodes that can be connec
 
 ## Constants
 
-<a name="alpha"></a>
+<a name="alpha"></a>Kademlia tunables — values match the go\-ethereum devp2p v4 spec.
 
 ```go
 const (
-    alpha      = 3  // Kademlia concurrency factor
-    bucketSize = 16 // Kademlia bucket size
-    hashBits   = len(types.Hash{}) * 8
-    nBuckets   = hashBits + 1 // Number of buckets
+    // alpha is the Kademlia concurrency factor: how many parallel
+    // FindNode RPCs Lookup may have in flight at once.
+    alpha = 3
+    // bucketSize is the per-bucket capacity (k in Kademlia
+    // terminology). Eviction policy when full: ping the LRU entry;
+    // keep it if it responds.
+    bucketSize = 16
+    // hashBits is the bit-width of the node-ID hash space (256).
+    hashBits = len(types.Hash{}) * 8
+    // nBuckets is the routing-table fan-out — one per possible log
+    // distance plus one for self.
+    nBuckets = hashBits + 1
 
+    // maxBondingPingPongs caps concurrent bonding ping/pong sessions
+    // to bound network use during bootstrap.
     maxBondingPingPongs = 16
+    // maxFindnodeFailures is the threshold at which a node is
+    // evicted from the table for repeated FindNode failures.
     maxFindnodeFailures = 5
 )
 ```
 
-<a name="respTimeout"></a>Timeouts
+<a name="respTimeout"></a>Timeouts governing the discovery RPC machine.
 
 ```go
 const (
+    // respTimeout is how long pending records wait for a matching
+    // reply before erroring with errTimeout.
     respTimeout = 500 * time.Millisecond
+    // sendTimeout is the deadline for a single UDP send.
     sendTimeout = 500 * time.Millisecond
-    expiration  = 20 * time.Second
+    // expiration is the absolute lifetime stamped on each outgoing
+    // packet — receivers reject packets past this with errExpired.
+    expiration = 20 * time.Second
 
+    // refreshInterval is the cadence at which Table.refresh runs to
+    // keep buckets warm.
     refreshInterval = 30 * time.Minute
 )
 ```
 
-<a name="pingPacket"></a>RPC packet types
+<a name="pingPacket"></a>RPC packet type discriminators. Sent as the byte immediately following the signed header in encodePacket.
 
 ```go
 const (
+    // pingPacket initiates or answers a bonding session.
     pingPacket = iota + 1 // zero is 'reserved'
+    // pongPacket is the reply to pingPacket.
     pongPacket
+    // findnodePacket asks the recipient for nodes close to a target ID.
     findnodePacket
+    // neighborsPacket carries a chunk of FindNode results (split
+    // across packets to fit under the 1280-byte cap).
     neighborsPacket
 )
 ```
 
-<a name="macSize"></a>
+<a name="macSize"></a>Wire framing constants for signed packets. Layout: \[hash macSize\] \[sig sigSize\] \[type 1B\] \[rlp\-encoded payload\].
 
 ```go
 const (
-    macSize  = 256 / 8
-    sigSize  = 520 / 8
-    headSize = macSize + sigSize // space of packet frame data
+    // macSize is the leading keccak-256 hash length used as a packet
+    // integrity check.
+    macSize = 256 / 8
+    // sigSize is the secp256k1 signature length covering the
+    // type-byte plus payload.
+    sigSize = 520 / 8
+    // headSize is the total pre-payload framing overhead.
+    headSize = macSize + sigSize
 )
 ```
 
-<a name="Version"></a>
+<a name="Version"></a>Version is the discovery protocol version this node speaks. ping packets carrying a different Version are rejected with errBadVersion.
 
 ```go
 const Version = 4
 ```
 
-<a name="nodeIDBits"></a>
+<a name="nodeIDBits"></a>nodeIDBits is the bit\-width of a NodeID — a marshaled secp256k1 public key with the 0x04 prefix byte stripped.
 
 ```go
 const nodeIDBits = 512
@@ -184,31 +238,47 @@ const nodeIDBits = 512
 
 ## Variables
 
-<a name="nodeDBNilNodeID"></a>
+<a name="nodeDBNilNodeID"></a>Lifetime parameters for entries in the persistent node database. Vars \(not consts\) so tests may shrink them; production should leave them at the documented defaults.
 
 ```go
 var (
-    nodeDBNilNodeID      = NodeID{}       // Special node ID to use as a nil element.
-    nodeDBNodeExpiration = 24 * time.Hour // Time after which an unseen node should be dropped.
-    nodeDBCleanupCycle   = time.Hour      // Time period for running the expiration task.
+    // nodeDBNilNodeID is a sentinel zero-NodeID used as a "nil"
+    // marker by makeKey when storing global keys (e.g. version).
+    nodeDBNilNodeID = NodeID{}
+    // nodeDBNodeExpiration is the staleness threshold past which an
+    // unseen node is dropped from the database by the expirer.
+    nodeDBNodeExpiration = 24 * time.Hour
+    // nodeDBCleanupCycle is the cadence at which the expirer runs.
+    nodeDBCleanupCycle = time.Hour
 )
 ```
 
-<a name="nodeDBVersionKey"></a>Schema layout for the node database
+<a name="nodeDBVersionKey"></a>Schema layout for the node database. Keys are built by \[makeKey\] from a NodeID \+ a field suffix; values are leveldb\-encoded ints \(varint timestamps\) or RLP\-encoded Node structs.
 
 ```go
 var (
-    nodeDBVersionKey = []byte("version") // Version of the database to flush if changes
-    nodeDBItemPrefix = []byte("n:")      // Header to prefix node entries with
+    // nodeDBVersionKey holds the schema version. Mismatch on open
+    // triggers a wipe-and-recreate.
+    nodeDBVersionKey = []byte("version")
+    // nodeDBItemPrefix is prepended to every per-node key so a
+    // prefix iterator can target only node-scoped entries.
+    nodeDBItemPrefix = []byte("n:")
 
-    nodeDBDiscoverRoot      = ":discover"
-    nodeDBDiscoverPing      = nodeDBDiscoverRoot + ":lastping"
-    nodeDBDiscoverPong      = nodeDBDiscoverRoot + ":lastpong"
+    // nodeDBDiscoverRoot stores the RLP-encoded Node struct itself.
+    nodeDBDiscoverRoot = ":discover"
+    // nodeDBDiscoverPing records the last time we sent a ping to
+    // this node (varint unix time).
+    nodeDBDiscoverPing = nodeDBDiscoverRoot + ":lastping"
+    // nodeDBDiscoverPong records the last time this node pong'd us
+    // (varint unix time) — input to the expirer's freshness check.
+    nodeDBDiscoverPong = nodeDBDiscoverRoot + ":lastpong"
+    // nodeDBDiscoverFindFails counts consecutive FindNode failures;
+    // when this hits maxFindnodeFailures the node is evicted.
     nodeDBDiscoverFindFails = nodeDBDiscoverRoot + ":findfail"
 )
 ```
 
-<a name="errPacketTooSmall"></a>Errors
+<a name="errPacketTooSmall"></a>Wire\-level errors. Logged at debug level; never returned to callers as the discovery transport is fire\-and\-forget.
 
 ```go
 var (
@@ -227,16 +297,18 @@ var (
 
 ```go
 var (
+    // headSpace is a zero-filled prefix used as the placeholder for
+    // hash + signature during packet construction.
     headSpace = make([]byte, headSize)
 
-    // Neighbors responses are sent across multiple packets to
-    // stay below the 1280 byte limit. We compute the maximum number
-    // of entries by stuffing a packet until it grows too large.
+    // maxNeighbors is the largest number of rpcNode entries that can
+    // fit in a single neighbors packet under the 1280-byte UDP limit.
+    // Computed once in init() against worst-case (full IPv6) entries.
     maxNeighbors int
 )
 ```
 
-<a name="lzcount"></a>table of leading zero counts for bytes \[0..255\]
+<a name="lzcount"></a>lzcount is a precomputed lookup table of leading\-zero counts for each byte value \[0..255\], used by logdist to avoid a per\-call loop over bit positions.
 
 ```go
 var lzcount = [256]int{
@@ -276,16 +348,16 @@ var lzcount = [256]int{
 ```
 
 <a name="decodePacket"></a>
-## func [decodePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L496>)
+## func [decodePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L573>)
 
 ```go
 func decodePacket(buf []byte) (packet, NodeID, []byte, error)
 ```
 
-
+decodePacket parses the wire frame: validates the leading mac, recovers the sender's NodeID from the signature, then RLP\-decodes the body into the type\-specific struct dictated by the type byte.
 
 <a name="distcmp"></a>
-## func [distcmp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L239>)
+## func [distcmp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L246>)
 
 ```go
 func distcmp(target, a, b types.Hash) int
@@ -294,25 +366,25 @@ func distcmp(target, a, b types.Hash) int
 distcmp compares the distances a\-\>target and b\-\>target. Returns \-1 if a is closer to target, 1 if b is closer to target and 0 if they are equal.
 
 <a name="encodePacket"></a>
-## func [encodePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L444>)
+## func [encodePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L515>)
 
 ```go
 func encodePacket(priv *ecdsa.PrivateKey, ptype byte, req interface{}) ([]byte, error)
 ```
 
-
+encodePacket assembles the wire bytes for a signed discovery packet: signs the type\-byte \+ rlp\-encoded body with priv, then hashes the \(sig \+ body\) into the leading mac field.
 
 <a name="expired"></a>
-## func [expired](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L601>)
+## func [expired](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L680>)
 
 ```go
 func expired(ts uint64) bool
 ```
 
-
+expired reports whether the packet expiration timestamp ts is in the past.
 
 <a name="hashAtDistance"></a>
-## func [hashAtDistance](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L304>)
+## func [hashAtDistance](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L313>)
 
 ```go
 func hashAtDistance(a types.Hash, n int) (b types.Hash)
@@ -321,7 +393,7 @@ func hashAtDistance(a types.Hash, n int) (b types.Hash)
 hashAtDistance returns a random hash such that logdist\(a, b\) == n
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L415>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L480>)
 
 ```go
 func init()
@@ -330,7 +402,7 @@ func init()
 
 
 <a name="logdist"></a>
-## func [logdist](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L289>)
+## func [logdist](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L298>)
 
 ```go
 func logdist(a, b types.Hash) int
@@ -339,7 +411,7 @@ func logdist(a, b types.Hash) int
 logdist returns the logarithmic distance between a and b, log2\(a ^ b\).
 
 <a name="makeKey"></a>
-## func [makeKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L139>)
+## func [makeKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L163>)
 
 ```go
 func makeKey(id NodeID, field string) []byte
@@ -348,25 +420,25 @@ func makeKey(id NodeID, field string) []byte
 makeKey generates the leveldb key\-blob from a node id and its particular field of interest.
 
 <a name="newUDP"></a>
-## func [newUDP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L214>)
+## func [newUDP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L260>)
 
 ```go
 func newUDP(priv *ecdsa.PrivateKey, c conn, natm nat.Interface, nodeDBPath string) (*Table, *udp)
 ```
 
-
+newUDP constructs the udp transport over an already\-bound connection. If a NAT mapper is supplied and the local address is not loopback, a port\-mapping goroutine is started and the externally reachable address replaces the local one in our advertised endpoint.
 
 <a name="randUint"></a>
-## func [randUint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L162>)
+## func [randUint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L183>)
 
 ```go
 func randUint(max uint32) uint32
 ```
 
-
+randUint returns a random uint32 in \[0, max\). Returns 0 when max == 0 to avoid a modulo\-by\-zero panic.
 
 <a name="Node"></a>
-## type [Node](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L41-L52>)
+## type [Node](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L43-L54>)
 
 Node represents a host on the network.
 
@@ -386,7 +458,7 @@ type Node struct {
 ```
 
 <a name="MustParseNode"></a>
-### func [MustParseNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L147>)
+### func [MustParseNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L153>)
 
 ```go
 func MustParseNode(rawurl string) *Node
@@ -395,7 +467,7 @@ func MustParseNode(rawurl string) *Node
 MustParseNode parses a node URL. It panics if the URL is not valid.
 
 <a name="ParseNode"></a>
-### func [ParseNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L102>)
+### func [ParseNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L108>)
 
 ```go
 func ParseNode(rawurl string) (*Node, error)
@@ -414,25 +486,25 @@ enode://<hex node id>@10.3.58.6:30303?discport=30301
 ```
 
 <a name="newNode"></a>
-### func [newNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L54>)
+### func [newNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L59>)
 
 ```go
 func newNode(id NodeID, ip net.IP, udpPort, tcpPort uint16) *Node
 ```
 
-
+newNode constructs a Node and pre\-computes its sha \(keccak256 of the node ID\) so the routing table can compare distances without re\-hashing on every operation.
 
 <a name="nodeFromRPC"></a>
-### func [nodeFromRPC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L121>)
+### func [nodeFromRPC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L150>)
 
 ```go
 func nodeFromRPC(rn rpcNode) (n *Node, valid bool)
 ```
 
-
+nodeFromRPC validates and converts a wire\-form rpcNode into a Node. Multicast / unspecified IPs and zero UDP ports are rejected as they cannot be productive discovery candidates.
 
 <a name="Node.String"></a>
-### func \(\*Node\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L73>)
+### func \(\*Node\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L79>)
 
 ```go
 func (n *Node) String() string
@@ -441,16 +513,16 @@ func (n *Node) String() string
 The string representation of a Node is a URL. Please see ParseNode for a description of the format.
 
 <a name="Node.addr"></a>
-### func \(\*Node\) [addr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L67>)
+### func \(\*Node\) [addr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L73>)
 
 ```go
 func (n *Node) addr() *net.UDPAddr
 ```
 
-
+addr returns the node's UDP discovery address.
 
 <a name="NodeID"></a>
-## type [NodeID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L157>)
+## type [NodeID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L163>)
 
 NodeID is a unique identifier for each node. The node identifier is a marshaled elliptic curve public key.
 
@@ -459,7 +531,7 @@ type NodeID [nodeIDBits / 8]byte
 ```
 
 <a name="HexID"></a>
-### func [HexID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L171>)
+### func [HexID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L177>)
 
 ```go
 func HexID(in string) (NodeID, error)
@@ -468,7 +540,7 @@ func HexID(in string) (NodeID, error)
 HexID converts a hex string to a NodeID. The string may be prefixed with 0x.
 
 <a name="MustHexID"></a>
-### func [MustHexID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L188>)
+### func [MustHexID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L194>)
 
 ```go
 func MustHexID(in string) NodeID
@@ -477,7 +549,7 @@ func MustHexID(in string) NodeID
 MustHexID converts a hex string to a NodeID. It panics if the string is not a valid NodeID.
 
 <a name="PubkeyID"></a>
-### func [PubkeyID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L197>)
+### func [PubkeyID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L203>)
 
 ```go
 func PubkeyID(pub *ecdsa.PublicKey) NodeID
@@ -486,16 +558,16 @@ func PubkeyID(pub *ecdsa.PublicKey) NodeID
 PubkeyID returns a marshaled representation of the given public key.
 
 <a name="recoverNodeID"></a>
-### func [recoverNodeID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L222>)
+### func [recoverNodeID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L229>)
 
 ```go
 func recoverNodeID(hash, sig []byte) (id NodeID, err error)
 ```
 
-recoverNodeID computes the public key used to sign the given hash from the signature.
+recoverNodeID computes the public key used to sign the given hash from the signature, returning it in NodeID form. Used by the UDP transport to identify the sender of a signed discovery packet.
 
 <a name="splitKey"></a>
-### func [splitKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L147>)
+### func [splitKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L171>)
 
 ```go
 func splitKey(key []byte) (id NodeID, field string)
@@ -504,7 +576,7 @@ func splitKey(key []byte) (id NodeID, field string)
 splitKey tries to split a database key into a node id and a field part.
 
 <a name="NodeID.GoString"></a>
-### func \(NodeID\) [GoString](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L165>)
+### func \(NodeID\) [GoString](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L171>)
 
 ```go
 func (n NodeID) GoString() string
@@ -513,7 +585,7 @@ func (n NodeID) GoString() string
 The Go syntax representation of a NodeID is a call to HexID.
 
 <a name="NodeID.Pubkey"></a>
-### func \(NodeID\) [Pubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L209>)
+### func \(NodeID\) [Pubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L215>)
 
 ```go
 func (id NodeID) Pubkey() (*ecdsa.PublicKey, error)
@@ -522,7 +594,7 @@ func (id NodeID) Pubkey() (*ecdsa.PublicKey, error)
 Pubkey returns the public key represented by the node ID. It returns an error if the ID is not a point on the curve.
 
 <a name="NodeID.String"></a>
-### func \(NodeID\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L160>)
+### func \(NodeID\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L166>)
 
 ```go
 func (n NodeID) String() string
@@ -531,9 +603,9 @@ func (n NodeID) String() string
 NodeID prints as a long hexadecimal number.
 
 <a name="Table"></a>
-## type [Table](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L50-L68>)
+## type [Table](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L61-L79>)
 
-
+Table is the Kademlia routing table. Holds the current bucket map, the bootstrap nursery, the persistent \[nodeDB\], and the bonding session map. All mutating fields are guarded by mutex except for bonding, which has its own bondmu.
 
 ```go
 type Table struct {
@@ -558,7 +630,7 @@ type Table struct {
 ```
 
 <a name="ListenUDP"></a>
-### func [ListenUDP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L200>)
+### func [ListenUDP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L242>)
 
 ```go
 func ListenUDP(priv *ecdsa.PrivateKey, laddr string, natm nat.Interface, nodeDBPath string) (*Table, error)
@@ -567,16 +639,16 @@ func ListenUDP(priv *ecdsa.PrivateKey, laddr string, natm nat.Interface, nodeDBP
 ListenUDP returns a new table that listens for UDP packets on laddr.
 
 <a name="newTable"></a>
-### func [newTable](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L94>)
+### func [newTable](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L113>)
 
 ```go
 func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string) *Table
 ```
 
-
+newTable constructs a Table bound to the given transport \(the UDP implementation in production\) and persistent node database path. An empty nodeDBPath yields an in\-memory database. Falls back to an in\-memory DB if opening the persistent file fails.
 
 <a name="Table.Bootstrap"></a>
-### func \(\*Table\) [Bootstrap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L182>)
+### func \(\*Table\) [Bootstrap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L203>)
 
 ```go
 func (tab *Table) Bootstrap(nodes []*Node)
@@ -585,7 +657,7 @@ func (tab *Table) Bootstrap(nodes []*Node)
 Bootstrap sets the bootstrap nodes. These nodes are used to connect to the network if the table is empty. Bootstrap will also attempt to fill the table by performing random lookup operations on the network.
 
 <a name="Table.Close"></a>
-### func \(\*Table\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L172>)
+### func \(\*Table\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L193>)
 
 ```go
 func (tab *Table) Close()
@@ -594,7 +666,7 @@ func (tab *Table) Close()
 Close terminates the network listener and flushes the node database.
 
 <a name="Table.Lookup"></a>
-### func \(\*Table\) [Lookup](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L200>)
+### func \(\*Table\) [Lookup](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L221>)
 
 ```go
 func (tab *Table) Lookup(targetID NodeID, wg *sync.WaitGroup, forceSeed bool) []*Node
@@ -603,7 +675,7 @@ func (tab *Table) Lookup(targetID NodeID, wg *sync.WaitGroup, forceSeed bool) []
 Lookup performs a network search for nodes close to the given target. It approaches the target by querying nodes that are closer to it on each iteration. The given target does not need to be an actual node identifier.
 
 <a name="Table.ReadRandomNodes"></a>
-### func \(\*Table\) [ReadRandomNodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L127>)
+### func \(\*Table\) [ReadRandomNodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L146>)
 
 ```go
 func (tab *Table) ReadRandomNodes(buf []*Node) (n int)
@@ -612,7 +684,7 @@ func (tab *Table) ReadRandomNodes(buf []*Node) (n int)
 ReadRandomNodes fills the given slice with random nodes from the table. It will not write the same node more than once. The nodes in the slice are copies and can be modified by the caller.
 
 <a name="Table.Self"></a>
-### func \(\*Table\) [Self](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L120>)
+### func \(\*Table\) [Self](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L139>)
 
 ```go
 func (tab *Table) Self() *Node
@@ -621,7 +693,7 @@ func (tab *Table) Self() *Node
 Self returns the local node. The returned node should not be modified by the caller.
 
 <a name="Table.add"></a>
-### func \(\*Table\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L506>)
+### func \(\*Table\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L539>)
 
 ```go
 func (tab *Table) add(entries []*Node)
@@ -630,7 +702,7 @@ func (tab *Table) add(entries []*Node)
 add puts the entries into the table if their corresponding bucket is not full. The caller must hold tab.mutex.
 
 <a name="Table.bond"></a>
-### func \(\*Table\) [bond](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L386>)
+### func \(\*Table\) [bond](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L412>)
 
 ```go
 func (tab *Table) bond(pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16) (*Node, error)
@@ -645,7 +717,7 @@ bond is meant to operate idempotently in that bonding with a remote node which s
 If pinged is true, the remote node has just pinged us and one half of the process can be skipped.
 
 <a name="Table.bondall"></a>
-### func \(\*Table\) [bondall](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L352>)
+### func \(\*Table\) [bondall](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L378>)
 
 ```go
 func (tab *Table) bondall(nodes []*Node) (result []*Node)
@@ -654,7 +726,7 @@ func (tab *Table) bondall(nodes []*Node) (result []*Node)
 bondall bonds with all given nodes concurrently and returns those nodes for which bonding has probably succeeded.
 
 <a name="Table.closest"></a>
-### func \(\*Table\) [closest](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L330>)
+### func \(\*Table\) [closest](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L353>)
 
 ```go
 func (tab *Table) closest(target types.Hash, nresults int) *nodesByDistance
@@ -663,7 +735,7 @@ func (tab *Table) closest(target types.Hash, nresults int) *nodesByDistance
 closest returns the n nodes in the table that are closest to the given id. The caller must hold tab.mutex.
 
 <a name="Table.del"></a>
-### func \(\*Table\) [del](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L531>)
+### func \(\*Table\) [del](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L564>)
 
 ```go
 func (tab *Table) del(node *Node)
@@ -672,16 +744,16 @@ func (tab *Table) del(node *Node)
 del removes an entry from the node table \(used to evacuate failed/non\-bonded discovery peers\).
 
 <a name="Table.len"></a>
-### func \(\*Table\) [len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L343>)
+### func \(\*Table\) [len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L369>)
 
 ```go
 func (tab *Table) len() (n int)
 ```
 
-
+len returns the total number of nodes currently in the table. Caller need not hold tab.mutex; the count is approximate under concurrent mutations.
 
 <a name="Table.ping"></a>
-### func \(\*Table\) [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L491>)
+### func \(\*Table\) [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L524>)
 
 ```go
 func (tab *Table) ping(id NodeID, addr *net.UDPAddr) error
@@ -690,36 +762,36 @@ func (tab *Table) ping(id NodeID, addr *net.UDPAddr) error
 ping a remote endpoint and wait for a reply, also updating the node database accordingly.
 
 <a name="Table.pingpong"></a>
-### func \(\*Table\) [pingpong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L435>)
+### func \(\*Table\) [pingpong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L464>)
 
 ```go
 func (tab *Table) pingpong(w *bondproc, pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16)
 ```
 
-
+pingpong drives the actual ping/pong RPC pair, gated by a bondslots semaphore to bound concurrent network use. Stores the result in w \(an outcome the bond callers race on\).
 
 <a name="Table.pingreplace"></a>
-### func \(\*Table\) [pingreplace](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L470>)
+### func \(\*Table\) [pingreplace](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L503>)
 
 ```go
 func (tab *Table) pingreplace(new *Node, b *bucket)
 ```
 
-
+pingreplace implements the standard Kademlia eviction rule for a full bucket: ping the least\-recently\-active entry; if it responds, keep it and discard the newcomer; otherwise drop the LRU and insert the newcomer at the head.
 
 <a name="Table.refresh"></a>
-### func \(\*Table\) [refresh](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L270>)
+### func \(\*Table\) [refresh](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L293>)
 
 ```go
 func (tab *Table) refresh(forceSeed bool)
 ```
 
-refresh performs a lookup for a random target to keep buckets full, or seeds the table if it is empty \(initial bootstrap or discarded faulty peers\).
+refresh performs a lookup for a random target to keep buckets full, or seeds the table if it is empty \(initial bootstrap or discarded faulty peers\). forceSeed=true forces a fresh seed pass even when the table is non\-empty.
 
 <a name="bondproc"></a>
-## type [bondproc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L70-L74>)
+## type [bondproc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L84-L88>)
 
-
+bondproc tracks an in\-flight bonding \(ping/pong\) session so concurrent callers asking about the same peer can join the same outcome rather than racing on duplicate ping traffic.
 
 ```go
 type bondproc struct {
@@ -730,9 +802,9 @@ type bondproc struct {
 ```
 
 <a name="bucket"></a>
-## type [bucket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L89-L92>)
+## type [bucket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L104-L107>)
 
-bucket contains nodes, ordered by their last activity. the entry that was most recently active is the last element in entries.
+bucket is one Kademlia k\-bucket. entries holds up to bucketSize nodes ordered by their last activity \(most recently active is the last element\); lastLookup records when a Lookup last targeted this bucket so refresh can prioritise stale buckets.
 
 ```go
 type bucket struct {
@@ -742,18 +814,18 @@ type bucket struct {
 ```
 
 <a name="bucket.bump"></a>
-### func \(\*bucket\) [bump](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L544>)
+### func \(\*bucket\) [bump](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L580>)
 
 ```go
 func (b *bucket) bump(n *Node) bool
 ```
 
-
+bump moves an existing entry to the front of the bucket \(most recent\), returning true if it was found. Returns false if n is not already in the bucket — the caller then routes to pingreplace.
 
 <a name="conn"></a>
-## type [conn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L138-L143>)
+## type [conn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L174-L179>)
 
-
+conn is the subset of net.PacketConn used by the discovery transport. Carved out so tests can supply an in\-memory stand\-in.
 
 ```go
 type conn interface {
@@ -765,7 +837,7 @@ type conn interface {
 ```
 
 <a name="findnode"></a>
-## type [findnode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L88-L91>)
+## type [findnode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L106-L109>)
 
 findnode is a query for nodes close to the given target.
 
@@ -777,7 +849,7 @@ type findnode struct {
 ```
 
 <a name="findnode.handle"></a>
-### func \(\*findnode\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L559>)
+### func \(\*findnode\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L636>)
 
 ```go
 func (req *findnode) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error
@@ -786,7 +858,7 @@ func (req *findnode) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte
 
 
 <a name="neighbors"></a>
-## type [neighbors](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L94-L97>)
+## type [neighbors](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L112-L115>)
 
 reply to findnode
 
@@ -798,7 +870,7 @@ type neighbors struct {
 ```
 
 <a name="neighbors.handle"></a>
-### func \(\*neighbors\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L591>)
+### func \(\*neighbors\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L668>)
 
 ```go
 func (req *neighbors) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error
@@ -807,9 +879,9 @@ func (req *neighbors) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byt
 
 
 <a name="nodeDB"></a>
-## type [nodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L50-L58>)
+## type [nodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L61-L69>)
 
-nodeDB stores all nodes we know about.
+nodeDB is the persistent \(or in\-memory\) leveldb\-backed cache of every node we have ever heard from. Keyed by \[makeKey\] under the "n:\<NodeID\>\<field\>" prefix scheme. Implements an idempotent expirer goroutine that prunes records older than nodeDBNodeExpiration.
 
 ```go
 type nodeDB struct {
@@ -824,7 +896,7 @@ type nodeDB struct {
 ```
 
 <a name="newMemoryNodeDB"></a>
-### func [newMemoryNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L83>)
+### func [newMemoryNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L107>)
 
 ```go
 func newMemoryNodeDB(self NodeID) (*nodeDB, error)
@@ -833,7 +905,7 @@ func newMemoryNodeDB(self NodeID) (*nodeDB, error)
 newMemoryNodeDB creates a new in\-memory node database without a persistent backend.
 
 <a name="newNodeDB"></a>
-### func [newNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L74>)
+### func [newNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L98>)
 
 ```go
 func newNodeDB(path string, version int, self NodeID) (*nodeDB, error)
@@ -842,7 +914,7 @@ func newNodeDB(path string, version int, self NodeID) (*nodeDB, error)
 newNodeDB creates a new node database for storing and retrieving infos about known peers in the network. If no path is given, an in\-memory, temporary database is constructed.
 
 <a name="newPersistentNodeDB"></a>
-### func [newPersistentNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L97>)
+### func [newPersistentNodeDB](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L121>)
 
 ```go
 func newPersistentNodeDB(path string, version int, self NodeID) (*nodeDB, error)
@@ -851,7 +923,7 @@ func newPersistentNodeDB(path string, version int, self NodeID) (*nodeDB, error)
 newPersistentNodeDB creates/opens a leveldb backed persistent node database, also flushing its contents in case of a version mismatch.
 
 <a name="nodeDB.close"></a>
-### func \(\*nodeDB\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L349>)
+### func \(\*nodeDB\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L374>)
 
 ```go
 func (db *nodeDB) close()
@@ -860,7 +932,7 @@ func (db *nodeDB) close()
 close flushes and closes the database files.
 
 <a name="nodeDB.deleteNode"></a>
-### func \(\*nodeDB\) [deleteNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L209>)
+### func \(\*nodeDB\) [deleteNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L233>)
 
 ```go
 func (db *nodeDB) deleteNode(id NodeID) error
@@ -869,7 +941,7 @@ func (db *nodeDB) deleteNode(id NodeID) error
 deleteNode deletes all information/keys associated with a node.
 
 <a name="nodeDB.ensureExpirer"></a>
-### func \(\*nodeDB\) [ensureExpirer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L228>)
+### func \(\*nodeDB\) [ensureExpirer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L252>)
 
 ```go
 func (db *nodeDB) ensureExpirer()
@@ -880,7 +952,7 @@ ensureExpirer is a small helper method ensuring that the data expiration mechani
 The goal is to start the data evacuation only after the network successfully bootstrapped itself \(to prevent dumping potentially useful seed nodes\). Since it would require significant overhead to exactly trace the first successful convergence, it's simpler to "ensure" the correct state when an appropriate condition occurs \(i.e. a successful bonding\), and discard further events.
 
 <a name="nodeDB.expireNodes"></a>
-### func \(\*nodeDB\) [expireNodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L251>)
+### func \(\*nodeDB\) [expireNodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L276>)
 
 ```go
 func (db *nodeDB) expireNodes() error
@@ -889,16 +961,16 @@ func (db *nodeDB) expireNodes() error
 expireNodes iterates over the database and deletes all nodes that have not been seen \(i.e. received a pong from\) for some alloted time.
 
 <a name="nodeDB.expirer"></a>
-### func \(\*nodeDB\) [expirer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L234>)
+### func \(\*nodeDB\) [expirer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L259>)
 
 ```go
 func (db *nodeDB) expirer()
 ```
 
-expirer should be started in a go routine, and is responsible for looping ad infinitum and dropping stale data from the database.
+expirer is the background goroutine started once by ensureExpirer. Loops on nodeDBCleanupCycle, calling expireNodes to drop entries past nodeDBNodeExpiration. Exits cleanly on db.quit close.
 
 <a name="nodeDB.fetchInt64"></a>
-### func \(\*nodeDB\) [fetchInt64](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L162>)
+### func \(\*nodeDB\) [fetchInt64](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L186>)
 
 ```go
 func (db *nodeDB) fetchInt64(key []byte) int64
@@ -907,7 +979,7 @@ func (db *nodeDB) fetchInt64(key []byte) int64
 fetchInt64 retrieves an integer instance associated with a particular database key.
 
 <a name="nodeDB.findFails"></a>
-### func \(\*nodeDB\) [findFails](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L298>)
+### func \(\*nodeDB\) [findFails](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L323>)
 
 ```go
 func (db *nodeDB) findFails(id NodeID) int
@@ -916,7 +988,7 @@ func (db *nodeDB) findFails(id NodeID) int
 findFails retrieves the number of findnode failures since bonding.
 
 <a name="nodeDB.lastPing"></a>
-### func \(\*nodeDB\) [lastPing](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L278>)
+### func \(\*nodeDB\) [lastPing](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L303>)
 
 ```go
 func (db *nodeDB) lastPing(id NodeID) time.Time
@@ -925,7 +997,7 @@ func (db *nodeDB) lastPing(id NodeID) time.Time
 lastPing retrieves the time of the last ping packet send to a remote node, requesting binding.
 
 <a name="nodeDB.lastPong"></a>
-### func \(\*nodeDB\) [lastPong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L288>)
+### func \(\*nodeDB\) [lastPong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L313>)
 
 ```go
 func (db *nodeDB) lastPong(id NodeID) time.Time
@@ -934,7 +1006,7 @@ func (db *nodeDB) lastPong(id NodeID) time.Time
 lastPong retrieves the time of the last successful contact from remote node.
 
 <a name="nodeDB.node"></a>
-### func \(\*nodeDB\) [node](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L184>)
+### func \(\*nodeDB\) [node](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L208>)
 
 ```go
 func (db *nodeDB) node(id NodeID) *Node
@@ -943,7 +1015,7 @@ func (db *nodeDB) node(id NodeID) *Node
 node retrieves a node with a given id from the database.
 
 <a name="nodeDB.querySeeds"></a>
-### func \(\*nodeDB\) [querySeeds](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L317>)
+### func \(\*nodeDB\) [querySeeds](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L342>)
 
 ```go
 func (db *nodeDB) querySeeds(n int) []*Node
@@ -956,7 +1028,7 @@ Ideal seeds are the most recently seen nodes \(highest probability to be still a
 If the database runs out of potential seeds, we restart the startup counter and start iterating over the peers again.
 
 <a name="nodeDB.storeInt64"></a>
-### func \(\*nodeDB\) [storeInt64](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L176>)
+### func \(\*nodeDB\) [storeInt64](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L200>)
 
 ```go
 func (db *nodeDB) storeInt64(key []byte, n int64) error
@@ -965,7 +1037,7 @@ func (db *nodeDB) storeInt64(key []byte, n int64) error
 storeInt64 update a specific database entry to the current time instance as a unix timestamp.
 
 <a name="nodeDB.updateFindFails"></a>
-### func \(\*nodeDB\) [updateFindFails](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L303>)
+### func \(\*nodeDB\) [updateFindFails](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L328>)
 
 ```go
 func (db *nodeDB) updateFindFails(id NodeID, fails int) error
@@ -974,7 +1046,7 @@ func (db *nodeDB) updateFindFails(id NodeID, fails int) error
 updateFindFails updates the number of findnode failures since bonding.
 
 <a name="nodeDB.updateLastPing"></a>
-### func \(\*nodeDB\) [updateLastPing](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L283>)
+### func \(\*nodeDB\) [updateLastPing](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L308>)
 
 ```go
 func (db *nodeDB) updateLastPing(id NodeID, instance time.Time) error
@@ -983,7 +1055,7 @@ func (db *nodeDB) updateLastPing(id NodeID, instance time.Time) error
 updateLastPing updates the last time we tried contacting a remote node.
 
 <a name="nodeDB.updateLastPong"></a>
-### func \(\*nodeDB\) [updateLastPong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L293>)
+### func \(\*nodeDB\) [updateLastPong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L318>)
 
 ```go
 func (db *nodeDB) updateLastPong(id NodeID, instance time.Time) error
@@ -992,7 +1064,7 @@ func (db *nodeDB) updateLastPong(id NodeID, instance time.Time) error
 updateLastPong updates the last time a remote node successfully contacted.
 
 <a name="nodeDB.updateNode"></a>
-### func \(\*nodeDB\) [updateNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L200>)
+### func \(\*nodeDB\) [updateNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/database.go#L224>)
 
 ```go
 func (db *nodeDB) updateNode(node *Node) error
@@ -1001,7 +1073,7 @@ func (db *nodeDB) updateNode(node *Node) error
 updateNode inserts \- potentially overwriting \- a node into the peer database.
 
 <a name="nodesByDistance"></a>
-## type [nodesByDistance](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L558-L561>)
+## type [nodesByDistance](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L594-L597>)
 
 nodesByDistance is a list of nodes, ordered by distance to target.
 
@@ -1013,7 +1085,7 @@ type nodesByDistance struct {
 ```
 
 <a name="nodesByDistance.push"></a>
-### func \(\*nodesByDistance\) [push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L564>)
+### func \(\*nodesByDistance\) [push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L600>)
 
 ```go
 func (h *nodesByDistance) push(n *Node, maxElems int)
@@ -1022,9 +1094,9 @@ func (h *nodesByDistance) push(n *Node, maxElems int)
 push adds the given node to the list, keeping the total size below maxElems.
 
 <a name="packet"></a>
-## type [packet](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L134-L136>)
+## type [packet](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L168-L170>)
 
-
+packet is the contract every decoded discovery payload satisfies. handle is invoked from the readLoop goroutine after signature verification has recovered the sender's NodeID.
 
 ```go
 type packet interface {
@@ -1033,7 +1105,7 @@ type packet interface {
 ```
 
 <a name="pending"></a>
-## type [pending](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L171-L188>)
+## type [pending](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L209-L226>)
 
 pending represents a pending reply.
 
@@ -1063,9 +1135,9 @@ type pending struct {
 ```
 
 <a name="ping"></a>
-## type [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L70-L74>)
+## type [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L88-L92>)
 
-RPC request structures
+ping is the bonding initiator's payload.
 
 ```go
 type ping struct {
@@ -1076,7 +1148,7 @@ type ping struct {
 ```
 
 <a name="ping.handle"></a>
-### func \(\*ping\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L526>)
+### func \(\*ping\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L603>)
 
 ```go
 func (req *ping) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error
@@ -1085,7 +1157,7 @@ func (req *ping) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) er
 
 
 <a name="pong"></a>
-## type [pong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L77-L85>)
+## type [pong](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L95-L103>)
 
 pong is the reply to ping.
 
@@ -1102,7 +1174,7 @@ type pong struct {
 ```
 
 <a name="pong.handle"></a>
-### func \(\*pong\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L549>)
+### func \(\*pong\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L626>)
 
 ```go
 func (req *pong) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error
@@ -1111,9 +1183,9 @@ func (req *pong) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) er
 
 
 <a name="reply"></a>
-## type [reply](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L190-L197>)
+## type [reply](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L232-L239>)
 
-
+reply carries an inbound packet up to the event loop alongside the ack channel \`matched\` — the loop signals whether the packet satisfied any pending callback so the readLoop can decide to drop it as unsolicited.
 
 ```go
 type reply struct {
@@ -1127,9 +1199,9 @@ type reply struct {
 ```
 
 <a name="rpcEndpoint"></a>
-## type [rpcEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L106-L110>)
+## type [rpcEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L129-L133>)
 
-RPC request structures
+rpcEndpoint is the wire form of a network endpoint, used for the From/To fields of ping packets so peers can detect their post\-NAT address.
 
 ```go
 type rpcEndpoint struct {
@@ -1140,18 +1212,18 @@ type rpcEndpoint struct {
 ```
 
 <a name="makeEndpoint"></a>
-### func [makeEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L113>)
+### func [makeEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L139>)
 
 ```go
 func makeEndpoint(addr *net.UDPAddr, tcpPort uint16) rpcEndpoint
 ```
 
-
+makeEndpoint converts a UDP address plus a TCP port hint into the rpcEndpoint form expected on the wire, normalising the IP to the shortest representation that still represents the address.
 
 <a name="rpcNode"></a>
-## type [rpcNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L99-L104>)
+## type [rpcNode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L119-L124>)
 
-RPC request structures
+rpcNode is the wire form of a Node — same fields, distinct type to keep the public Node free of RLP tags.
 
 ```go
 type rpcNode struct {
@@ -1163,16 +1235,16 @@ type rpcNode struct {
 ```
 
 <a name="nodeToRPC"></a>
-### func [nodeToRPC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L130>)
+### func [nodeToRPC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L161>)
 
 ```go
 func nodeToRPC(n *Node) rpcNode
 ```
 
-
+nodeToRPC is the inverse of nodeFromRPC, projecting a Node into the wire\-form rpcNode for inclusion in neighbors packets.
 
 <a name="transport"></a>
-## type [transport](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L79-L84>)
+## type [transport](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/table.go#L93-L98>)
 
 transport is implemented by the UDP transport. it is an interface so we can test without opening lots of UDP sockets and without generating a private key.
 
@@ -1186,9 +1258,9 @@ type transport interface {
 ```
 
 <a name="udp"></a>
-## type [udp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L146-L160>)
+## type [udp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L184-L198>)
 
-udp implements the RPC protocol.
+udp implements the RPC protocol over a UDP socket. Embeds \*Table so the discovery RPC handlers can directly call into routing logic \(bond, add, etc.\).
 
 ```go
 type udp struct {
@@ -1209,16 +1281,16 @@ type udp struct {
 ```
 
 <a name="udp.close"></a>
-### func \(\*udp\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L252>)
+### func \(\*udp\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L301>)
 
 ```go
 func (t *udp) close()
 ```
 
-
+close shuts down the transport: signals the goroutines via t.closing, closes the underlying socket, and panics if the close itself errors \(closes during normal shutdown should never fail\).
 
 <a name="udp.findnode"></a>
-### func \(\*udp\) [findnode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L280>)
+### func \(\*udp\) [findnode](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L332>)
 
 ```go
 func (t *udp) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node, error)
@@ -1227,25 +1299,25 @@ func (t *udp) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node
 findnode sends a findnode request to the given node and waits until the node has sent up to k neighbors.
 
 <a name="udp.handlePacket"></a>
-### func \(\*udp\) [handlePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L482>)
+### func \(\*udp\) [handlePacket](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L556>)
 
 ```go
 func (t *udp) handlePacket(from *net.UDPAddr, buf []byte) error
 ```
 
-
+handlePacket decodes one inbound UDP datagram, dispatches it to the matching packet.handle, and logs the outcome. Errors are non\-fatal — discovery survives a malformed packet from any peer.
 
 <a name="udp.handleReply"></a>
-### func \(\*udp\) [handleReply](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L315>)
+### func \(\*udp\) [handleReply](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L371>)
 
 ```go
 func (t *udp) handleReply(from NodeID, ptype byte, req packet) bool
 ```
 
-
+handleReply forwards a decoded packet to the event loop, which matches it against any pending callbacks. Returns true iff at least one pending callback claimed the reply \(used to distinguish solicited vs. unsolicited inbound packets\).
 
 <a name="udp.loop"></a>
-### func \(\*udp\) [loop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L328>)
+### func \(\*udp\) [loop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L384>)
 
 ```go
 func (t *udp) loop()
@@ -1254,7 +1326,7 @@ func (t *udp) loop()
 loop runs in its own goroutin. it keeps track of the refresh timer and the pending reply queue.
 
 <a name="udp.pending"></a>
-### func \(\*udp\) [pending](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L303>)
+### func \(\*udp\) [pending](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L355>)
 
 ```go
 func (t *udp) pending(id NodeID, ptype byte, callback func(interface{}) bool) <-chan error
@@ -1263,7 +1335,7 @@ func (t *udp) pending(id NodeID, ptype byte, callback func(interface{}) bool) <-
 pending adds a reply callback to the pending reply queue. see the documentation of type pending for a detailed explanation.
 
 <a name="udp.ping"></a>
-### func \(\*udp\) [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L262>)
+### func \(\*udp\) [ping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L311>)
 
 ```go
 func (t *udp) ping(toid NodeID, toaddr *net.UDPAddr) error
@@ -1272,7 +1344,7 @@ func (t *udp) ping(toid NodeID, toaddr *net.UDPAddr) error
 ping sends a ping message to the given node and waits for a reply.
 
 <a name="udp.readLoop"></a>
-### func \(\*udp\) [readLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L467>)
+### func \(\*udp\) [readLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L538>)
 
 ```go
 func (t *udp) readLoop()
@@ -1281,21 +1353,21 @@ func (t *udp) readLoop()
 readLoop runs in its own goroutine. it handles incoming UDP packets.
 
 <a name="udp.send"></a>
-### func \(\*udp\) [send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L432>)
+### func \(\*udp\) [send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L500>)
 
 ```go
 func (t *udp) send(toaddr *net.UDPAddr, ptype byte, req interface{}) error
 ```
 
-
+send signs and writes a single discovery packet. UDP write errors are logged and returned but never retried — the protocol is fire\-and\-forget; missed packets surface as RPC timeouts upstream.
 
 <a name="udp.waitping"></a>
-### func \(\*udp\) [waitping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L274>)
+### func \(\*udp\) [waitping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/udp.go#L326>)
 
 ```go
 func (t *udp) waitping(from NodeID) error
 ```
 
-
+waitping blocks until the named peer pings us, with the same respTimeout as a regular RPC. Used by the bonding flow to confirm the remote also considers us unbonded.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

@@ -14,12 +14,6 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package discover implements the Node Discovery Protocol.
-//
-// The Node Discovery protocol provides a way to find RLPx nodes that
-// can be connected to. It uses a Kademlia-like protocol to maintain a
-// distributed database of the IDs and endpoints of all listening
-// nodes.
 package discover
 
 import (
@@ -37,16 +31,33 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// Kademlia tunables — values match the go-ethereum devp2p v4 spec.
 const (
-	alpha      = 3  // Kademlia concurrency factor
-	bucketSize = 16 // Kademlia bucket size
-	hashBits   = len(types.Hash{}) * 8
-	nBuckets   = hashBits + 1 // Number of buckets
+	// alpha is the Kademlia concurrency factor: how many parallel
+	// FindNode RPCs Lookup may have in flight at once.
+	alpha = 3
+	// bucketSize is the per-bucket capacity (k in Kademlia
+	// terminology). Eviction policy when full: ping the LRU entry;
+	// keep it if it responds.
+	bucketSize = 16
+	// hashBits is the bit-width of the node-ID hash space (256).
+	hashBits = len(types.Hash{}) * 8
+	// nBuckets is the routing-table fan-out — one per possible log
+	// distance plus one for self.
+	nBuckets = hashBits + 1
 
+	// maxBondingPingPongs caps concurrent bonding ping/pong sessions
+	// to bound network use during bootstrap.
 	maxBondingPingPongs = 16
+	// maxFindnodeFailures is the threshold at which a node is
+	// evicted from the table for repeated FindNode failures.
 	maxFindnodeFailures = 5
 )
 
+// Table is the Kademlia routing table. Holds the current bucket map,
+// the bootstrap nursery, the persistent [nodeDB], and the bonding
+// session map. All mutating fields are guarded by mutex except for
+// bonding, which has its own bondmu.
 type Table struct {
 	mutex   sync.Mutex        // protects buckets, their content, and nursery
 	buckets [nBuckets]*bucket // index of known nodes by distance
@@ -67,6 +78,9 @@ type Table struct {
 	wg sync.WaitGroup
 }
 
+// bondproc tracks an in-flight bonding (ping/pong) session so
+// concurrent callers asking about the same peer can join the same
+// outcome rather than racing on duplicate ping traffic.
 type bondproc struct {
 	err  error
 	n    *Node
@@ -83,14 +97,19 @@ type transport interface {
 	close()
 }
 
-// bucket contains nodes, ordered by their last activity.
-// the entry that was most recently active is the last element
-// in entries.
+// bucket is one Kademlia k-bucket. entries holds up to bucketSize
+// nodes ordered by their last activity (most recently active is the
+// last element); lastLookup records when a Lookup last targeted this
+// bucket so refresh can prioritise stale buckets.
 type bucket struct {
 	lastLookup time.Time
 	entries    []*Node
 }
 
+// newTable constructs a Table bound to the given transport (the UDP
+// implementation in production) and persistent node database path.
+// An empty nodeDBPath yields an in-memory database. Falls back to an
+// in-memory DB if opening the persistent file fails.
 func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string) *Table {
 	// If no node database was given, use an in-memory one
 	db, err := newNodeDB(nodeDBPath, Version, ourID)
@@ -159,6 +178,8 @@ func (tab *Table) ReadRandomNodes(buf []*Node) (n int) {
 	return i + 1
 }
 
+// randUint returns a random uint32 in [0, max). Returns 0 when
+// max == 0 to avoid a modulo-by-zero panic.
 func randUint(max uint32) uint32 {
 	if max == 0 {
 		return 0
@@ -265,8 +286,10 @@ func (tab *Table) Lookup(targetID NodeID, wg *sync.WaitGroup, forceSeed bool) []
 	return result.entries
 }
 
-// refresh performs a lookup for a random target to keep buckets full, or seeds
-// the table if it is empty (initial bootstrap or discarded faulty peers).
+// refresh performs a lookup for a random target to keep buckets full,
+// or seeds the table if it is empty (initial bootstrap or discarded
+// faulty peers). forceSeed=true forces a fresh seed pass even when
+// the table is non-empty.
 func (tab *Table) refresh(forceSeed bool) {
 	seed := true
 
@@ -340,6 +363,9 @@ func (tab *Table) closest(target types.Hash, nresults int) *nodesByDistance {
 	return close
 }
 
+// len returns the total number of nodes currently in the table.
+// Caller need not hold tab.mutex; the count is approximate under
+// concurrent mutations.
 func (tab *Table) len() (n int) {
 	for _, b := range tab.buckets {
 		n += len(b.entries)
@@ -432,6 +458,9 @@ func (tab *Table) bond(pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16
 	return node, result
 }
 
+// pingpong drives the actual ping/pong RPC pair, gated by a
+// bondslots semaphore to bound concurrent network use. Stores the
+// result in w (an outcome the bond callers race on).
 func (tab *Table) pingpong(w *bondproc, pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16) {
 	// Request a bonding slot to limit network usage
 	<-tab.bondslots
@@ -467,6 +496,10 @@ func (tab *Table) pingpong(w *bondproc, pinged bool, id NodeID, addr *net.UDPAdd
 	close(w.done)
 }
 
+// pingreplace implements the standard Kademlia eviction rule for a
+// full bucket: ping the least-recently-active entry; if it responds,
+// keep it and discard the newcomer; otherwise drop the LRU and insert
+// the newcomer at the head.
 func (tab *Table) pingreplace(new *Node, b *bucket) {
 	if len(b.entries) == bucketSize {
 		oldest := b.entries[bucketSize-1]
@@ -541,6 +574,9 @@ func (tab *Table) del(node *Node) {
 	}
 }
 
+// bump moves an existing entry to the front of the bucket (most
+// recent), returning true if it was found. Returns false if n is not
+// already in the bucket — the caller then routes to pingreplace.
 func (b *bucket) bump(n *Node) bool {
 	for i := range b.entries {
 		if b.entries[i].ID == n.ID {

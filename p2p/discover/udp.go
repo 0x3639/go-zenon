@@ -34,9 +34,12 @@ import (
 	"github.com/zenon-network/go-zenon/p2p/nat"
 )
 
+// Version is the discovery protocol version this node speaks. ping
+// packets carrying a different Version are rejected with errBadVersion.
 const Version = 4
 
-// Errors
+// Wire-level errors. Logged at debug level; never returned to callers
+// as the discovery transport is fire-and-forget.
 var (
 	errPacketTooSmall   = errors.New("too small")
 	errBadHash          = errors.New("bad hash")
@@ -48,25 +51,40 @@ var (
 	errClosed           = errors.New("socket closed")
 )
 
-// Timeouts
+// Timeouts governing the discovery RPC machine.
 const (
+	// respTimeout is how long pending records wait for a matching
+	// reply before erroring with errTimeout.
 	respTimeout = 500 * time.Millisecond
+	// sendTimeout is the deadline for a single UDP send.
 	sendTimeout = 500 * time.Millisecond
-	expiration  = 20 * time.Second
+	// expiration is the absolute lifetime stamped on each outgoing
+	// packet — receivers reject packets past this with errExpired.
+	expiration = 20 * time.Second
 
+	// refreshInterval is the cadence at which Table.refresh runs to
+	// keep buckets warm.
 	refreshInterval = 30 * time.Minute
 )
 
-// RPC packet types
+// RPC packet type discriminators. Sent as the byte immediately
+// following the signed header in encodePacket.
 const (
+	// pingPacket initiates or answers a bonding session.
 	pingPacket = iota + 1 // zero is 'reserved'
+	// pongPacket is the reply to pingPacket.
 	pongPacket
+	// findnodePacket asks the recipient for nodes close to a target ID.
 	findnodePacket
+	// neighborsPacket carries a chunk of FindNode results (split
+	// across packets to fit under the 1280-byte cap).
 	neighborsPacket
 )
 
-// RPC request structures
+// RPC payload structures. Each implements the unexported [packet]
+// interface via its handle method.
 type (
+	// ping is the bonding initiator's payload.
 	ping struct {
 		Version    uint
 		From, To   rpcEndpoint
@@ -96,6 +114,8 @@ type (
 		Expiration uint64
 	}
 
+	// rpcNode is the wire form of a Node — same fields, distinct type
+	// to keep the public Node free of RLP tags.
 	rpcNode struct {
 		IP  net.IP // len 4 for IPv4 or 16 for IPv6
 		UDP uint16 // for discovery protocol
@@ -103,6 +123,9 @@ type (
 		ID  NodeID
 	}
 
+	// rpcEndpoint is the wire form of a network endpoint, used for
+	// the From/To fields of ping packets so peers can detect their
+	// post-NAT address.
 	rpcEndpoint struct {
 		IP  net.IP // len 4 for IPv4 or 16 for IPv6
 		UDP uint16 // for discovery protocol
@@ -110,6 +133,9 @@ type (
 	}
 )
 
+// makeEndpoint converts a UDP address plus a TCP port hint into the
+// rpcEndpoint form expected on the wire, normalising the IP to the
+// shortest representation that still represents the address.
 func makeEndpoint(addr *net.UDPAddr, tcpPort uint16) rpcEndpoint {
 	ip := addr.IP.To4()
 	if ip == nil {
@@ -118,6 +144,9 @@ func makeEndpoint(addr *net.UDPAddr, tcpPort uint16) rpcEndpoint {
 	return rpcEndpoint{IP: ip, UDP: uint16(addr.Port), TCP: tcpPort}
 }
 
+// nodeFromRPC validates and converts a wire-form rpcNode into a Node.
+// Multicast / unspecified IPs and zero UDP ports are rejected as
+// they cannot be productive discovery candidates.
 func nodeFromRPC(rn rpcNode) (n *Node, valid bool) {
 	// TODO: don't accept localhost, LAN addresses from internet hosts
 	// TODO: check public key is on secp256k1 curve
@@ -127,14 +156,21 @@ func nodeFromRPC(rn rpcNode) (n *Node, valid bool) {
 	return newNode(rn.ID, rn.IP, rn.UDP, rn.TCP), true
 }
 
+// nodeToRPC is the inverse of nodeFromRPC, projecting a Node into the
+// wire-form rpcNode for inclusion in neighbors packets.
 func nodeToRPC(n *Node) rpcNode {
 	return rpcNode{ID: n.ID, IP: n.IP, UDP: n.UDP, TCP: n.TCP}
 }
 
+// packet is the contract every decoded discovery payload satisfies.
+// handle is invoked from the readLoop goroutine after signature
+// verification has recovered the sender's NodeID.
 type packet interface {
 	handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte) error
 }
 
+// conn is the subset of net.PacketConn used by the discovery
+// transport. Carved out so tests can supply an in-memory stand-in.
 type conn interface {
 	ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err error)
 	WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error)
@@ -142,7 +178,9 @@ type conn interface {
 	LocalAddr() net.Addr
 }
 
-// udp implements the RPC protocol.
+// udp implements the RPC protocol over a UDP socket. Embeds *Table
+// so the discovery RPC handlers can directly call into routing logic
+// (bond, add, etc.).
 type udp struct {
 	conn        conn
 	priv        *ecdsa.PrivateKey
@@ -187,6 +225,10 @@ type pending struct {
 	errc chan<- error
 }
 
+// reply carries an inbound packet up to the event loop alongside the
+// ack channel `matched` — the loop signals whether the packet
+// satisfied any pending callback so the readLoop can decide to drop
+// it as unsolicited.
 type reply struct {
 	from  NodeID
 	ptype byte
@@ -211,6 +253,10 @@ func ListenUDP(priv *ecdsa.PrivateKey, laddr string, natm nat.Interface, nodeDBP
 	return tab, nil
 }
 
+// newUDP constructs the udp transport over an already-bound
+// connection. If a NAT mapper is supplied and the local address is
+// not loopback, a port-mapping goroutine is started and the externally
+// reachable address replaces the local one in our advertised endpoint.
 func newUDP(priv *ecdsa.PrivateKey, c conn, natm nat.Interface, nodeDBPath string) (*Table, *udp) {
 	udp := &udp{
 		conn:       c,
@@ -249,6 +295,9 @@ func newUDP(priv *ecdsa.PrivateKey, c conn, natm nat.Interface, nodeDBPath strin
 	return udp.Table, udp
 }
 
+// close shuts down the transport: signals the goroutines via
+// t.closing, closes the underlying socket, and panics if the close
+// itself errors (closes during normal shutdown should never fail).
 func (t *udp) close() {
 	close(t.closing)
 	err := t.conn.Close()
@@ -271,6 +320,9 @@ func (t *udp) ping(toid NodeID, toaddr *net.UDPAddr) error {
 	return <-errc
 }
 
+// waitping blocks until the named peer pings us, with the same
+// respTimeout as a regular RPC. Used by the bonding flow to confirm
+// the remote also considers us unbonded.
 func (t *udp) waitping(from NodeID) error {
 	return <-t.pending(from, pingPacket, func(interface{}) bool { return true })
 }
@@ -312,6 +364,10 @@ func (t *udp) pending(id NodeID, ptype byte, callback func(interface{}) bool) <-
 	return ch
 }
 
+// handleReply forwards a decoded packet to the event loop, which
+// matches it against any pending callbacks. Returns true iff at
+// least one pending callback claimed the reply (used to distinguish
+// solicited vs. unsolicited inbound packets).
 func (t *udp) handleReply(from NodeID, ptype byte, req packet) bool {
 	matched := make(chan bool)
 	select {
@@ -397,18 +453,27 @@ func (t *udp) loop() {
 	}
 }
 
+// Wire framing constants for signed packets. Layout: [hash macSize]
+// [sig sigSize] [type 1B] [rlp-encoded payload].
 const (
-	macSize  = 256 / 8
-	sigSize  = 520 / 8
-	headSize = macSize + sigSize // space of packet frame data
+	// macSize is the leading keccak-256 hash length used as a packet
+	// integrity check.
+	macSize = 256 / 8
+	// sigSize is the secp256k1 signature length covering the
+	// type-byte plus payload.
+	sigSize = 520 / 8
+	// headSize is the total pre-payload framing overhead.
+	headSize = macSize + sigSize
 )
 
 var (
+	// headSpace is a zero-filled prefix used as the placeholder for
+	// hash + signature during packet construction.
 	headSpace = make([]byte, headSize)
 
-	// Neighbors responses are sent across multiple packets to
-	// stay below the 1280 byte limit. We compute the maximum number
-	// of entries by stuffing a packet until it grows too large.
+	// maxNeighbors is the largest number of rpcNode entries that can
+	// fit in a single neighbors packet under the 1280-byte UDP limit.
+	// Computed once in init() against worst-case (full IPv6) entries.
 	maxNeighbors int
 )
 
@@ -429,6 +494,9 @@ func init() {
 	}
 }
 
+// send signs and writes a single discovery packet. UDP write errors
+// are logged and returned but never retried — the protocol is
+// fire-and-forget; missed packets surface as RPC timeouts upstream.
 func (t *udp) send(toaddr *net.UDPAddr, ptype byte, req interface{}) error {
 	packet, err := encodePacket(t.priv, ptype, req)
 	if err != nil {
@@ -441,6 +509,9 @@ func (t *udp) send(toaddr *net.UDPAddr, ptype byte, req interface{}) error {
 	return err
 }
 
+// encodePacket assembles the wire bytes for a signed discovery
+// packet: signs the type-byte + rlp-encoded body with priv, then
+// hashes the (sig + body) into the leading mac field.
 func encodePacket(priv *ecdsa.PrivateKey, ptype byte, req interface{}) ([]byte, error) {
 	b := new(bytes.Buffer)
 	b.Write(headSpace)
@@ -479,6 +550,9 @@ func (t *udp) readLoop() {
 	}
 }
 
+// handlePacket decodes one inbound UDP datagram, dispatches it to
+// the matching packet.handle, and logs the outcome. Errors are
+// non-fatal — discovery survives a malformed packet from any peer.
 func (t *udp) handlePacket(from *net.UDPAddr, buf []byte) error {
 	packet, fromID, hash, err := decodePacket(buf)
 	if err != nil {
@@ -493,6 +567,9 @@ func (t *udp) handlePacket(from *net.UDPAddr, buf []byte) error {
 	return err
 }
 
+// decodePacket parses the wire frame: validates the leading mac,
+// recovers the sender's NodeID from the signature, then RLP-decodes
+// the body into the type-specific struct dictated by the type byte.
 func decodePacket(buf []byte) (packet, NodeID, []byte, error) {
 	if len(buf) < headSize+1 {
 		return nil, NodeID{}, nil, errPacketTooSmall
@@ -598,6 +675,8 @@ func (req *neighbors) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byt
 	return nil
 }
 
+// expired reports whether the packet expiration timestamp ts is in
+// the past.
 func expired(ts uint64) bool {
 	return time.Unix(int64(ts), 0).Before(time.Now())
 }

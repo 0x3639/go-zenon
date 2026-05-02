@@ -28,14 +28,22 @@ import (
 	"github.com/huin/goupnp/dcps/internetgateway2"
 )
 
+// soapRequestTimeout caps each SOAP RPC against the IGD so a
+// misbehaving router does not stall startup or the periodic refresh.
 const soapRequestTimeout = 3 * time.Second
 
+// upnp adapts an Internet Gateway Device's SOAP control endpoint to
+// the common Interface. service is a short label describing the
+// negotiated profile (IGDv1-IP1, IGDv2-PPP1, etc.).
 type upnp struct {
 	dev     *goupnp.RootDevice
 	service string
 	client  upnpClient
 }
 
+// upnpClient is the subset of methods this package needs from any of
+// the IGDv1/IGDv2 SOAP client variants exposed by the goupnp library
+// — abstracted so all of them can flow through one upnp wrapper.
 type upnpClient interface {
 	GetExternalIPAddress() (string, error)
 	AddPortMapping(string, uint16, string, uint16, string, bool, string, uint32) error
@@ -65,6 +73,9 @@ func (n *upnp) AddMapping(protocol string, extport, intport int, desc string, li
 	return n.client.AddPortMapping("", uint16(extport), protocol, uint16(intport), ip.String(), true, desc, lifetimeS)
 }
 
+// internalAddress finds the local IP on the same subnet as the
+// gateway device n.dev — required by AddPortMapping so the IGD knows
+// which host to forward to.
 func (n *upnp) internalAddress() (net.IP, error) {
 	devaddr, err := net.ResolveUDPAddr("udp4", n.dev.URLBase.Host)
 	if err != nil {
@@ -133,6 +144,10 @@ func discoverUPnP() Interface {
 	return nil
 }
 
+// discover walks every device returned by SSDP for the given target
+// URN, asks matcher to wrap any service it recognises, and writes
+// the first NAT-enabled match into out (or a single nil if nothing
+// matches). Each SOAP call is bounded by soapRequestTimeout.
 func discover(out chan<- *upnp, target string, matcher func(*goupnp.RootDevice, goupnp.ServiceClient) *upnp) {
 	devs, err := goupnp.DiscoverDevices(target)
 	if err != nil {

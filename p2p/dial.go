@@ -55,6 +55,8 @@ type dialstate struct {
 	dialing     *dialHistory
 }
 
+// discoverTable is the subset of the discovery API consumed by the
+// dialer. The production implementation is *discover.Table.
 type discoverTable interface {
 	Self() *discover.Node
 	Close()
@@ -63,20 +65,26 @@ type discoverTable interface {
 	ReadRandomNodes([]*discover.Node) int
 }
 
-// the dial history remembers recent dials.
+// dialHistory remembers recent dials. Implemented as a min-heap keyed
+// on expiry so expire can pop in time order.
 type dialHistory []pastDial
 
-// pastDial is an entry in the dial history.
+// pastDial is an entry in the dial history: which peer we last
+// attempted (id) and when that attempt's cooldown expires.
 type pastDial struct {
 	id  discover.NodeID
 	exp time.Time
 }
 
+// task is a unit of work executed on the Server.run goroutine via the
+// taskdone channel. Concrete implementations: dialTask, discoverTask,
+// waitExpireTask.
 type task interface {
 	Do(*Server)
 }
 
-// A dialTask is generated for each node that is dialed.
+// dialTask attempts a single outbound TCP connection to dest, marking
+// it with flags for downstream admission decisions.
 type dialTask struct {
 	flags connFlag
 	dest  *discover.Node
@@ -93,12 +101,17 @@ type discoverTask struct {
 	results   []*discover.Node
 }
 
-// A waitExpireTask is generated if there are no other tasks
-// to keep the loop in Server.run ticking.
+// waitExpireTask is generated if there are no other tasks to keep the
+// loop in Server.run ticking. It simply sleeps until a dial-history
+// entry is due to expire so the dialer can re-try a previously failed
+// node.
 type waitExpireTask struct {
 	time.Duration
 }
 
+// newDialState constructs a dialstate seeded with the configured
+// static nodes and bound to the given discovery table. maxdyn caps
+// the number of dynamically discovered peers the dialer will pursue.
 func newDialState(static []*discover.Node, ntab discoverTable, maxdyn int) *dialstate {
 	s := &dialstate{
 		maxDynDials: maxdyn,
@@ -114,10 +127,17 @@ func newDialState(static []*discover.Node, ntab discoverTable, maxdyn int) *dial
 	return s
 }
 
+// addStatic registers n as a static peer that will be re-dialed
+// indefinitely. Idempotent: re-adding an existing static node is a
+// no-op.
 func (s *dialstate) addStatic(n *discover.Node) {
 	s.static[n.ID] = n
 }
 
+// newTasks computes the next batch of dial / discovery tasks the
+// scheduler should launch. Static nodes are always queued if not
+// connected; dynamic dials backfill up to maxDynDials, drawing half
+// from random table nodes and half from random discovery lookups.
 func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now time.Time) []task {
 	var newtasks []task
 	addDial := func(flag connFlag, n *discover.Node) bool {
@@ -187,6 +207,9 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 	return newtasks
 }
 
+// taskDone updates dialer bookkeeping after a task finishes:
+// dialTasks land in the cooldown history, discoverTasks publish their
+// lookup results into lookupBuf for the next newTasks call.
 func (s *dialstate) taskDone(t task, now time.Time) {
 	switch t := t.(type) {
 	case *dialTask:
@@ -254,7 +277,8 @@ func (t waitExpireTask) String() string {
 	return fmt.Sprintf("wait for dial hist expire (%v)", t.Duration)
 }
 
-// Use only these methods to access or modify dialHistory.
+// min returns the soonest-to-expire entry. Use only these methods to
+// access or modify dialHistory — the slice is a heap.
 func (h dialHistory) min() pastDial {
 	return h[0]
 }

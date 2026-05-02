@@ -10,11 +10,55 @@ Package p2p manages peer connections and message transport at the wire layer.
 
 ### Overview
 
-p2p owns the Server that accepts and dials peers, the per\-peer goroutines that read and write framed messages, and the configurable sets of static, bootstrap, and trusted nodes. Higher\-level routing belongs to [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>).
+p2p is a port of the go\-ethereum devp2p stack, lightly adapted for Zenon \(notably the [Net](<#Net>) config type, [DefaultSeeders](<#DefaultSeeders>) list, and listening port \[DefaultListenPort\]=35995\). It owns:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- [Server](<#Server>) — accepts inbound connections, dials outbound peers, and drives a single event loop in \[Server.run\] that gates the per\-peer handshake pipeline.
+- [Peer](<#Peer>) — one per established connection, multiplexing the registered subprotocols \(matched by [Cap](<#Cap>)\) over a single [MsgReadWriter](<#MsgReadWriter>).
+- The RLPx transport \(rlpx.go\) — encrypted, MAC'd framing with a two\-step handshake \(encryption then protocol\).
+- The dialer \(dial.go\) — schedules outbound dial tasks and bootstraps discovery via [github.com/zenon\\\-network/go\\\-zenon/p2p/discover](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/discover/>).
 
-Package p2p implements the Ethereum p2p network protocols.
+Higher\-level routing \(block / transaction relay, sync\) belongs to [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>), which registers itself as a [Protocol](<#Protocol>) on the server.
+
+### Connection Lifecycle
+
+Each connection passes through three stages tracked via the unexported \[connFlag\] bits:
+
+1. Encryption handshake — RLPx auth \(initiator\) / auth\-resp \(receiver\) produces shared AES \+ MAC secrets. After this, the remote node ID is known but not yet verified.
+2. Protocol handshake — exchange \[protoHandshake\] containing capability advertisements \([Cap](<#Cap>)\). Mismatched protocol versions disconnect with [DiscIncompatibleVersion](<#DiscRequested>).
+3. Run — \[Peer.run\] launches read/write/ping loops and dispatches into each matched subprotocol's \[Protocol.Run\] callback.
+
+The two checkpoints \(post\-encryption, post\-protocol\) call back into \[Server.run\] so the central goroutine can enforce admission rules \(max\-peer cap, trusted\-list bypass, dedup against existing peer set\).
+
+### Concurrency
+
+One central goroutine in \[Server.run\] is the single writer of the peer map. All public Server methods that read peer state \([Server.Peers](<#Server.Peers>), [Server.PeerCount](<#Server.PeerCount>)\) post a closure on \`peerOp\` and wait for it to execute on the loop goroutine. Per\-connection goroutines:
+
+- listenLoop — accepts inbound connections \(rate\-limited by a semaphore of \[maxAcceptConns\]=50 slots\).
+- One setupConn goroutine per pending connection, ending when both handshakes complete \(or the connection is rejected\).
+- One \[Peer.run\] goroutine per established peer, plus three child goroutines per peer \(readLoop, pingLoop, and one writer per subprotocol\).
+
+[MsgReadWriter](<#MsgReadWriter>) implementations must be safe for concurrent ReadMsg/WriteMsg from different goroutines; \[rlpx\] and the netWrapper achieve this with separate read/write mutexes.
+
+### Tunables
+
+Defaults are conservative and exposed via the [Net](<#Net>) config type:
+
+- \[DefaultMaxPeers\]=60, \[DefaultMinPeers\]=8, \[DefaultMinConnectedPeers\]=16, \[DefaultMaxPendingPeers\]=10
+- \[defaultDialTimeout\]=15s, \[refreshPeersInterval\]=30s, \[staticPeerCheckInterval\]=15s
+- \[frameReadTimeout\]=30s \(effective idle timeout\), \[frameWriteTimeout\]=20s
+- \[handshakeTimeout\]=5s for the combined enc \+ proto handshake
+- \[pingInterval\]=15s heartbeats keep idle connections alive
+
+### Generated Files
+
+None. The .go files in this package carry the original go\-ethereum LGPL\-3.0\+ headers; config.go is Zenon\-specific \(no upstream header\).
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/p2p/discover](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/discover/>) — Kademlia\-style UDP node discovery; supplies the seed pool and random\-lookup candidates the dialer consumes.
+- [github.com/zenon\\\-network/go\\\-zenon/p2p/nat](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/nat/>) — NAT traversal \(UPnP, NAT\-PMP\) used to map the listening port.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>) — the Zenon wire\-protocol manager, registered here as a [Protocol](<#Protocol>).
+- [github.com/zenon\\\-network/go\\\-zenon/node](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/>) — owns the [Server](<#Server>) instance and wires it into the application lifecycle.
 
 ## Index
 
@@ -171,23 +215,39 @@ Package p2p implements the Ethereum p2p network protocols.
 
 ## Constants
 
-<a name="DefaultNodeName"></a>
+<a name="DefaultNodeName"></a>Default network configuration values applied by \[node\] when a concrete [Net](<#Net>) field is left unset.
 
 ```go
 const (
+    // DefaultNodeName is the user-agent string advertised in
+    // protoHandshake.Name when no override is configured.
     DefaultNodeName = "znn-node"
 
+    // DefaultListenHost binds to all interfaces.
     DefaultListenHost = "0.0.0.0"
+    // DefaultListenPort is the canonical Zenon devp2p TCP port.
     DefaultListenPort = 35995
-    DefaultHTTPPort   = 35997
-    DefaultWSPort     = 35998
+    // DefaultHTTPPort is the JSON-RPC HTTP listen port.
+    DefaultHTTPPort = 35997
+    // DefaultWSPort is the JSON-RPC WebSocket listen port.
+    DefaultWSPort = 35998
 
-    DefaultMinPeers          = 8
-    DefaultMaxPeers          = 60
-    DefaultMaxPendingPeers   = 10
+    // DefaultMinPeers is the floor before the dialer aggressively
+    // solicits new peers.
+    DefaultMinPeers = 8
+    // DefaultMaxPeers caps the simultaneous connected peers.
+    DefaultMaxPeers = 60
+    // DefaultMaxPendingPeers caps concurrent in-flight handshakes.
+    DefaultMaxPendingPeers = 10
+    // DefaultMinConnectedPeers is the dynamic-dial target — Server.run
+    // will keep trying to fill up to this many dynamic peers.
     DefaultMinConnectedPeers = 16
 
-    DefaultNetDirName        = "network"
+    // DefaultNetDirName is the subdirectory under DataDir holding
+    // p2p state (node DB, persisted private key).
+    DefaultNetDirName = "network"
+    // DefaultNetPrivateKeyFile is the filename within DefaultNetDirName
+    // where the persistent secp256k1 private key is stored.
     DefaultNetPrivateKeyFile = "network-private-key"
 )
 ```
@@ -210,10 +270,20 @@ const (
 
 ```go
 const (
-    baseProtocolVersion    = 4
-    baseProtocolLength     = uint64(16)
+    // baseProtocolVersion is the devp2p framing version this node
+    // speaks. Negotiated in protoHandshake; mismatch produces
+    // DiscIncompatibleVersion.
+    baseProtocolVersion = 4
+    // baseProtocolLength reserves message-code space for base-protocol
+    // messages (0..15). Subprotocol message codes are offset past this.
+    baseProtocolLength = uint64(16)
+    // baseProtocolMaxMsgSize bounds the size of base-protocol frames
+    // (handshake, ping/pong, disconnect). Subprotocols set their own
+    // limits.
     baseProtocolMaxMsgSize = 2 * 1024
 
+    // pingInterval is the heartbeat cadence for keeping idle
+    // connections alive (must be < frameReadTimeout).
     pingInterval = 15 * time.Second
 )
 ```
@@ -222,13 +292,20 @@ const (
 
 ```go
 const (
-    // devp2p message codes
+    // handshakeMsg carries the protoHandshake frame exchanged once at
+    // connection start.
     handshakeMsg = 0x00
-    discMsg      = 0x01
-    pingMsg      = 0x02
-    pongMsg      = 0x03
-    getPeersMsg  = 0x04
-    peersMsg     = 0x05
+    // discMsg notifies the remote of an impending close with a single
+    // DiscReason.
+    discMsg = 0x01
+    // pingMsg requests a pongMsg reply, used as a keepalive.
+    pingMsg = 0x02
+    // pongMsg is the reply to pingMsg.
+    pongMsg = 0x03
+    // getPeersMsg / peersMsg are legacy devp2p peer-exchange codes;
+    // they are accepted for compatibility but not actively used.
+    getPeersMsg = 0x04
+    peersMsg    = 0x05
 )
 ```
 
@@ -236,36 +313,57 @@ const (
 
 ```go
 const (
+    // errInvalidMsgCode is returned when a peer sends a message code
+    // outside the negotiated subprotocol's reserved range.
     errInvalidMsgCode = iota
+    // errInvalidMsg is returned when a message's RLP payload fails to
+    // decode into the expected structure.
     errInvalidMsg
 )
 ```
 
-<a name="maxUint24"></a>
+<a name="maxUint24"></a>RLPx framing and handshake size constants. Values are dictated by the devp2p RLPx specification and must match across implementations.
 
 ```go
 const (
+    // maxUint24 caps a single RLPx frame's encoded length.
     maxUint24 = ^uint32(0) >> 8
 
-    sskLen = 16 // ecies.MaxSharedKeyLength(pubKey) / 2
-    sigLen = 65 // elliptic S256
-    pubLen = 64 // 512 bit pubkey in uncompressed representation without format byte
-    shaLen = 32 // hash length (for nonce etc)
+    // sskLen is the ECIES shared-secret half-length (in bytes).
+    sskLen = 16
+    // sigLen is the secp256k1 signature length on curve S256.
+    sigLen = 65
+    // pubLen is a 512-bit pubkey in uncompressed representation
+    // without the format byte.
+    pubLen = 64
+    // shaLen is the keccak-256 hash / nonce length.
+    shaLen = 32
 
-    authMsgLen  = sigLen + shaLen + pubLen + shaLen + 1
+    // authMsgLen is the plaintext size of the initiator's enc-handshake
+    // auth message: signature || sha3(ephemeral pubkey) || static
+    // pubkey || nonce || token-flag.
+    authMsgLen = sigLen + shaLen + pubLen + shaLen + 1
+    // authRespLen is the plaintext size of the receiver's enc-handshake
+    // auth response: ephemeral pubkey || nonce || token-flag.
     authRespLen = pubLen + shaLen + 1
 
-    eciesBytes     = 65 + 16 + 32
-    encAuthMsgLen  = authMsgLen + eciesBytes  // size of the final ECIES payload sent as initiator's handshake
-    encAuthRespLen = authRespLen + eciesBytes // size of the final ECIES payload sent as receiver's handshake
+    // eciesBytes is the per-message ECIES envelope overhead
+    // (ephemeral pubkey + IV + MAC).
+    eciesBytes = 65 + 16 + 32
+    // encAuthMsgLen is the size of the final ECIES payload sent as
+    // the initiator's handshake.
+    encAuthMsgLen = authMsgLen + eciesBytes
+    // encAuthRespLen is the size of the final ECIES payload sent as
+    // the receiver's handshake.
+    encAuthRespLen = authRespLen + eciesBytes
 
-    // total timeout for encryption handshake and protocol
-    // handshake in both directions.
+    // handshakeTimeout is the total timeout for encryption handshake
+    // and protocol handshake in both directions.
     handshakeTimeout = 5 * time.Second
 
-    // This is the timeout for sending the disconnect reason.
-    // This is shorter than the usual timeout because we don't want
-    // to wait if the connection is known to be bad anyway.
+    // discWriteTimeout is the timeout for sending the disconnect
+    // reason — shorter than the usual timeout because we don't want to
+    // wait if the connection is known to be bad anyway.
     discWriteTimeout = 1 * time.Second
 )
 ```
@@ -274,21 +372,34 @@ const (
 
 ```go
 const (
-    defaultDialTimeout      = 15 * time.Second
-    refreshPeersInterval    = 30 * time.Second
+    // defaultDialTimeout caps how long an outbound TCP dial may take
+    // before the dialer gives up.
+    defaultDialTimeout = 15 * time.Second
+    // refreshPeersInterval bounds how often the dialer re-queries the
+    // discovery table for fresh dynamic-dial candidates.
+    refreshPeersInterval = 30 * time.Second
+    // staticPeerCheckInterval bounds how often static peers are
+    // re-evaluated for reconnection.
     staticPeerCheckInterval = 15 * time.Second
 
-    // Maximum number of concurrently handshaking inbound connections.
+    // maxAcceptConns is the maximum number of concurrently handshaking
+    // inbound connections. Acts as a backpressure semaphore on
+    // listenLoop so a flood of new TCP connections cannot exhaust file
+    // descriptors before the cheap admission checks run.
     maxAcceptConns = 50
 
-    // Maximum number of concurrently dialing outbound connections.
+    // maxActiveDialTasks is the maximum number of concurrently dialing
+    // outbound connections. Caps the dialer's task fan-out from
+    // Server.run.
     maxActiveDialTasks = 16
 
-    // Maximum time allowed for reading a complete message.
-    // This is effectively the amount of time a connection can be idle.
+    // frameReadTimeout is the maximum time allowed for reading a
+    // complete message — effectively the amount of time a connection
+    // can be idle before pingMsg/pongMsg traffic must keep it alive.
     frameReadTimeout = 30 * time.Second
 
-    // Maximum amount of time allowed for writing a complete message.
+    // frameWriteTimeout is the maximum time allowed for writing a
+    // complete message before the connection is considered stalled.
     frameWriteTimeout = 20 * time.Second
 )
 ```
@@ -318,7 +429,7 @@ var (
 )
 ```
 
-<a name="DefaultSeeders"></a>
+<a name="DefaultSeeders"></a>DefaultSeeders is the embedded bootstrap list for the Alphanet — each entry is a fully\-formed enode URL \(secp256k1 pubkey @ host:port\). Used by [Net.Nodes](<#Net.Nodes>) to seed the discovery table when no override is supplied.
 
 ```go
 var (
@@ -469,13 +580,13 @@ var discReasonToString = [...]string{
 }
 ```
 
-<a name="errServerStopped"></a>
+<a name="errServerStopped"></a>errServerStopped is returned when an operation is attempted on a Server that has been stopped or is in the middle of shutdown.
 
 ```go
 var errServerStopped = errors.New("server stopped")
 ```
 
-<a name="errorToString"></a>
+<a name="errorToString"></a>errorToString maps each peerError code to its human\-readable description. newPeerError panics if it is given a code missing from this table — every constant in the err\* group above must be listed.
 
 ```go
 var errorToString = map[int]string{
@@ -485,16 +596,16 @@ var errorToString = map[int]string{
 ```
 
 <a name="Decrypt"></a>
-## func [Decrypt](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L70>)
+## func [Decrypt](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L91>)
 
 ```go
 func Decrypt(prv *ecdsa.PrivateKey, ct []byte) ([]byte, error)
 ```
 
-
+Decrypt decrypts an ECIES ciphertext using the supplied secp256k1 private key. Exposed for use by the encryption\-handshake code paths.
 
 <a name="ExpectMsg"></a>
-## func [ExpectMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L244>)
+## func [ExpectMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L252>)
 
 ```go
 func ExpectMsg(r MsgReader, code uint64, content interface{}) error
@@ -503,7 +614,7 @@ func ExpectMsg(r MsgReader, code uint64, content interface{}) error
 ExpectMsg reads a message from r and verifies that its code and encoded RLP content match the provided values. If content is nil, the payload is discarded and not verified.
 
 <a name="MsgPipe"></a>
-## func [MsgPipe](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L171>)
+## func [MsgPipe](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L179>)
 
 ```go
 func MsgPipe() (*MsgPipeRW, *MsgPipeRW)
@@ -512,7 +623,7 @@ func MsgPipe() (*MsgPipeRW, *MsgPipeRW)
 MsgPipe creates a message pipe. Reads on one end are matched with writes on the other. The pipe is full\-duplex, both ends implement MsgReadWriter.
 
 <a name="Send"></a>
-## func [Send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L91>)
+## func [Send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L95>)
 
 ```go
 func Send(w MsgWriter, msgcode uint64, data interface{}) error
@@ -521,7 +632,7 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error
 Send writes an RLP\-encoded message with the given code. data should encode as an RLP list.
 
 <a name="SendItems"></a>
-## func [SendItems](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L107>)
+## func [SendItems](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L111>)
 
 ```go
 func SendItems(w MsgWriter, msgcode uint64, elems ...interface{}) error
@@ -540,43 +651,43 @@ the message payload will be an RLP list containing the items:
 ```
 
 <a name="ToECDSAPub"></a>
-## func [ToECDSAPub](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L75>)
+## func [ToECDSAPub](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L99>)
 
 ```go
 func ToECDSAPub(pub []byte) *ecdsa.PublicKey
 ```
 
-
+ToECDSAPub unmarshals a serialised secp256k1 public key into the standard library's ecdsa.PublicKey form. Returns nil for empty input.
 
 <a name="countMatchingProtocols"></a>
-## func [countMatchingProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L268>)
+## func [countMatchingProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L306>)
 
 ```go
 func countMatchingProtocols(protocols []Protocol, caps []Cap) int
 ```
 
-
+countMatchingProtocols counts how many entries in caps name a protocol the local node supports. Used by Server.run to drop peers with no usable subprotocol overlap \(DiscUselessPeer\).
 
 <a name="exportPubkey"></a>
-## func [exportPubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L471>)
+## func [exportPubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L513>)
 
 ```go
 func exportPubkey(pub *ecies.PublicKey) []byte
 ```
 
-
+exportPubkey serialises an ECIES public key in 64\-byte raw form \(no 0x04 prefix\). Panics on nil input — callers are internal.
 
 <a name="importPublicKey"></a>
-## func [importPublicKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L456>)
+## func [importPublicKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L496>)
 
 ```go
 func importPublicKey(pubKey []byte) (*ecies.PublicKey, error)
 ```
 
-importPublicKey unmarshals 512 bit public keys.
+importPublicKey unmarshals 512\-bit public keys, accepting either the bare 64\-byte form or the standard 65\-byte prefix\-0x04 form.
 
 <a name="matchProtocols"></a>
-## func [matchProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L281>)
+## func [matchProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L319>)
 
 ```go
 func matchProtocols(protocols []Protocol, caps []Cap, rw MsgReadWriter) map[string]*protoRW
@@ -594,43 +705,43 @@ func newMeteredConn(conn net.Conn, ingress bool) net.Conn
 newMeteredConn creates a new metered connection, also bumping the ingress or egress connection meter.
 
 <a name="putInt24"></a>
-## func [putInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L638>)
+## func [putInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L693>)
 
 ```go
 func putInt24(v uint32, b []byte)
 ```
 
-
+putInt24 encodes v as a big\-endian 24\-bit integer into the first three bytes of b. Caller is responsible for ensuring v fits in 24 bits \(see maxUint24\).
 
 <a name="readInt24"></a>
-## func [readInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L634>)
+## func [readInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L686>)
 
 ```go
 func readInt24(b []byte) uint32
 ```
 
-
+readInt24 decodes a big\-endian 24\-bit integer from the first three bytes of b — used for the RLPx frame\-size field.
 
 <a name="updateMAC"></a>
-## func [updateMAC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L624>)
+## func [updateMAC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L674>)
 
 ```go
 func updateMAC(mac hash.Hash, block cipher.Block, seed []byte) []byte
 ```
 
-updateMAC reseeds the given hash with encrypted seed. it returns the first 16 bytes of the hash sum after seeding.
+updateMAC reseeds the given keccak hash with the encrypted seed and returns the first 16 bytes of the resulting digest. Implements the RLPx "MAC update" step that chains together frame headers and frame bodies to detect tampering.
 
 <a name="xor"></a>
-## func [xor](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L478>)
+## func [xor](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L522>)
 
 ```go
 func xor(one, other []byte) (xor []byte)
 ```
 
-
+xor returns the bytewise XOR of one and other. one and other must be the same length; the result is always len\(one\) bytes.
 
 <a name="Cap"></a>
-## type [Cap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L49-L52>)
+## type [Cap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L51-L54>)
 
 Cap is the structure of a peer capability.
 
@@ -642,27 +753,27 @@ type Cap struct {
 ```
 
 <a name="Cap.RlpData"></a>
-### func \(Cap\) [RlpData](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L54>)
+### func \(Cap\) [RlpData](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L58>)
 
 ```go
 func (cap Cap) RlpData() interface{}
 ```
 
-
+RlpData renders Cap as a heterogeneous RLP list \(\[name, version\]\) — implements the rlp.Encoder interface used by the handshake codec.
 
 <a name="Cap.String"></a>
-### func \(Cap\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L58>)
+### func \(Cap\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L63>)
 
 ```go
 func (cap Cap) String() string
 ```
 
-
+String renders Cap as "name/version" for log output.
 
 <a name="DiscReason"></a>
-## type [DiscReason](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L54>)
+## type [DiscReason](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L71>)
 
-
+DiscReason is the wire\-level enum sent in discMsg explaining why a connection is being closed. Values mirror the devp2p disconnect reasons; new entries must be appended to keep wire compatibility.
 
 ```go
 type DiscReason uint
@@ -672,33 +783,49 @@ type DiscReason uint
 
 ```go
 const (
+    // DiscRequested — local code or remote peer voluntarily closed.
     DiscRequested DiscReason = iota
+    // DiscNetworkError — TCP-level read/write error.
     DiscNetworkError
+    // DiscProtocolError — base-protocol violation (bad message code,
+    // malformed RLP).
     DiscProtocolError
+    // DiscUselessPeer — no overlapping subprotocols.
     DiscUselessPeer
+    // DiscTooManyPeers — admission cap exceeded.
     DiscTooManyPeers
+    // DiscAlreadyConnected — duplicate connection from same node ID.
     DiscAlreadyConnected
+    // DiscIncompatibleVersion — base-protocol version mismatch.
     DiscIncompatibleVersion
+    // DiscInvalidIdentity — empty or malformed node ID in handshake.
     DiscInvalidIdentity
+    // DiscQuitting — local node is shutting down.
     DiscQuitting
+    // DiscUnexpectedIdentity — dialed peer's ID didn't match the
+    // expected enode ID.
     DiscUnexpectedIdentity
+    // DiscSelf — connected to ourselves (loopback or NAT echo).
     DiscSelf
+    // DiscReadTimeout — connection was idle past frameReadTimeout.
     DiscReadTimeout
+    // DiscSubprotocolError — error originating in a registered
+    // subprotocol's Run callback.
     DiscSubprotocolError
 )
 ```
 
 <a name="discReasonForError"></a>
-### func [discReasonForError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L99>)
+### func [discReasonForError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L136>)
 
 ```go
 func discReasonForError(err error) DiscReason
 ```
 
-
+discReasonForError maps an arbitrary error to the DiscReason that should be sent on the wire: pass through if it's already a DiscReason, fold base\-protocol errors to DiscProtocolError, and fall back to DiscSubprotocolError otherwise.
 
 <a name="DiscReason.Error"></a>
-### func \(DiscReason\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L95>)
+### func \(DiscReason\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L128>)
 
 ```go
 func (d DiscReason) Error() string
@@ -707,7 +834,7 @@ func (d DiscReason) Error() string
 
 
 <a name="DiscReason.String"></a>
-### func \(DiscReason\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L88>)
+### func \(DiscReason\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L121>)
 
 ```go
 func (d DiscReason) String() string
@@ -761,7 +888,7 @@ func (msg Msg) String() string
 
 
 <a name="MsgPipeRW"></a>
-## type [MsgPipeRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L187-L192>)
+## type [MsgPipeRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L195-L200>)
 
 MsgPipeRW is an endpoint of a MsgReadWriter pipe.
 
@@ -775,7 +902,7 @@ type MsgPipeRW struct {
 ```
 
 <a name="MsgPipeRW.Close"></a>
-### func \(\*MsgPipeRW\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L231>)
+### func \(\*MsgPipeRW\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L239>)
 
 ```go
 func (p *MsgPipeRW) Close() error
@@ -784,7 +911,7 @@ func (p *MsgPipeRW) Close() error
 Close unblocks any pending ReadMsg and WriteMsg calls on both ends of the pipe. They will return ErrPipeClosed. Close also interrupts any reads from a message payload.
 
 <a name="MsgPipeRW.ReadMsg"></a>
-### func \(\*MsgPipeRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L217>)
+### func \(\*MsgPipeRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L225>)
 
 ```go
 func (p *MsgPipeRW) ReadMsg() (Msg, error)
@@ -793,7 +920,7 @@ func (p *MsgPipeRW) ReadMsg() (Msg, error)
 ReadMsg returns a message sent on the other end of the pipe.
 
 <a name="MsgPipeRW.WriteMsg"></a>
-### func \(\*MsgPipeRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L196>)
+### func \(\*MsgPipeRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L204>)
 
 ```go
 func (p *MsgPipeRW) WriteMsg(msg Msg) error
@@ -802,7 +929,7 @@ func (p *MsgPipeRW) WriteMsg(msg Msg) error
 WriteMsg sends a messsage on the pipe. It blocks until the receiver has consumed the message payload.
 
 <a name="MsgReadWriter"></a>
-## type [MsgReadWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L84-L87>)
+## type [MsgReadWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L88-L91>)
 
 MsgReadWriter provides reading and writing of encoded messages. Implementations should ensure that ReadMsg and WriteMsg can be called simultaneously from multiple goroutines.
 
@@ -814,9 +941,9 @@ type MsgReadWriter interface {
 ```
 
 <a name="MsgReader"></a>
-## type [MsgReader](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L68-L70>)
+## type [MsgReader](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L72-L74>)
 
-
+MsgReader is the read side of a framed message stream. Returned errors are typically transport\- or framing\-level; a Msg whose payload encodes an unparseable subprotocol message is reported via Msg.Decode.
 
 ```go
 type MsgReader interface {
@@ -825,7 +952,7 @@ type MsgReader interface {
 ```
 
 <a name="MsgWriter"></a>
-## type [MsgWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L72-L79>)
+## type [MsgWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L76-L83>)
 
 
 
@@ -841,9 +968,9 @@ type MsgWriter interface {
 ```
 
 <a name="Net"></a>
-## type [Net](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L150-L188>)
+## type [Net](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L176-L214>)
 
-
+Net is the Zenon\-specific p2p configuration consumed by \[node\]. Mirrors the relevant subset of [Server](<#Server>) fields plus the seeder list and key\-file path. Translation to a [Server](<#Server>) happens during node startup.
 
 ```go
 type Net struct {
@@ -888,16 +1015,16 @@ type Net struct {
 ```
 
 <a name="Net.Nodes"></a>
-### func \(\*Net\) [Nodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L223>)
+### func \(\*Net\) [Nodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L253>)
 
 ```go
 func (c *Net) Nodes() ([]*discover.Node, error)
 ```
 
-
+Nodes parses the configured Seeders into discover.Node values for use as bootstrap candidates. Returns the first parse error encountered.
 
 <a name="Net.PrivateKey"></a>
-### func \(\*Net\) [PrivateKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L193>)
+### func \(\*Net\) [PrivateKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L219>)
 
 ```go
 func (c *Net) PrivateKey() *ecdsa.PrivateKey
@@ -906,7 +1033,7 @@ func (c *Net) PrivateKey() *ecdsa.PrivateKey
 PrivateKey retrieves the currently configured private key of the node, checking first any manually set key, falling back to the one found in the configured data folder. If no key can be found, a new one is generated.
 
 <a name="Peer"></a>
-## type [Peer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L62-L70>)
+## type [Peer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L82-L90>)
 
 Peer represents a connected remote node.
 
@@ -923,7 +1050,7 @@ type Peer struct {
 ```
 
 <a name="NewPeer"></a>
-### func [NewPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L73>)
+### func [NewPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L93>)
 
 ```go
 func NewPeer(id discover.NodeID, name string, caps []Cap) *Peer
@@ -932,16 +1059,16 @@ func NewPeer(id discover.NodeID, name string, caps []Cap) *Peer
 NewPeer returns a peer for testing purposes.
 
 <a name="newPeer"></a>
-### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L122>)
+### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L144>)
 
 ```go
 func newPeer(conn *conn, protocols []Protocol) *Peer
 ```
 
-
+newPeer wires up a Peer over an already\-handshaked conn, matching the supplied subprotocols against the remote's advertised caps.
 
 <a name="Peer.Caps"></a>
-### func \(\*Peer\) [Caps](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L92>)
+### func \(\*Peer\) [Caps](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L112>)
 
 ```go
 func (p *Peer) Caps() []Cap
@@ -950,7 +1077,7 @@ func (p *Peer) Caps() []Cap
 Caps returns the capabilities \(supported subprotocols\) of the remote peer.
 
 <a name="Peer.Disconnect"></a>
-### func \(\*Peer\) [Disconnect](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L109>)
+### func \(\*Peer\) [Disconnect](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L129>)
 
 ```go
 func (p *Peer) Disconnect(reason DiscReason)
@@ -959,7 +1086,7 @@ func (p *Peer) Disconnect(reason DiscReason)
 Disconnect terminates the peer connection with the given reason. It returns immediately and does not wait until the connection is closed.
 
 <a name="Peer.ID"></a>
-### func \(\*Peer\) [ID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L82>)
+### func \(\*Peer\) [ID](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L102>)
 
 ```go
 func (p *Peer) ID() discover.NodeID
@@ -968,7 +1095,7 @@ func (p *Peer) ID() discover.NodeID
 ID returns the node's public key.
 
 <a name="Peer.LocalAddr"></a>
-### func \(\*Peer\) [LocalAddr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L103>)
+### func \(\*Peer\) [LocalAddr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L123>)
 
 ```go
 func (p *Peer) LocalAddr() net.Addr
@@ -977,7 +1104,7 @@ func (p *Peer) LocalAddr() net.Addr
 LocalAddr returns the local address of the network connection.
 
 <a name="Peer.Name"></a>
-### func \(\*Peer\) [Name](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L87>)
+### func \(\*Peer\) [Name](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L107>)
 
 ```go
 func (p *Peer) Name() string
@@ -986,7 +1113,7 @@ func (p *Peer) Name() string
 Name returns the node name that the remote node advertised.
 
 <a name="Peer.RemoteAddr"></a>
-### func \(\*Peer\) [RemoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L98>)
+### func \(\*Peer\) [RemoteAddr](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L118>)
 
 ```go
 func (p *Peer) RemoteAddr() net.Addr
@@ -995,7 +1122,7 @@ func (p *Peer) RemoteAddr() net.Addr
 RemoteAddr returns the remote address of the network connection.
 
 <a name="Peer.String"></a>
-### func \(\*Peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L118>)
+### func \(\*Peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L138>)
 
 ```go
 func (p *Peer) String() string
@@ -1004,7 +1131,7 @@ func (p *Peer) String() string
 String implements fmt.Stringer.
 
 <a name="Peer.getProto"></a>
-### func \(\*Peer\) [getProto](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L329>)
+### func \(\*Peer\) [getProto](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L370>)
 
 ```go
 func (p *Peer) getProto(code uint64) (*protoRW, error)
@@ -1013,49 +1140,49 @@ func (p *Peer) getProto(code uint64) (*protoRW, error)
 getProto finds the protocol responsible for handling the given message code.
 
 <a name="Peer.handle"></a>
-### func \(\*Peer\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L234>)
+### func \(\*Peer\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L269>)
 
 ```go
 func (p *Peer) handle(msg Msg) error
 ```
 
-
+handle dispatches one inbound message: replies to ping, returns the reason on disc, hands off subprotocol messages to the matching protoRW, and silently discards unknown base\-protocol codes.
 
 <a name="Peer.pingLoop"></a>
-### func \(\*Peer\) [pingLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L203>)
+### func \(\*Peer\) [pingLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L232>)
 
 ```go
 func (p *Peer) pingLoop()
 ```
 
-
+pingLoop emits a pingMsg every pingInterval and exits when the peer is closed. A failed write surfaces as a protoErr that triggers shutdown.
 
 <a name="Peer.readLoop"></a>
-### func \(\*Peer\) [readLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L219>)
+### func \(\*Peer\) [readLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L251>)
 
 ```go
 func (p *Peer) readLoop(errc chan<- error)
 ```
 
-
+readLoop is the single reader of the underlying transport. Each decoded message is timestamped and dispatched by handle; the first read or handle error terminates the loop.
 
 <a name="Peer.run"></a>
-### func \(\*Peer\) [run](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L134>)
+### func \(\*Peer\) [run](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L160>)
 
 ```go
 func (p *Peer) run() DiscReason
 ```
 
-
+run drives the peer's lifetime: launches readLoop / pingLoop / per\-protocol handlers, blocks until any of them errors or a disconnect is requested, then closes the connection. Returns the DiscReason recorded for the disconnect.
 
 <a name="Peer.startProtocols"></a>
-### func \(\*Peer\) [startProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L305>)
+### func \(\*Peer\) [startProtocols](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L346>)
 
 ```go
 func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 ```
 
-
+startProtocols launches each matched subprotocol handler in its own goroutine, sharing the writeStart token so writes serialize across protocols on the same connection.
 
 <a name="Protocol"></a>
 ## type [Protocol](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L22-L42>)
@@ -1087,16 +1214,16 @@ type Protocol struct {
 ```
 
 <a name="Protocol.cap"></a>
-### func \(Protocol\) [cap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L44>)
+### func \(Protocol\) [cap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L46>)
 
 ```go
 func (p Protocol) cap() Cap
 ```
 
-
+cap returns the capability advertisement for this Protocol — used when assembling the local node's protoHandshake.
 
 <a name="Server"></a>
-## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L59-L147>)
+## type [Server](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L73-L161>)
 
 Server manages all peer connections.
 
@@ -1195,7 +1322,7 @@ type Server struct {
 ```
 
 <a name="Server.AddPeer"></a>
-### func \(\*Server\) [AddPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L251>)
+### func \(\*Server\) [AddPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L292>)
 
 ```go
 func (srv *Server) AddPeer(node *discover.Node)
@@ -1204,7 +1331,7 @@ func (srv *Server) AddPeer(node *discover.Node)
 AddPeer connects to the given node and maintains the connection until the server is shut down. If the connection fails for any reason, the server will attempt to reconnect the peer.
 
 <a name="Server.PeerCount"></a>
-### func \(\*Server\) [PeerCount](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L238>)
+### func \(\*Server\) [PeerCount](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L279>)
 
 ```go
 func (srv *Server) PeerCount() int
@@ -1213,7 +1340,7 @@ func (srv *Server) PeerCount() int
 PeerCount returns the number of connected peers.
 
 <a name="Server.Peers"></a>
-### func \(\*Server\) [Peers](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L220>)
+### func \(\*Server\) [Peers](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L261>)
 
 ```go
 func (srv *Server) Peers() []*Peer
@@ -1222,7 +1349,7 @@ func (srv *Server) Peers() []*Peer
 Peers returns all connected peers.
 
 <a name="Server.Self"></a>
-### func \(\*Server\) [Self](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L259>)
+### func \(\*Server\) [Self](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L300>)
 
 ```go
 func (srv *Server) Self() *discover.Node
@@ -1231,7 +1358,7 @@ func (srv *Server) Self() *discover.Node
 Self returns the local node's endpoint information.
 
 <a name="Server.Start"></a>
-### func \(\*Server\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L305>)
+### func \(\*Server\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L346>)
 
 ```go
 func (srv *Server) Start() (err error)
@@ -1240,7 +1367,7 @@ func (srv *Server) Start() (err error)
 Start starts running the server. Servers can not be re\-used after stopping.
 
 <a name="Server.Stop"></a>
-### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L287>)
+### func \(\*Server\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L328>)
 
 ```go
 func (srv *Server) Stop()
@@ -1249,7 +1376,7 @@ func (srv *Server) Stop()
 Stop terminates the server and all active peer connections. It blocks until all active connections have been closed.
 
 <a name="Server.checkpoint"></a>
-### func \(\*Server\) [checkpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L660>)
+### func \(\*Server\) [checkpoint](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L717>)
 
 ```go
 func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error
@@ -1258,16 +1385,16 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error
 checkpoint sends the conn to run, which performs the post\-handshake checks for the stage \(posthandshake, addpeer\).
 
 <a name="Server.encHandshakeChecks"></a>
-### func \(\*Server\) [encHandshakeChecks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L554>)
+### func \(\*Server\) [encHandshakeChecks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L611>)
 
 ```go
 func (srv *Server) encHandshakeChecks(peers map[discover.NodeID]*Peer, c *conn) error
 ```
 
-
+encHandshakeChecks runs the post\-encryption\-handshake admission rules: enforce MaxPeers \(with trusted/static bypass\), reject duplicate IDs, and reject self\-dials.
 
 <a name="Server.listenLoop"></a>
-### func \(\*Server\) [listenLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L569>)
+### func \(\*Server\) [listenLoop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L626>)
 
 ```go
 func (srv *Server) listenLoop()
@@ -1276,25 +1403,25 @@ func (srv *Server) listenLoop()
 listenLoop runs in its own goroutine and accepts inbound connections.
 
 <a name="Server.protoHandshakeChecks"></a>
-### func \(\*Server\) [protoHandshakeChecks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L544>)
+### func \(\*Server\) [protoHandshakeChecks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L598>)
 
 ```go
 func (srv *Server) protoHandshakeChecks(peers map[discover.NodeID]*Peer, c *conn) error
 ```
 
-
+protoHandshakeChecks runs the post\-protocol\-handshake admission rules: drop peers with no overlapping subprotocol, then re\-run the encryption\-checkpoint rules in case the peer set changed during the proto handshake.
 
 <a name="Server.run"></a>
-### func \(\*Server\) [run](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L402>)
+### func \(\*Server\) [run](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L452>)
 
 ```go
 func (srv *Server) run(dialstate dialer)
 ```
 
-
+run is the central event loop. It owns the live peer map, dispatches dial tasks via dialstate, and gates the post\-handshake admission checks. Runs in a single goroutine for the lifetime of the server.
 
 <a name="Server.runPeer"></a>
-### func \(\*Server\) [runPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L677>)
+### func \(\*Server\) [runPeer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L734>)
 
 ```go
 func (srv *Server) runPeer(p *Peer)
@@ -1303,7 +1430,7 @@ func (srv *Server) runPeer(p *Peer)
 runPeer runs in its own goroutine for each peer. it waits until the Peer logic returns and removes the peer.
 
 <a name="Server.setupConn"></a>
-### func \(\*Server\) [setupConn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L607>)
+### func \(\*Server\) [setupConn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L664>)
 
 ```go
 func (srv *Server) setupConn(fd net.Conn, flags connFlag, dialDest *discover.Node)
@@ -1312,25 +1439,25 @@ func (srv *Server) setupConn(fd net.Conn, flags connFlag, dialDest *discover.Nod
 setupConn runs the handshakes and attempts to add the connection as a peer. It returns when the connection has been added as a peer or the handshakes have failed.
 
 <a name="Server.startListening"></a>
-### func \(\*Server\) [startListening](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L371>)
+### func \(\*Server\) [startListening](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L415>)
 
 ```go
 func (srv *Server) startListening() error
 ```
 
-
+startListening opens the TCP listener and, if NAT is configured, kicks off a port\-mapping goroutine. Called once from Start while holding srv.lock.
 
 <a name="capsByNameAndVersion"></a>
-## type [capsByNameAndVersion](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L62>)
+## type [capsByNameAndVersion](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L71>)
 
-
+capsByNameAndVersion is a sort.Interface implementation that orders Caps by name ascending, then version ascending — used so message\-code offsets are assigned deterministically across nodes that advertise the same protocol set.
 
 ```go
 type capsByNameAndVersion []Cap
 ```
 
 <a name="capsByNameAndVersion.Len"></a>
-### func \(capsByNameAndVersion\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L64>)
+### func \(capsByNameAndVersion\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L73>)
 
 ```go
 func (cs capsByNameAndVersion) Len() int
@@ -1339,7 +1466,7 @@ func (cs capsByNameAndVersion) Len() int
 
 
 <a name="capsByNameAndVersion.Less"></a>
-### func \(capsByNameAndVersion\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L66>)
+### func \(capsByNameAndVersion\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L75>)
 
 ```go
 func (cs capsByNameAndVersion) Less(i, j int) bool
@@ -1348,7 +1475,7 @@ func (cs capsByNameAndVersion) Less(i, j int) bool
 
 
 <a name="capsByNameAndVersion.Swap"></a>
-### func \(capsByNameAndVersion\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L65>)
+### func \(capsByNameAndVersion\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/protocol.go#L74>)
 
 ```go
 func (cs capsByNameAndVersion) Swap(i, j int)
@@ -1357,9 +1484,9 @@ func (cs capsByNameAndVersion) Swap(i, j int)
 
 
 <a name="conn"></a>
-## type [conn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L162-L170>)
+## type [conn](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L194-L202>)
 
-conn wraps a network connection with information gathered during the two handshakes.
+conn wraps a network connection with information gathered during the two handshakes. fd, transport, and flags are populated at accept/dial time; id is filled by the encryption handshake; caps and name are filled by the protocol handshake. cont is the back\-channel by which Server.run reports admission decisions to the setupConn goroutine.
 
 ```go
 type conn struct {
@@ -1374,27 +1501,27 @@ type conn struct {
 ```
 
 <a name="conn.String"></a>
-### func \(\*conn\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L186>)
+### func \(\*conn\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L224>)
 
 ```go
 func (c *conn) String() string
 ```
 
-
+String returns a human\-readable connection summary used in logs: flag set, the first 8 bytes of the remote node ID once known, and the remote network address.
 
 <a name="conn.is"></a>
-### func \(\*conn\) [is](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L215>)
+### func \(\*conn\) [is](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L256>)
 
 ```go
 func (c *conn) is(f connFlag) bool
 ```
 
-
+is reports whether any of the bits in f are set on this connection.
 
 <a name="connFlag"></a>
-## type [connFlag](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L151>)
+## type [connFlag](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L172>)
 
-
+connFlag is a bitfield describing how a connection was established \(inbound vs. outbound, dynamic vs. static, trusted\), used by the admission checks in Server.run to bypass MaxPeers for trusted/static peers.
 
 ```go
 type connFlag int
@@ -1404,33 +1531,41 @@ type connFlag int
 
 ```go
 const (
+    // dynDialedConn marks an outbound connection initiated from a
+    // discovery-table candidate.
     dynDialedConn connFlag = 1 << iota
+    // staticDialedConn marks an outbound connection to a configured
+    // static node.
     staticDialedConn
+    // inboundConn marks a connection accepted by listenLoop.
     inboundConn
+    // trustedConn marks a connection whose remote ID is on the trusted
+    // list — bypasses MaxPeers but still subject to identity / dedup
+    // checks.
     trustedConn
 )
 ```
 
 <a name="connFlag.String"></a>
-### func \(connFlag\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L195>)
+### func \(connFlag\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L235>)
 
 ```go
 func (f connFlag) String() string
 ```
 
-
+String renders the set bits of f as a space\-separated label list \(e.g., "trusted dyn dial"\).
 
 <a name="dialHistory"></a>
-## type [dialHistory](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L67>)
+## type [dialHistory](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L70>)
 
-the dial history remembers recent dials.
+dialHistory remembers recent dials. Implemented as a min\-heap keyed on expiry so expire can pop in time order.
 
 ```go
 type dialHistory []pastDial
 ```
 
 <a name="dialHistory.Len"></a>
-### func \(dialHistory\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L291>)
+### func \(dialHistory\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L315>)
 
 ```go
 func (h dialHistory) Len() int
@@ -1439,7 +1574,7 @@ func (h dialHistory) Len() int
 heap.Interface boilerplate
 
 <a name="dialHistory.Less"></a>
-### func \(dialHistory\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L292>)
+### func \(dialHistory\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L316>)
 
 ```go
 func (h dialHistory) Less(i, j int) bool
@@ -1448,7 +1583,7 @@ func (h dialHistory) Less(i, j int) bool
 
 
 <a name="dialHistory.Pop"></a>
-### func \(\*dialHistory\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L297>)
+### func \(\*dialHistory\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L321>)
 
 ```go
 func (h *dialHistory) Pop() interface{}
@@ -1457,7 +1592,7 @@ func (h *dialHistory) Pop() interface{}
 
 
 <a name="dialHistory.Push"></a>
-### func \(\*dialHistory\) [Push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L294>)
+### func \(\*dialHistory\) [Push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L318>)
 
 ```go
 func (h *dialHistory) Push(x interface{})
@@ -1466,7 +1601,7 @@ func (h *dialHistory) Push(x interface{})
 
 
 <a name="dialHistory.Swap"></a>
-### func \(dialHistory\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L293>)
+### func \(dialHistory\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L317>)
 
 ```go
 func (h dialHistory) Swap(i, j int)
@@ -1475,7 +1610,7 @@ func (h dialHistory) Swap(i, j int)
 
 
 <a name="dialHistory.add"></a>
-### func \(\*dialHistory\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L261>)
+### func \(\*dialHistory\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L285>)
 
 ```go
 func (h *dialHistory) add(id discover.NodeID, exp time.Time)
@@ -1484,7 +1619,7 @@ func (h *dialHistory) add(id discover.NodeID, exp time.Time)
 
 
 <a name="dialHistory.contains"></a>
-### func \(dialHistory\) [contains](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L276>)
+### func \(dialHistory\) [contains](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L300>)
 
 ```go
 func (h dialHistory) contains(id discover.NodeID) bool
@@ -1493,7 +1628,7 @@ func (h dialHistory) contains(id discover.NodeID) bool
 
 
 <a name="dialHistory.expire"></a>
-### func \(\*dialHistory\) [expire](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L284>)
+### func \(\*dialHistory\) [expire](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L308>)
 
 ```go
 func (h *dialHistory) expire(now time.Time)
@@ -1502,16 +1637,16 @@ func (h *dialHistory) expire(now time.Time)
 
 
 <a name="dialHistory.min"></a>
-### func \(dialHistory\) [min](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L258>)
+### func \(dialHistory\) [min](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L282>)
 
 ```go
 func (h dialHistory) min() pastDial
 ```
 
-Use only these methods to access or modify dialHistory.
+min returns the soonest\-to\-expire entry. Use only these methods to access or modify dialHistory — the slice is a heap.
 
 <a name="dialHistory.remove"></a>
-### func \(\*dialHistory\) [remove](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L264>)
+### func \(\*dialHistory\) [remove](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L288>)
 
 ```go
 func (h *dialHistory) remove(id discover.NodeID)
@@ -1520,9 +1655,9 @@ func (h *dialHistory) remove(id discover.NodeID)
 
 
 <a name="dialTask"></a>
-## type [dialTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L80-L83>)
+## type [dialTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L88-L91>)
 
-A dialTask is generated for each node that is dialed.
+dialTask attempts a single outbound TCP connection to dest, marking it with flags for downstream admission decisions.
 
 ```go
 type dialTask struct {
@@ -1532,7 +1667,7 @@ type dialTask struct {
 ```
 
 <a name="dialTask.Do"></a>
-### func \(\*dialTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L204>)
+### func \(\*dialTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L227>)
 
 ```go
 func (t *dialTask) Do(srv *Server)
@@ -1541,7 +1676,7 @@ func (t *dialTask) Do(srv *Server)
 
 
 <a name="dialTask.String"></a>
-### func \(\*dialTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L216>)
+### func \(\*dialTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L239>)
 
 ```go
 func (t *dialTask) String() string
@@ -1550,9 +1685,9 @@ func (t *dialTask) String() string
 
 
 <a name="dialer"></a>
-## type [dialer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L396-L400>)
+## type [dialer](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L443-L447>)
 
-
+dialer is the contract Server.run uses to drive the outbound dial scheduler. The production implementation is \*dialstate \(see dial.go\); it is an interface so tests can substitute a deterministic dialer.
 
 ```go
 type dialer interface {
@@ -1584,45 +1719,45 @@ type dialstate struct {
 ```
 
 <a name="newDialState"></a>
-### func [newDialState](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L102>)
+### func [newDialState](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L115>)
 
 ```go
 func newDialState(static []*discover.Node, ntab discoverTable, maxdyn int) *dialstate
 ```
 
-
+newDialState constructs a dialstate seeded with the configured static nodes and bound to the given discovery table. maxdyn caps the number of dynamically discovered peers the dialer will pursue.
 
 <a name="dialstate.addStatic"></a>
-### func \(\*dialstate\) [addStatic](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L117>)
+### func \(\*dialstate\) [addStatic](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L133>)
 
 ```go
 func (s *dialstate) addStatic(n *discover.Node)
 ```
 
-
+addStatic registers n as a static peer that will be re\-dialed indefinitely. Idempotent: re\-adding an existing static node is a no\-op.
 
 <a name="dialstate.newTasks"></a>
-### func \(\*dialstate\) [newTasks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L121>)
+### func \(\*dialstate\) [newTasks](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L141>)
 
 ```go
 func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now time.Time) []task
 ```
 
-
+newTasks computes the next batch of dial / discovery tasks the scheduler should launch. Static nodes are always queued if not connected; dynamic dials backfill up to maxDynDials, drawing half from random table nodes and half from random discovery lookups.
 
 <a name="dialstate.taskDone"></a>
-### func \(\*dialstate\) [taskDone](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L190>)
+### func \(\*dialstate\) [taskDone](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L213>)
 
 ```go
 func (s *dialstate) taskDone(t task, now time.Time)
 ```
 
-
+taskDone updates dialer bookkeeping after a task finishes: dialTasks land in the cooldown history, discoverTasks publish their lookup results into lookupBuf for the next newTasks call.
 
 <a name="discoverTable"></a>
-## type [discoverTable](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L58-L64>)
+## type [discoverTable](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L60-L66>)
 
-
+discoverTable is the subset of the discovery API consumed by the dialer. The production implementation is \*discover.Table.
 
 ```go
 type discoverTable interface {
@@ -1635,7 +1770,7 @@ type discoverTable interface {
 ```
 
 <a name="discoverTask"></a>
-## type [discoverTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L91-L94>)
+## type [discoverTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L99-L102>)
 
 discoverTask runs discovery table operations. Only one discoverTask is active at any time.
 
@@ -1649,7 +1784,7 @@ type discoverTask struct {
 ```
 
 <a name="discoverTask.Do"></a>
-### func \(\*discoverTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L220>)
+### func \(\*discoverTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L243>)
 
 ```go
 func (t *discoverTask) Do(srv *Server)
@@ -1658,7 +1793,7 @@ func (t *discoverTask) Do(srv *Server)
 
 
 <a name="discoverTask.String"></a>
-### func \(\*discoverTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L238>)
+### func \(\*discoverTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L261>)
 
 ```go
 func (t *discoverTask) String() (s string)
@@ -1667,9 +1802,9 @@ func (t *discoverTask) String() (s string)
 
 
 <a name="encHandshake"></a>
-## type [encHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L199-L207>)
+## type [encHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L228-L236>)
 
-encHandshake contains the state of the encryption handshake.
+encHandshake contains the state of the encryption handshake. Held transiently during initiator/receiver flows; once secrets\(\) succeeds the data is discarded and only the derived \[secrets\] are retained.
 
 ```go
 type encHandshake struct {
@@ -1684,25 +1819,25 @@ type encHandshake struct {
 ```
 
 <a name="decodeAuthMsg"></a>
-### func [decodeAuthMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L390>)
+### func [decodeAuthMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L429>)
 
 ```go
 func decodeAuthMsg(prv *ecdsa.PrivateKey, token []byte, auth []byte) (*encHandshake, error)
 ```
 
-
+decodeAuthMsg parses the initiator's encrypted auth message \(called on the receiving side\), recovers the initiator's ephemeral public key from the embedded signature, and seeds an encHandshake ready for \[encHandshake.authResp\].
 
 <a name="newInitiatorHandshake"></a>
-### func [newInitiatorHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L284>)
+### func [newInitiatorHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L319>)
 
 ```go
 func newInitiatorHandshake(remoteID discover.NodeID) (*encHandshake, error)
 ```
 
-
+newInitiatorHandshake constructs an encHandshake initialised for the dialing side: a fresh nonce and ephemeral keypair, and the remote node's static public key recovered from remoteID.
 
 <a name="encHandshake.authMsg"></a>
-### func \(\*encHandshake\) [authMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L310>)
+### func \(\*encHandshake\) [authMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L345>)
 
 ```go
 func (h *encHandshake) authMsg(prv *ecdsa.PrivateKey, token []byte) ([]byte, error)
@@ -1711,7 +1846,7 @@ func (h *encHandshake) authMsg(prv *ecdsa.PrivateKey, token []byte) ([]byte, err
 authMsg creates an encrypted initiator handshake message.
 
 <a name="encHandshake.authResp"></a>
-### func \(\*encHandshake\) [authResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L440>)
+### func \(\*encHandshake\) [authResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L479>)
 
 ```go
 func (h *encHandshake) authResp(prv *ecdsa.PrivateKey, token []byte) ([]byte, error)
@@ -1720,7 +1855,7 @@ func (h *encHandshake) authResp(prv *ecdsa.PrivateKey, token []byte) ([]byte, er
 authResp generates the encrypted authentication response message.
 
 <a name="encHandshake.decodeAuthResp"></a>
-### func \(\*encHandshake\) [decodeAuthResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L348>)
+### func \(\*encHandshake\) [decodeAuthResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L383>)
 
 ```go
 func (h *encHandshake) decodeAuthResp(auth []byte, prv *ecdsa.PrivateKey) error
@@ -1729,16 +1864,16 @@ func (h *encHandshake) decodeAuthResp(auth []byte, prv *ecdsa.PrivateKey) error
 decodeAuthResp decode an encrypted authentication response message.
 
 <a name="encHandshake.ecdhShared"></a>
-### func \(\*encHandshake\) [ecdhShared](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L252>)
+### func \(\*encHandshake\) [ecdhShared](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L284>)
 
 ```go
 func (h *encHandshake) ecdhShared(prv *ecdsa.PrivateKey) ([]byte, error)
 ```
 
-
+ecdhShared performs ECDH between the local static private key and the remote static public key. Used as the initial session token for new peers.
 
 <a name="encHandshake.secrets"></a>
-### func \(\*encHandshake\) [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L220>)
+### func \(\*encHandshake\) [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L249>)
 
 ```go
 func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error)
@@ -1747,9 +1882,9 @@ func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error)
 secrets is called after the handshake is completed. It extracts the connection secrets from the handshake values.
 
 <a name="eofSignal"></a>
-## type [eofSignal](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L138-L142>)
+## type [eofSignal](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L146-L150>)
 
-eofSignal wraps a reader with eof signaling. the eof channel is closed when the wrapped reader returns an error or when count bytes have been read.
+eofSignal wraps a reader with EOF signalling: when the wrapped reader returns an error or count bytes have been consumed, a single value is sent on eof. The MsgPipe sender uses this to know when the receiver has finished draining a message payload, so it can safely release the next write.
 
 ```go
 type eofSignal struct {
@@ -1760,7 +1895,7 @@ type eofSignal struct {
 ```
 
 <a name="eofSignal.Read"></a>
-### func \(\*eofSignal\) [Read](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L146>)
+### func \(\*eofSignal\) [Read](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L154>)
 
 ```go
 func (r *eofSignal) Read(buf []byte) (int, error)
@@ -1798,9 +1933,9 @@ func (c *meteredConn) Write(b []byte) (n int, err error)
 Write delegates a network write to the underlying connection, bumping the egress traffic meter along the way.
 
 <a name="netWrapper"></a>
-## type [netWrapper](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L113-L119>)
+## type [netWrapper](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L119-L125>)
 
-netWrapper wraps a MsgReadWriter with locks around ReadMsg/WriteMsg and applies read/write deadlines.
+netWrapper wraps a MsgReadWriter with locks around ReadMsg/WriteMsg and applies read/write deadlines pulled from rtimeout / wtimeout. Used in tests to compose timeout enforcement onto an arbitrary transport.
 
 ```go
 type netWrapper struct {
@@ -1813,7 +1948,7 @@ type netWrapper struct {
 ```
 
 <a name="netWrapper.ReadMsg"></a>
-### func \(\*netWrapper\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L121>)
+### func \(\*netWrapper\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L127>)
 
 ```go
 func (rw *netWrapper) ReadMsg() (Msg, error)
@@ -1822,7 +1957,7 @@ func (rw *netWrapper) ReadMsg() (Msg, error)
 
 
 <a name="netWrapper.WriteMsg"></a>
-### func \(\*netWrapper\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L128>)
+### func \(\*netWrapper\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L134>)
 
 ```go
 func (rw *netWrapper) WriteMsg(msg Msg) error
@@ -1831,9 +1966,9 @@ func (rw *netWrapper) WriteMsg(msg Msg) error
 
 
 <a name="pastDial"></a>
-## type [pastDial](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L70-L73>)
+## type [pastDial](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L74-L77>)
 
-pastDial is an entry in the dial history.
+pastDial is an entry in the dial history: which peer we last attempted \(id\) and when that attempt's cooldown expires.
 
 ```go
 type pastDial struct {
@@ -1843,9 +1978,9 @@ type pastDial struct {
 ```
 
 <a name="peerError"></a>
-## type [peerError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L33-L36>)
+## type [peerError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L43-L46>)
 
-
+peerError is the internal error type for misbehaving\-peer cases. It carries a code so discReasonForError can map it to a wire\-level DiscReason.
 
 ```go
 type peerError struct {
@@ -1855,16 +1990,16 @@ type peerError struct {
 ```
 
 <a name="newPeerError"></a>
-### func [newPeerError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L38>)
+### func [newPeerError](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L52>)
 
 ```go
 func newPeerError(code int, format string, v ...interface{}) *peerError
 ```
 
-
+newPeerError builds a peerError whose message starts with the canonical description for code, optionally followed by formatted detail. Panics if code is unknown — the constants and errorToString must stay in sync.
 
 <a name="peerError.Error"></a>
-### func \(\*peerError\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L50>)
+### func \(\*peerError\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer_error.go#L64>)
 
 ```go
 func (self *peerError) Error() string
@@ -1873,18 +2008,18 @@ func (self *peerError) Error() string
 
 
 <a name="peerOpFunc"></a>
-## type [peerOpFunc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L149>)
+## type [peerOpFunc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L166>)
 
-
+peerOpFunc is a closure run on the Server.run goroutine to read or mutate the peer map. Callers post via the peerOp channel and wait for peerOpDone to enforce serialization without a global lock.
 
 ```go
 type peerOpFunc func(map[discover.NodeID]*Peer)
 ```
 
 <a name="protoHandshake"></a>
-## type [protoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L53-L59>)
+## type [protoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L73-L79>)
 
-protoHandshake is the RLP structure of the protocol handshake.
+protoHandshake is the RLP structure exchanged once per connection after the encryption handshake completes. Version must match baseProtocolVersion; Caps advertises the subprotocols this node supports; ID is the node's secp256k1 public key.
 
 ```go
 type protoHandshake struct {
@@ -1897,7 +2032,7 @@ type protoHandshake struct {
 ```
 
 <a name="readProtocolHandshake"></a>
-### func [readProtocolHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L145>)
+### func [readProtocolHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L172>)
 
 ```go
 func readProtocolHandshake(rw MsgReader, our *protoHandshake) (*protoHandshake, error)
@@ -1906,9 +2041,9 @@ func readProtocolHandshake(rw MsgReader, our *protoHandshake) (*protoHandshake, 
 
 
 <a name="protoRW"></a>
-## type [protoRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L338-L346>)
+## type [protoRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L384-L392>)
 
-
+protoRW is the per\-subprotocol MsgReadWriter handed to a Protocol's Run callback. It applies the subprotocol's offset when reading / writing so each subprotocol sees its codes starting at zero, and gates writes through the wstart token to serialize with other protocols on the same Peer.
 
 ```go
 type protoRW struct {
@@ -1923,7 +2058,7 @@ type protoRW struct {
 ```
 
 <a name="protoRW.ReadMsg"></a>
-### func \(\*protoRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L367>)
+### func \(\*protoRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L413>)
 
 ```go
 func (rw *protoRW) ReadMsg() (Msg, error)
@@ -1932,7 +2067,7 @@ func (rw *protoRW) ReadMsg() (Msg, error)
 
 
 <a name="protoRW.WriteMsg"></a>
-### func \(\*protoRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L348>)
+### func \(\*protoRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L394>)
 
 ```go
 func (rw *protoRW) WriteMsg(msg Msg) (err error)
@@ -1941,7 +2076,7 @@ func (rw *protoRW) WriteMsg(msg Msg) (err error)
 
 
 <a name="rlpx"></a>
-## type [rlpx](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L85-L90>)
+## type [rlpx](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L109-L114>)
 
 rlpx is the transport protocol used by actual \(non\-test\) connections. It wraps the frame encoder with locks and read/write deadlines.
 
@@ -1955,7 +2090,7 @@ type rlpx struct {
 ```
 
 <a name="rlpx.ReadMsg"></a>
-### func \(\*rlpx\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L97>)
+### func \(\*rlpx\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L124>)
 
 ```go
 func (t *rlpx) ReadMsg() (Msg, error)
@@ -1964,7 +2099,7 @@ func (t *rlpx) ReadMsg() (Msg, error)
 
 
 <a name="rlpx.WriteMsg"></a>
-### func \(\*rlpx\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L104>)
+### func \(\*rlpx\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L131>)
 
 ```go
 func (t *rlpx) WriteMsg(msg Msg) error
@@ -1973,7 +2108,7 @@ func (t *rlpx) WriteMsg(msg Msg) error
 
 
 <a name="rlpx.close"></a>
-### func \(\*rlpx\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L111>)
+### func \(\*rlpx\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L138>)
 
 ```go
 func (t *rlpx) close(err error)
@@ -1982,7 +2117,7 @@ func (t *rlpx) close(err error)
 
 
 <a name="rlpx.doEncHandshake"></a>
-### func \(\*rlpx\) [doEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L179>)
+### func \(\*rlpx\) [doEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L206>)
 
 ```go
 func (t *rlpx) doEncHandshake(prv *ecdsa.PrivateKey, dial *discover.Node) (discover.NodeID, error)
@@ -1991,7 +2126,7 @@ func (t *rlpx) doEncHandshake(prv *ecdsa.PrivateKey, dial *discover.Node) (disco
 
 
 <a name="rlpx.doProtoHandshake"></a>
-### func \(\*rlpx\) [doProtoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L128>)
+### func \(\*rlpx\) [doProtoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L155>)
 
 ```go
 func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err error)
@@ -2000,7 +2135,7 @@ func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err
 doEncHandshake runs the protocol handshake using authenticated messages. the protocol handshake is the first authenticated message and also verifies whether the encryption handshake 'worked' and the remote side actually provided the right public key.
 
 <a name="rlpxFrameRW"></a>
-## type [rlpxFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L499-L507>)
+## type [rlpxFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L543-L551>)
 
 rlpxFrameRW implements a simplified version of RLPx framing. chunked messages are not supported and all headers are equal to zeroHeader.
 
@@ -2019,16 +2154,16 @@ type rlpxFrameRW struct {
 ```
 
 <a name="newRLPXFrameRW"></a>
-### func [newRLPXFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L509>)
+### func [newRLPXFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L557>)
 
 ```go
 func newRLPXFrameRW(conn io.ReadWriter, s secrets) *rlpxFrameRW
 ```
 
-
+newRLPXFrameRW initialises an rlpxFrameRW using the secrets derived from the encryption handshake — separate AES streams for inbound and outbound traffic, one per direction MAC, and the shared macCipher used to update each MAC.
 
 <a name="rlpxFrameRW.ReadMsg"></a>
-### func \(\*rlpxFrameRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L573>)
+### func \(\*rlpxFrameRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L621>)
 
 ```go
 func (rw *rlpxFrameRW) ReadMsg() (msg Msg, err error)
@@ -2037,7 +2172,7 @@ func (rw *rlpxFrameRW) ReadMsg() (msg Msg, err error)
 
 
 <a name="rlpxFrameRW.WriteMsg"></a>
-### func \(\*rlpxFrameRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L531>)
+### func \(\*rlpxFrameRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L579>)
 
 ```go
 func (rw *rlpxFrameRW) WriteMsg(msg Msg) error
@@ -2046,7 +2181,7 @@ func (rw *rlpxFrameRW) WriteMsg(msg Msg) error
 
 
 <a name="secrets"></a>
-## type [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L211-L216>)
+## type [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L240-L245>)
 
 secrets represents the connection secrets which are negotiated during the encryption handshake.
 
@@ -2060,7 +2195,7 @@ type secrets struct {
 ```
 
 <a name="initiatorEncHandshake"></a>
-### func [initiatorEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L261>)
+### func [initiatorEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L293>)
 
 ```go
 func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID discover.NodeID, token []byte) (s secrets, err error)
@@ -2071,7 +2206,7 @@ initiatorEncHandshake negotiates a session token on conn. it should be called on
 prv is the local client's private key. token is the token from a previous session with this node.
 
 <a name="receiverEncHandshake"></a>
-### func [receiverEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L367>)
+### func [receiverEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L402>)
 
 ```go
 func receiverEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, token []byte) (s secrets, err error)
@@ -2082,9 +2217,9 @@ receiverEncHandshake negotiates a session token on conn. it should be called on 
 prv is the local client's private key. token is the token from a previous session with this node.
 
 <a name="task"></a>
-## type [task](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L75-L77>)
+## type [task](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L82-L84>)
 
-
+task is a unit of work executed on the Server.run goroutine via the taskdone channel. Concrete implementations: dialTask, discoverTask, waitExpireTask.
 
 ```go
 type task interface {
@@ -2093,9 +2228,9 @@ type task interface {
 ```
 
 <a name="transport"></a>
-## type [transport](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L172-L184>)
+## type [transport](<https://github.com/zenon-network/go-zenon/blob/master/p2p/server.go#L207-L219>)
 
-
+transport is the interface satisfied by an underlying connection\-level codec. Two implementations exist: rlpx \(production, encrypted / authenticated framing\) and the test\-only MsgPipe \(in\-memory\).
 
 ```go
 type transport interface {
@@ -2114,18 +2249,18 @@ type transport interface {
 ```
 
 <a name="newRLPX"></a>
-### func [newRLPX](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L92>)
+### func [newRLPX](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L119>)
 
 ```go
 func newRLPX(fd net.Conn) transport
 ```
 
-
+newRLPX constructs an rlpx transport over fd, arming a connection deadline of handshakeTimeout to bound the combined enc \+ proto handshake.
 
 <a name="waitExpireTask"></a>
-## type [waitExpireTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L98-L100>)
+## type [waitExpireTask](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L108-L110>)
 
-A waitExpireTask is generated if there are no other tasks to keep the loop in Server.run ticking.
+waitExpireTask is generated if there are no other tasks to keep the loop in Server.run ticking. It simply sleeps until a dial\-history entry is due to expire so the dialer can re\-try a previously failed node.
 
 ```go
 type waitExpireTask struct {
@@ -2134,7 +2269,7 @@ type waitExpireTask struct {
 ```
 
 <a name="waitExpireTask.Do"></a>
-### func \(waitExpireTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L250>)
+### func \(waitExpireTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L273>)
 
 ```go
 func (t waitExpireTask) Do(*Server)
@@ -2143,7 +2278,7 @@ func (t waitExpireTask) Do(*Server)
 
 
 <a name="waitExpireTask.String"></a>
-### func \(waitExpireTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L253>)
+### func \(waitExpireTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L276>)
 
 ```go
 func (t waitExpireTask) String() string

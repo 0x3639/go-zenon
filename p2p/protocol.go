@@ -41,6 +41,8 @@ type Protocol struct {
 	Run func(peer *Peer, rw MsgReadWriter) error
 }
 
+// cap returns the capability advertisement for this Protocol — used
+// when assembling the local node's protoHandshake.
 func (p Protocol) cap() Cap {
 	return Cap{p.Name, p.Version}
 }
@@ -51,14 +53,21 @@ type Cap struct {
 	Version uint
 }
 
+// RlpData renders Cap as a heterogeneous RLP list ([name, version]) —
+// implements the rlp.Encoder interface used by the handshake codec.
 func (cap Cap) RlpData() interface{} {
 	return []interface{}{cap.Name, cap.Version}
 }
 
+// String renders Cap as "name/version" for log output.
 func (cap Cap) String() string {
 	return fmt.Sprintf("%s/%d", cap.Name, cap.Version)
 }
 
+// capsByNameAndVersion is a sort.Interface implementation that orders
+// Caps by name ascending, then version ascending — used so message-code
+// offsets are assigned deterministically across nodes that advertise
+// the same protocol set.
 type capsByNameAndVersion []Cap
 
 func (cs capsByNameAndVersion) Len() int      { return len(cs) }

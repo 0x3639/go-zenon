@@ -35,6 +35,8 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// nodeIDBits is the bit-width of a NodeID — a marshaled secp256k1
+// public key with the 0x04 prefix byte stripped.
 const nodeIDBits = 512
 
 // Node represents a host on the network.
@@ -51,6 +53,9 @@ type Node struct {
 	sha types.Hash
 }
 
+// newNode constructs a Node and pre-computes its sha (keccak256 of the
+// node ID) so the routing table can compare distances without
+// re-hashing on every operation.
 func newNode(id NodeID, ip net.IP, udpPort, tcpPort uint16) *Node {
 	if ipv4 := ip.To4(); ipv4 != nil {
 		ip = ipv4
@@ -64,6 +69,7 @@ func newNode(id NodeID, ip net.IP, udpPort, tcpPort uint16) *Node {
 	}
 }
 
+// addr returns the node's UDP discovery address.
 func (n *Node) addr() *net.UDPAddr {
 	return &net.UDPAddr{IP: n.IP, Port: int(n.UDP)}
 }
@@ -217,8 +223,9 @@ func (id NodeID) Pubkey() (*ecdsa.PublicKey, error) {
 	return p, nil
 }
 
-// recoverNodeID computes the public key used to sign the
-// given hash from the signature.
+// recoverNodeID computes the public key used to sign the given hash
+// from the signature, returning it in NodeID form. Used by the UDP
+// transport to identify the sender of a signed discovery packet.
 func recoverNodeID(hash, sig []byte) (id NodeID, err error) {
 	pubkey, err := secp256k1.RecoverPubkey(hash, sig)
 	if err != nil {
@@ -249,7 +256,9 @@ func distcmp(target, a, b types.Hash) int {
 	return 0
 }
 
-// table of leading zero counts for bytes [0..255]
+// lzcount is a precomputed lookup table of leading-zero counts for
+// each byte value [0..255], used by logdist to avoid a per-call
+// loop over bit positions.
 var lzcount = [256]int{
 	8, 7, 6, 6, 5, 5, 5, 5,
 	4, 4, 4, 4, 4, 4, 4, 4,

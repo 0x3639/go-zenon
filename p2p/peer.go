@@ -32,24 +32,44 @@ import (
 )
 
 const (
-	baseProtocolVersion    = 4
-	baseProtocolLength     = uint64(16)
+	// baseProtocolVersion is the devp2p framing version this node
+	// speaks. Negotiated in protoHandshake; mismatch produces
+	// DiscIncompatibleVersion.
+	baseProtocolVersion = 4
+	// baseProtocolLength reserves message-code space for base-protocol
+	// messages (0..15). Subprotocol message codes are offset past this.
+	baseProtocolLength = uint64(16)
+	// baseProtocolMaxMsgSize bounds the size of base-protocol frames
+	// (handshake, ping/pong, disconnect). Subprotocols set their own
+	// limits.
 	baseProtocolMaxMsgSize = 2 * 1024
 
+	// pingInterval is the heartbeat cadence for keeping idle
+	// connections alive (must be < frameReadTimeout).
 	pingInterval = 15 * time.Second
 )
 
 const (
-	// devp2p message codes
+	// handshakeMsg carries the protoHandshake frame exchanged once at
+	// connection start.
 	handshakeMsg = 0x00
-	discMsg      = 0x01
-	pingMsg      = 0x02
-	pongMsg      = 0x03
-	getPeersMsg  = 0x04
-	peersMsg     = 0x05
+	// discMsg notifies the remote of an impending close with a single
+	// DiscReason.
+	discMsg = 0x01
+	// pingMsg requests a pongMsg reply, used as a keepalive.
+	pingMsg = 0x02
+	// pongMsg is the reply to pingMsg.
+	pongMsg = 0x03
+	// getPeersMsg / peersMsg are legacy devp2p peer-exchange codes;
+	// they are accepted for compatibility but not actively used.
+	getPeersMsg = 0x04
+	peersMsg    = 0x05
 )
 
-// protoHandshake is the RLP structure of the protocol handshake.
+// protoHandshake is the RLP structure exchanged once per connection
+// after the encryption handshake completes. Version must match
+// baseProtocolVersion; Caps advertises the subprotocols this node
+// supports; ID is the node's secp256k1 public key.
 type protoHandshake struct {
 	Version    uint64
 	Name       string
@@ -119,6 +139,8 @@ func (p *Peer) String() string {
 	return fmt.Sprintf("Peer %x %v", p.rw.id[:8], p.RemoteAddr())
 }
 
+// newPeer wires up a Peer over an already-handshaked conn, matching
+// the supplied subprotocols against the remote's advertised caps.
 func newPeer(conn *conn, protocols []Protocol) *Peer {
 	protomap := matchProtocols(protocols, conn.caps, conn)
 	p := &Peer{
@@ -131,6 +153,10 @@ func newPeer(conn *conn, protocols []Protocol) *Peer {
 	return p
 }
 
+// run drives the peer's lifetime: launches readLoop / pingLoop /
+// per-protocol handlers, blocks until any of them errors or a
+// disconnect is requested, then closes the connection. Returns the
+// DiscReason recorded for the disconnect.
 func (p *Peer) run() DiscReason {
 	var (
 		writeStart = make(chan struct{}, 1)
@@ -200,6 +226,9 @@ loop:
 	return reason
 }
 
+// pingLoop emits a pingMsg every pingInterval and exits when the peer
+// is closed. A failed write surfaces as a protoErr that triggers
+// shutdown.
 func (p *Peer) pingLoop() {
 	ping := time.NewTicker(pingInterval)
 	defer ping.Stop()
@@ -216,6 +245,9 @@ func (p *Peer) pingLoop() {
 	}
 }
 
+// readLoop is the single reader of the underlying transport. Each
+// decoded message is timestamped and dispatched by handle; the first
+// read or handle error terminates the loop.
 func (p *Peer) readLoop(errc chan<- error) {
 	for {
 		msg, err := p.rw.ReadMsg()
@@ -231,6 +263,9 @@ func (p *Peer) readLoop(errc chan<- error) {
 	}
 }
 
+// handle dispatches one inbound message: replies to ping, returns the
+// reason on disc, hands off subprotocol messages to the matching
+// protoRW, and silently discards unknown base-protocol codes.
 func (p *Peer) handle(msg Msg) error {
 	switch {
 	case msg.Code == pingMsg:
@@ -265,6 +300,9 @@ func (p *Peer) handle(msg Msg) error {
 	return nil
 }
 
+// countMatchingProtocols counts how many entries in caps name a
+// protocol the local node supports. Used by Server.run to drop peers
+// with no usable subprotocol overlap (DiscUselessPeer).
 func countMatchingProtocols(protocols []Protocol, caps []Cap) int {
 	n := 0
 	for _, cap := range caps {
@@ -302,6 +340,9 @@ outer:
 	return result
 }
 
+// startProtocols launches each matched subprotocol handler in its own
+// goroutine, sharing the writeStart token so writes serialize across
+// protocols on the same connection.
 func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error) {
 	p.wg.Add(len(p.running))
 	for _, proto := range p.running {
@@ -335,6 +376,11 @@ func (p *Peer) getProto(code uint64) (*protoRW, error) {
 	return nil, newPeerError(errInvalidMsgCode, "%d", code)
 }
 
+// protoRW is the per-subprotocol MsgReadWriter handed to a Protocol's
+// Run callback. It applies the subprotocol's offset when reading /
+// writing so each subprotocol sees its codes starting at zero, and
+// gates writes through the wstart token to serialize with other
+// protocols on the same Peer.
 type protoRW struct {
 	Protocol
 	in     chan Msg        // receices read messages

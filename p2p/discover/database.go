@@ -40,13 +40,24 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// Lifetime parameters for entries in the persistent node database.
+// Vars (not consts) so tests may shrink them; production should leave
+// them at the documented defaults.
 var (
-	nodeDBNilNodeID      = NodeID{}       // Special node ID to use as a nil element.
-	nodeDBNodeExpiration = 24 * time.Hour // Time after which an unseen node should be dropped.
-	nodeDBCleanupCycle   = time.Hour      // Time period for running the expiration task.
+	// nodeDBNilNodeID is a sentinel zero-NodeID used as a "nil"
+	// marker by makeKey when storing global keys (e.g. version).
+	nodeDBNilNodeID = NodeID{}
+	// nodeDBNodeExpiration is the staleness threshold past which an
+	// unseen node is dropped from the database by the expirer.
+	nodeDBNodeExpiration = 24 * time.Hour
+	// nodeDBCleanupCycle is the cadence at which the expirer runs.
+	nodeDBCleanupCycle = time.Hour
 )
 
-// nodeDB stores all nodes we know about.
+// nodeDB is the persistent (or in-memory) leveldb-backed cache of
+// every node we have ever heard from. Keyed by [makeKey] under the
+// "n:<NodeID><field>" prefix scheme. Implements an idempotent expirer
+// goroutine that prunes records older than nodeDBNodeExpiration.
 type nodeDB struct {
 	lvl    *leveldb.DB       // Interface to the database itself
 	seeder iterator.Iterator // Iterator for fetching possible seed nodes
@@ -57,14 +68,27 @@ type nodeDB struct {
 	quit   chan struct{} // Channel to signal the expiring thread to stop
 }
 
-// Schema layout for the node database
+// Schema layout for the node database. Keys are built by [makeKey]
+// from a NodeID + a field suffix; values are leveldb-encoded ints
+// (varint timestamps) or RLP-encoded Node structs.
 var (
-	nodeDBVersionKey = []byte("version") // Version of the database to flush if changes
-	nodeDBItemPrefix = []byte("n:")      // Header to prefix node entries with
+	// nodeDBVersionKey holds the schema version. Mismatch on open
+	// triggers a wipe-and-recreate.
+	nodeDBVersionKey = []byte("version")
+	// nodeDBItemPrefix is prepended to every per-node key so a
+	// prefix iterator can target only node-scoped entries.
+	nodeDBItemPrefix = []byte("n:")
 
-	nodeDBDiscoverRoot      = ":discover"
-	nodeDBDiscoverPing      = nodeDBDiscoverRoot + ":lastping"
-	nodeDBDiscoverPong      = nodeDBDiscoverRoot + ":lastpong"
+	// nodeDBDiscoverRoot stores the RLP-encoded Node struct itself.
+	nodeDBDiscoverRoot = ":discover"
+	// nodeDBDiscoverPing records the last time we sent a ping to
+	// this node (varint unix time).
+	nodeDBDiscoverPing = nodeDBDiscoverRoot + ":lastping"
+	// nodeDBDiscoverPong records the last time this node pong'd us
+	// (varint unix time) — input to the expirer's freshness check.
+	nodeDBDiscoverPong = nodeDBDiscoverRoot + ":lastpong"
+	// nodeDBDiscoverFindFails counts consecutive FindNode failures;
+	// when this hits maxFindnodeFailures the node is evicted.
 	nodeDBDiscoverFindFails = nodeDBDiscoverRoot + ":findfail"
 )
 
@@ -229,8 +253,9 @@ func (db *nodeDB) ensureExpirer() {
 	db.runner.Do(func() { go db.expirer() })
 }
 
-// expirer should be started in a go routine, and is responsible for looping ad
-// infinitum and dropping stale data from the database.
+// expirer is the background goroutine started once by ensureExpirer.
+// Loops on nodeDBCleanupCycle, calling expireNodes to drop entries
+// past nodeDBNodeExpiration. Exits cleanly on db.quit close.
 func (db *nodeDB) expirer() {
 	tick := time.Tick(nodeDBCleanupCycle)
 	for {

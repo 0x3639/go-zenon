@@ -14,7 +14,6 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package p2p implements the Ethereum p2p network protocols.
 package p2p
 
 import (
@@ -31,24 +30,39 @@ import (
 )
 
 const (
-	defaultDialTimeout      = 15 * time.Second
-	refreshPeersInterval    = 30 * time.Second
+	// defaultDialTimeout caps how long an outbound TCP dial may take
+	// before the dialer gives up.
+	defaultDialTimeout = 15 * time.Second
+	// refreshPeersInterval bounds how often the dialer re-queries the
+	// discovery table for fresh dynamic-dial candidates.
+	refreshPeersInterval = 30 * time.Second
+	// staticPeerCheckInterval bounds how often static peers are
+	// re-evaluated for reconnection.
 	staticPeerCheckInterval = 15 * time.Second
 
-	// Maximum number of concurrently handshaking inbound connections.
+	// maxAcceptConns is the maximum number of concurrently handshaking
+	// inbound connections. Acts as a backpressure semaphore on
+	// listenLoop so a flood of new TCP connections cannot exhaust file
+	// descriptors before the cheap admission checks run.
 	maxAcceptConns = 50
 
-	// Maximum number of concurrently dialing outbound connections.
+	// maxActiveDialTasks is the maximum number of concurrently dialing
+	// outbound connections. Caps the dialer's task fan-out from
+	// Server.run.
 	maxActiveDialTasks = 16
 
-	// Maximum time allowed for reading a complete message.
-	// This is effectively the amount of time a connection can be idle.
+	// frameReadTimeout is the maximum time allowed for reading a
+	// complete message — effectively the amount of time a connection
+	// can be idle before pingMsg/pongMsg traffic must keep it alive.
 	frameReadTimeout = 30 * time.Second
 
-	// Maximum amount of time allowed for writing a complete message.
+	// frameWriteTimeout is the maximum time allowed for writing a
+	// complete message before the connection is considered stalled.
 	frameWriteTimeout = 20 * time.Second
 )
 
+// errServerStopped is returned when an operation is attempted on a
+// Server that has been stopped or is in the middle of shutdown.
 var errServerStopped = errors.New("server stopped")
 
 // Server manages all peer connections.
@@ -146,19 +160,37 @@ type Server struct {
 	loopWG        sync.WaitGroup // loop, listenLoop
 }
 
+// peerOpFunc is a closure run on the Server.run goroutine to read or
+// mutate the peer map. Callers post via the peerOp channel and wait for
+// peerOpDone to enforce serialization without a global lock.
 type peerOpFunc func(map[discover.NodeID]*Peer)
 
+// connFlag is a bitfield describing how a connection was established
+// (inbound vs. outbound, dynamic vs. static, trusted), used by the
+// admission checks in Server.run to bypass MaxPeers for trusted/static
+// peers.
 type connFlag int
 
 const (
+	// dynDialedConn marks an outbound connection initiated from a
+	// discovery-table candidate.
 	dynDialedConn connFlag = 1 << iota
+	// staticDialedConn marks an outbound connection to a configured
+	// static node.
 	staticDialedConn
+	// inboundConn marks a connection accepted by listenLoop.
 	inboundConn
+	// trustedConn marks a connection whose remote ID is on the trusted
+	// list — bypasses MaxPeers but still subject to identity / dedup
+	// checks.
 	trustedConn
 )
 
-// conn wraps a network connection with information gathered
-// during the two handshakes.
+// conn wraps a network connection with information gathered during the
+// two handshakes. fd, transport, and flags are populated at accept/dial
+// time; id is filled by the encryption handshake; caps and name are
+// filled by the protocol handshake. cont is the back-channel by which
+// Server.run reports admission decisions to the setupConn goroutine.
 type conn struct {
 	fd net.Conn
 	transport
@@ -169,6 +201,9 @@ type conn struct {
 	name  string          // valid after the protocol handshake
 }
 
+// transport is the interface satisfied by an underlying connection-level
+// codec. Two implementations exist: rlpx (production, encrypted /
+// authenticated framing) and the test-only MsgPipe (in-memory).
 type transport interface {
 	// The two handshakes.
 	doEncHandshake(prv *ecdsa.PrivateKey, dialDest *discover.Node) (discover.NodeID, error)
@@ -183,6 +218,9 @@ type transport interface {
 	close(err error)
 }
 
+// String returns a human-readable connection summary used in logs:
+// flag set, the first 8 bytes of the remote node ID once known, and
+// the remote network address.
 func (c *conn) String() string {
 	s := c.flags.String() + " conn"
 	if (c.id != discover.NodeID{}) {
@@ -192,6 +230,8 @@ func (c *conn) String() string {
 	return s
 }
 
+// String renders the set bits of f as a space-separated label list
+// (e.g., "trusted dyn dial").
 func (f connFlag) String() string {
 	s := ""
 	if f&trustedConn != 0 {
@@ -212,6 +252,7 @@ func (f connFlag) String() string {
 	return s
 }
 
+// is reports whether any of the bits in f are set on this connection.
 func (c *conn) is(f connFlag) bool {
 	return c.flags&f != 0
 }
@@ -368,6 +409,9 @@ func (srv *Server) Start() (err error) {
 	return nil
 }
 
+// startListening opens the TCP listener and, if NAT is configured,
+// kicks off a port-mapping goroutine. Called once from Start while
+// holding srv.lock.
 func (srv *Server) startListening() error {
 	// Launch the TCP listener.
 	listener, err := net.Listen("tcp", srv.ListenAddr)
@@ -393,12 +437,18 @@ func (srv *Server) startListening() error {
 	return nil
 }
 
+// dialer is the contract Server.run uses to drive the outbound dial
+// scheduler. The production implementation is *dialstate (see dial.go);
+// it is an interface so tests can substitute a deterministic dialer.
 type dialer interface {
 	newTasks(running int, peers map[discover.NodeID]*Peer, now time.Time) []task
 	taskDone(task, time.Time)
 	addStatic(*discover.Node)
 }
 
+// run is the central event loop. It owns the live peer map, dispatches
+// dial tasks via dialstate, and gates the post-handshake admission
+// checks. Runs in a single goroutine for the lifetime of the server.
 func (srv *Server) run(dialstate dialer) {
 	var (
 		peers        = make(map[discover.NodeID]*Peer)
@@ -541,6 +591,10 @@ running:
 	}
 }
 
+// protoHandshakeChecks runs the post-protocol-handshake admission
+// rules: drop peers with no overlapping subprotocol, then re-run the
+// encryption-checkpoint rules in case the peer set changed during the
+// proto handshake.
 func (srv *Server) protoHandshakeChecks(peers map[discover.NodeID]*Peer, c *conn) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
@@ -551,6 +605,9 @@ func (srv *Server) protoHandshakeChecks(peers map[discover.NodeID]*Peer, c *conn
 	return srv.encHandshakeChecks(peers, c)
 }
 
+// encHandshakeChecks runs the post-encryption-handshake admission
+// rules: enforce MaxPeers (with trusted/static bypass), reject
+// duplicate IDs, and reject self-dials.
 func (srv *Server) encHandshakeChecks(peers map[discover.NodeID]*Peer, c *conn) error {
 	switch {
 	case !c.is(trustedConn|staticDialedConn) && len(peers) >= srv.MaxPeers:

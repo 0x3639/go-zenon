@@ -25,8 +25,9 @@ import (
 	"github.com/jackpal/go-nat-pmp"
 )
 
-// natPMPClient adapts the NAT-PMP protocol implementation so it conforms to
-// the common interface.
+// pmp adapts the NAT-PMP protocol implementation so it conforms to
+// the common Interface. gw is the gateway IP; c is the underlying
+// natpmp.Client used for the actual SOAP-style RPC calls.
 type pmp struct {
 	gw net.IP
 	c  *natpmp.Client
@@ -62,6 +63,10 @@ func (n *pmp) DeleteMapping(protocol string, extport, intport int) (err error) {
 	return err
 }
 
+// discoverPMP probes every plausible LAN gateway in parallel and
+// returns the first one to answer a NAT-PMP GetExternalAddress RPC.
+// Bounded by a 1-second timeout so unreachable backends do not block
+// startup.
 func discoverPMP() Interface {
 	// run external address lookups on all potential gateways
 	gws := potentialGateways()
@@ -102,8 +107,10 @@ var (
 	_, lan192, _ = net.ParseCIDR("192.168.0.0/16")
 )
 
-// TODO: improve this. We currently assume that (on most networks)
-// the router is X.X.X.1 in a local LAN range.
+// potentialGateways returns the .1 host on every RFC1918 (private)
+// network the local machine is attached to — a best-effort heuristic
+// for finding the LAN router. TODO: improve this; we currently assume
+// that (on most networks) the router is X.X.X.1 in a local LAN range.
 func potentialGateways() (gws []net.IP) {
 	ifaces, err := net.Interfaces()
 	if err != nil {

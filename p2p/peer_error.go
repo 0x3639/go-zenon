@@ -21,20 +21,34 @@ import (
 )
 
 const (
+	// errInvalidMsgCode is returned when a peer sends a message code
+	// outside the negotiated subprotocol's reserved range.
 	errInvalidMsgCode = iota
+	// errInvalidMsg is returned when a message's RLP payload fails to
+	// decode into the expected structure.
 	errInvalidMsg
 )
 
+// errorToString maps each peerError code to its human-readable
+// description. newPeerError panics if it is given a code missing from
+// this table — every constant in the err* group above must be listed.
 var errorToString = map[int]string{
 	errInvalidMsgCode: "invalid message code",
 	errInvalidMsg:     "invalid message",
 }
 
+// peerError is the internal error type for misbehaving-peer cases.
+// It carries a code so discReasonForError can map it to a wire-level
+// DiscReason.
 type peerError struct {
 	code    int
 	message string
 }
 
+// newPeerError builds a peerError whose message starts with the
+// canonical description for code, optionally followed by formatted
+// detail. Panics if code is unknown — the constants and errorToString
+// must stay in sync.
 func newPeerError(code int, format string, v ...interface{}) *peerError {
 	desc, ok := errorToString[code]
 	if !ok {
@@ -51,21 +65,40 @@ func (self *peerError) Error() string {
 	return self.message
 }
 
+// DiscReason is the wire-level enum sent in discMsg explaining why a
+// connection is being closed. Values mirror the devp2p disconnect
+// reasons; new entries must be appended to keep wire compatibility.
 type DiscReason uint
 
 const (
+	// DiscRequested — local code or remote peer voluntarily closed.
 	DiscRequested DiscReason = iota
+	// DiscNetworkError — TCP-level read/write error.
 	DiscNetworkError
+	// DiscProtocolError — base-protocol violation (bad message code,
+	// malformed RLP).
 	DiscProtocolError
+	// DiscUselessPeer — no overlapping subprotocols.
 	DiscUselessPeer
+	// DiscTooManyPeers — admission cap exceeded.
 	DiscTooManyPeers
+	// DiscAlreadyConnected — duplicate connection from same node ID.
 	DiscAlreadyConnected
+	// DiscIncompatibleVersion — base-protocol version mismatch.
 	DiscIncompatibleVersion
+	// DiscInvalidIdentity — empty or malformed node ID in handshake.
 	DiscInvalidIdentity
+	// DiscQuitting — local node is shutting down.
 	DiscQuitting
+	// DiscUnexpectedIdentity — dialed peer's ID didn't match the
+	// expected enode ID.
 	DiscUnexpectedIdentity
+	// DiscSelf — connected to ourselves (loopback or NAT echo).
 	DiscSelf
+	// DiscReadTimeout — connection was idle past frameReadTimeout.
 	DiscReadTimeout
+	// DiscSubprotocolError — error originating in a registered
+	// subprotocol's Run callback.
 	DiscSubprotocolError
 )
 
@@ -96,6 +129,10 @@ func (d DiscReason) Error() string {
 	return d.String()
 }
 
+// discReasonForError maps an arbitrary error to the DiscReason that
+// should be sent on the wire: pass through if it's already a
+// DiscReason, fold base-protocol errors to DiscProtocolError, and
+// fall back to DiscSubprotocolError otherwise.
 func discReasonForError(err error) DiscReason {
 	if reason, ok := err.(DiscReason); ok {
 		return reason

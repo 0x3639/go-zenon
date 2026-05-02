@@ -42,36 +42,60 @@ import (
 	"github.com/zenon-network/go-zenon/p2p/discover"
 )
 
+// RLPx framing and handshake size constants. Values are dictated by
+// the devp2p RLPx specification and must match across implementations.
 const (
+	// maxUint24 caps a single RLPx frame's encoded length.
 	maxUint24 = ^uint32(0) >> 8
 
-	sskLen = 16 // ecies.MaxSharedKeyLength(pubKey) / 2
-	sigLen = 65 // elliptic S256
-	pubLen = 64 // 512 bit pubkey in uncompressed representation without format byte
-	shaLen = 32 // hash length (for nonce etc)
+	// sskLen is the ECIES shared-secret half-length (in bytes).
+	sskLen = 16
+	// sigLen is the secp256k1 signature length on curve S256.
+	sigLen = 65
+	// pubLen is a 512-bit pubkey in uncompressed representation
+	// without the format byte.
+	pubLen = 64
+	// shaLen is the keccak-256 hash / nonce length.
+	shaLen = 32
 
-	authMsgLen  = sigLen + shaLen + pubLen + shaLen + 1
+	// authMsgLen is the plaintext size of the initiator's enc-handshake
+	// auth message: signature || sha3(ephemeral pubkey) || static
+	// pubkey || nonce || token-flag.
+	authMsgLen = sigLen + shaLen + pubLen + shaLen + 1
+	// authRespLen is the plaintext size of the receiver's enc-handshake
+	// auth response: ephemeral pubkey || nonce || token-flag.
 	authRespLen = pubLen + shaLen + 1
 
-	eciesBytes     = 65 + 16 + 32
-	encAuthMsgLen  = authMsgLen + eciesBytes  // size of the final ECIES payload sent as initiator's handshake
-	encAuthRespLen = authRespLen + eciesBytes // size of the final ECIES payload sent as receiver's handshake
+	// eciesBytes is the per-message ECIES envelope overhead
+	// (ephemeral pubkey + IV + MAC).
+	eciesBytes = 65 + 16 + 32
+	// encAuthMsgLen is the size of the final ECIES payload sent as
+	// the initiator's handshake.
+	encAuthMsgLen = authMsgLen + eciesBytes
+	// encAuthRespLen is the size of the final ECIES payload sent as
+	// the receiver's handshake.
+	encAuthRespLen = authRespLen + eciesBytes
 
-	// total timeout for encryption handshake and protocol
-	// handshake in both directions.
+	// handshakeTimeout is the total timeout for encryption handshake
+	// and protocol handshake in both directions.
 	handshakeTimeout = 5 * time.Second
 
-	// This is the timeout for sending the disconnect reason.
-	// This is shorter than the usual timeout because we don't want
-	// to wait if the connection is known to be bad anyway.
+	// discWriteTimeout is the timeout for sending the disconnect
+	// reason — shorter than the usual timeout because we don't want to
+	// wait if the connection is known to be bad anyway.
 	discWriteTimeout = 1 * time.Second
 )
 
+// Decrypt decrypts an ECIES ciphertext using the supplied secp256k1
+// private key. Exposed for use by the encryption-handshake code paths.
 func Decrypt(prv *ecdsa.PrivateKey, ct []byte) ([]byte, error) {
 	key := ecies.ImportECDSA(prv)
 	return key.Decrypt(ct, nil, nil)
 }
 
+// ToECDSAPub unmarshals a serialised secp256k1 public key into the
+// standard library's ecdsa.PublicKey form. Returns nil for empty
+// input.
 func ToECDSAPub(pub []byte) *ecdsa.PublicKey {
 	if len(pub) == 0 {
 		return nil
@@ -89,6 +113,9 @@ type rlpx struct {
 	rw       *rlpxFrameRW
 }
 
+// newRLPX constructs an rlpx transport over fd, arming a connection
+// deadline of handshakeTimeout to bound the combined enc + proto
+// handshake.
 func newRLPX(fd net.Conn) transport {
 	fd.SetDeadline(time.Now().Add(handshakeTimeout))
 	return &rlpx{fd: fd}
@@ -195,7 +222,9 @@ func (t *rlpx) doEncHandshake(prv *ecdsa.PrivateKey, dial *discover.Node) (disco
 	return sec.RemoteID, nil
 }
 
-// encHandshake contains the state of the encryption handshake.
+// encHandshake contains the state of the encryption handshake. Held
+// transiently during initiator/receiver flows; once secrets() succeeds
+// the data is discarded and only the derived [secrets] are retained.
 type encHandshake struct {
 	initiator bool
 	remoteID  discover.NodeID
@@ -249,6 +278,9 @@ func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error) {
 	return s, nil
 }
 
+// ecdhShared performs ECDH between the local static private key and
+// the remote static public key. Used as the initial session token for
+// new peers.
 func (h *encHandshake) ecdhShared(prv *ecdsa.PrivateKey) ([]byte, error) {
 	return ecies.ImportECDSA(prv).GenerateShared(h.remotePub, sskLen, sskLen)
 }
@@ -281,6 +313,9 @@ func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID d
 	return h.secrets(auth, response)
 }
 
+// newInitiatorHandshake constructs an encHandshake initialised for
+// the dialing side: a fresh nonce and ephemeral keypair, and the
+// remote node's static public key recovered from remoteID.
 func newInitiatorHandshake(remoteID discover.NodeID) (*encHandshake, error) {
 	// generate random initiator nonce
 	n := make([]byte, shaLen)
@@ -387,6 +422,10 @@ func receiverEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, token []byt
 	return h.secrets(auth, resp)
 }
 
+// decodeAuthMsg parses the initiator's encrypted auth message (called
+// on the receiving side), recovers the initiator's ephemeral public
+// key from the embedded signature, and seeds an encHandshake ready
+// for [encHandshake.authResp].
 func decodeAuthMsg(prv *ecdsa.PrivateKey, token []byte, auth []byte) (*encHandshake, error) {
 	var err error
 	h := new(encHandshake)
@@ -452,7 +491,8 @@ func (h *encHandshake) authResp(prv *ecdsa.PrivateKey, token []byte) ([]byte, er
 	return ecies.Encrypt(rand.Reader, h.remotePub, resp, nil, nil)
 }
 
-// importPublicKey unmarshals 512 bit public keys.
+// importPublicKey unmarshals 512-bit public keys, accepting either
+// the bare 64-byte form or the standard 65-byte prefix-0x04 form.
 func importPublicKey(pubKey []byte) (*ecies.PublicKey, error) {
 	var pubKey65 []byte
 	switch len(pubKey) {
@@ -468,6 +508,8 @@ func importPublicKey(pubKey []byte) (*ecies.PublicKey, error) {
 	return ecies.ImportECDSAPublic(ToECDSAPub(pubKey65)), nil
 }
 
+// exportPubkey serialises an ECIES public key in 64-byte raw form
+// (no 0x04 prefix). Panics on nil input — callers are internal.
 func exportPubkey(pub *ecies.PublicKey) []byte {
 	if pub == nil {
 		panic("nil pubkey")
@@ -475,6 +517,8 @@ func exportPubkey(pub *ecies.PublicKey) []byte {
 	return elliptic.Marshal(pub.Curve, pub.X, pub.Y)[1:]
 }
 
+// xor returns the bytewise XOR of one and other. one and other must be
+// the same length; the result is always len(one) bytes.
 func xor(one, other []byte) (xor []byte) {
 	xor = make([]byte, len(one))
 	for i := 0; i < len(one); i++ {
@@ -506,6 +550,10 @@ type rlpxFrameRW struct {
 	ingressMAC hash.Hash
 }
 
+// newRLPXFrameRW initialises an rlpxFrameRW using the secrets derived
+// from the encryption handshake — separate AES streams for inbound
+// and outbound traffic, one per direction MAC, and the shared
+// macCipher used to update each MAC.
 func newRLPXFrameRW(conn io.ReadWriter, s secrets) *rlpxFrameRW {
 	macc, err := aes.NewCipher(s.MAC)
 	if err != nil {
@@ -619,8 +667,10 @@ func (rw *rlpxFrameRW) ReadMsg() (msg Msg, err error) {
 	return msg, nil
 }
 
-// updateMAC reseeds the given hash with encrypted seed.
-// it returns the first 16 bytes of the hash sum after seeding.
+// updateMAC reseeds the given keccak hash with the encrypted seed and
+// returns the first 16 bytes of the resulting digest. Implements the
+// RLPx "MAC update" step that chains together frame headers and
+// frame bodies to detect tampering.
 func updateMAC(mac hash.Hash, block cipher.Block, seed []byte) []byte {
 	aesbuf := make([]byte, aes.BlockSize)
 	block.Encrypt(aesbuf, mac.Sum(nil))
@@ -631,10 +681,15 @@ func updateMAC(mac hash.Hash, block cipher.Block, seed []byte) []byte {
 	return mac.Sum(nil)[:16]
 }
 
+// readInt24 decodes a big-endian 24-bit integer from the first three
+// bytes of b — used for the RLPx frame-size field.
 func readInt24(b []byte) uint32 {
 	return uint32(b[2]) | uint32(b[1])<<8 | uint32(b[0])<<16
 }
 
+// putInt24 encodes v as a big-endian 24-bit integer into the first
+// three bytes of b. Caller is responsible for ensuring v fits in 24
+// bits (see maxUint24).
 func putInt24(v uint32, b []byte) {
 	b[0] = byte(v >> 16)
 	b[1] = byte(v >> 8)
