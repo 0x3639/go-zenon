@@ -10,9 +10,32 @@ Package downloader bulk\-syncs the chain when a node lags behind its peers.
 
 ### Overview
 
-downloader requests momentum and account\-block batches from peers, validates them through [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>), and feeds them to [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) in order. It complements [github.com/zenon\\\-network/go\\\-zenon/protocol/fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>), which handles single blocks announced individually.
+downloader implements the manual full chain synchronisation protocol — given a peer announcement of a longer / heavier chain, the downloader walks back to a common ancestor, requests the missing blocks in parallel from active peers, validates each batch via cross\-checks against neighbouring peers, and inserts the result into the local chain through the \[chainInsertFn\] callback.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Phases
+
+- Hash walk: starting from a peer's claimed head, the downloader requests up to [MaxHashFetch](<#log>) predecessor hashes repeatedly until it finds a hash already in the local chain \(the common ancestor\).
+- Block fetch: hashes between the ancestor and the head go into the \[queue\], which schedules them across peers \(one fetch request per peer at a time, bounded by [MaxBlockFetch](<#log>)\).
+- Cross\-check: as blocks come back, the downloader spot\-checks them against neighbours so a single misbehaving peer cannot poison the import.
+- Insert: validated, contiguous batches of up to \[maxBlockProcess\] blocks are pushed into the chain.
+
+### Tuning
+
+All knobs are vars \(not consts\) so tests can shrink them. Production defaults: [MaxHashFetch](<#log>) = [MinHashFetch](<#log>) = 512, [MaxBlockFetch](<#log>) = 128, \[maxQueuedHashes\] = 256K \(DOS protection\), \[hashTTL\] = 5s, \[blockHardTTL\] = 9s.
+
+### Concurrency
+
+The [Downloader](<#Downloader>) runs three internal goroutines \(hash fetcher, block fetcher, processor\) coordinated through channels and the \[queue\] scheduler. Public methods are safe for concurrent use.
+
+### Generated Files
+
+None. The .go files in this package carry the original go\-ethereum LGPL\-3.0\+ headers.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>) — the parent manager that wires the downloader to the wire\-protocol loop.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol/fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>) — handles single\-block fetches; the downloader handles bulk catch\-up.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — block model the downloader inserts.
 
 Package downloader contains the manual full chain synchronisation.
 
@@ -103,24 +126,45 @@ const (
 
 ## Variables
 
-<a name="log"></a>
+<a name="log"></a>log is the package\-level logger for the downloader subsystem.
+
+The exported request\-size and timeout knobs below tune the hash\-walk and block\-fetch phases. They are vars \(not consts\) so tests can shrink them.
 
 ```go
 var (
     log = common.DownloaderLogger
 
-    MinHashFetch  = 512 // Minimum amount of hashes to not consider a peer stalling
-    MaxHashFetch  = 512 // Amount of hashes to be fetched per retrieval request
-    MaxBlockFetch = 128 // Amount of blocks to be fetched per retrieval request
+    // MinHashFetch is the minimum amount of hashes a peer must
+    // return before it is not considered stalling.
+    MinHashFetch = 512
+    // MaxHashFetch is the amount of hashes to be fetched per
+    // retrieval request.
+    MaxHashFetch = 512
+    // MaxBlockFetch is the amount of blocks to be fetched per
+    // retrieval request.
+    MaxBlockFetch = 128
 
-    hashTTL         = 5 * time.Second  // Time it takes for a hash request to time out
-    blockSoftTTL    = 3 * time.Second  // Request completion threshold for increasing or decreasing a peer's bandwidth
-    blockHardTTL    = 3 * blockSoftTTL // Maximum time allowance before a block request is considered expired
-    crossCheckCycle = time.Second      // Period after which to check for expired cross checks
+    // hashTTL is the time it takes for a hash request to time out.
+    hashTTL = 5 * time.Second
+    // blockSoftTTL is the request completion threshold for
+    // increasing or decreasing a peer's bandwidth.
+    blockSoftTTL = 3 * time.Second
+    // blockHardTTL is the maximum time allowance before a block
+    // request is considered expired.
+    blockHardTTL = 3 * blockSoftTTL
+    // crossCheckCycle is the period after which to check for
+    // expired cross checks.
+    crossCheckCycle = time.Second
 
-    maxQueuedHashes = 256 * 1024 // Maximum number of hashes to queue for import (DOS protection)
-    maxBannedHashes = 4096       // Number of bannable hashes before phasing old ones out
-    maxBlockProcess = 256        // Number of blocks to import at once into the chain
+    // maxQueuedHashes is the maximum number of hashes to queue for
+    // import (DOS protection).
+    maxQueuedHashes = 256 * 1024
+    // maxBannedHashes is the number of bannable hashes before
+    // phasing old ones out.
+    maxBannedHashes = 4096
+    // maxBlockProcess is the number of blocks to import at once
+    // into the chain.
+    maxBlockProcess = 256
 )
 ```
 
@@ -175,7 +219,7 @@ var (
 ```
 
 <a name="Block"></a>
-## type [Block](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L144-L147>)
+## type [Block](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L184-L187>)
 
 Block is an origin\-tagged blockchain block.
 
@@ -187,25 +231,32 @@ type Block struct {
 ```
 
 <a name="DoneEvent"></a>
-## type [DoneEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L19>)
+## type [DoneEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L20>)
 
-
+DoneEvent is emitted when a sync run completes successfully.
 
 ```go
 type DoneEvent struct{}
 ```
 
 <a name="Downloader"></a>
-## type [Downloader](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L104-L141>)
+## type [Downloader](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L139-L181>)
 
+Downloader is the bulk\-sync chain catch\-up engine. Given a peer announcement of a longer / heavier chain, the downloader walks the hash chain back to a common ancestor, requests the missing blocks in parallel from active peers, validates them via the cross\-check mechanism, and inserts them into the local chain in batches.
 
+Concurrency: the downloader runs three goroutines internally \(hash fetcher, block fetcher, processor\), arbitrated through channels and the \[queue\] scheduler. The exported entry points are safe to call from any goroutine.
 
 ```go
 type Downloader struct {
-    queue  *queue                     // Scheduler for selecting the hashes to download
-    peers  *peerSet                   // Set of active peers from which download can proceed
-    checks map[types.Hash]*crossCheck // Pending cross checks to verify a hash chain
-    banned *set.Set                   // Set of hashes we've received and banned
+    // queue is the scheduler for selecting the hashes to download.
+    queue *queue
+    // peers is the set of active peers from which download can
+    // proceed.
+    peers *peerSet
+    // checks holds pending cross checks to verify a hash chain.
+    checks map[types.Hash]*crossCheck
+    // banned holds hashes we've received and banned.
+    banned *set.Set
 
     interrupt int32 // Atomic boolean to signal termination
 
@@ -242,7 +293,7 @@ type Downloader struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L150>)
+### func [New](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L190>)
 
 ```go
 func New(hasBlock hashCheckFn, getBlock blockRetrievalFn, headBlock headRetrievalFn, insertChain chainInsertFn, dropPeer peerDropFn) *Downloader
@@ -251,7 +302,7 @@ func New(hasBlock hashCheckFn, getBlock blockRetrievalFn, headBlock headRetrieva
 New creates a new downloader to fetch hashes and blocks from remote peers.
 
 <a name="Downloader.DeliverBlocks"></a>
-### func \(\*Downloader\) [DeliverBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L787>)
+### func \(\*Downloader\) [DeliverBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L827>)
 
 ```go
 func (d *Downloader) DeliverBlocks(id string, blocks []*nom.DetailedMomentum) error
@@ -260,7 +311,7 @@ func (d *Downloader) DeliverBlocks(id string, blocks []*nom.DetailedMomentum) er
 DeliverBlocks injects a new batch of blocks received from a remote node. This is usually invoked through the BlocksMsg by the protocol handler.
 
 <a name="Downloader.DeliverHashes"></a>
-### func \(\*Downloader\) [DeliverHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L809>)
+### func \(\*Downloader\) [DeliverHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L849>)
 
 ```go
 func (d *Downloader) DeliverHashes(id string, hashes []types.Hash) error
@@ -269,7 +320,7 @@ func (d *Downloader) DeliverHashes(id string, hashes []types.Hash) error
 DeliverHashes injects a new batch of hashes received from a remote node into the download schedule. This is usually invoked through the BlockHashesMsg by the protocol handler.
 
 <a name="Downloader.Has"></a>
-### func \(\*Downloader\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L299>)
+### func \(\*Downloader\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L339>)
 
 ```go
 func (d *Downloader) Has(hash types.Hash) bool
@@ -278,7 +329,7 @@ func (d *Downloader) Has(hash types.Hash) bool
 Has checks if the downloader knows about a particular hash, meaning that its either already downloaded of pending retrieval.
 
 <a name="Downloader.RegisterPeer"></a>
-### func \(\*Downloader\) [RegisterPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L201>)
+### func \(\*Downloader\) [RegisterPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L241>)
 
 ```go
 func (d *Downloader) RegisterPeer(id string, version int, head types.Hash, getRelHashes relativeHashFetcherFn, getAbsHashes absoluteHashFetcherFn, getBlocks blockFetcherFn) error
@@ -287,7 +338,7 @@ func (d *Downloader) RegisterPeer(id string, version int, head types.Hash, getRe
 RegisterPeer injects a new download peer into the set of block source to be used for fetching hashes and blocks from.
 
 <a name="Downloader.Stats"></a>
-### func \(\*Downloader\) [Stats](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L172>)
+### func \(\*Downloader\) [Stats](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L212>)
 
 ```go
 func (d *Downloader) Stats() (pending int, cached int, importing int, estimate time.Duration)
@@ -296,7 +347,7 @@ func (d *Downloader) Stats() (pending int, cached int, importing int, estimate t
 Stats retrieves the current status of the downloader.
 
 <a name="Downloader.Synchronise"></a>
-### func \(\*Downloader\) [Synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L229>)
+### func \(\*Downloader\) [Synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L269>)
 
 ```go
 func (d *Downloader) Synchronise(id string, head types.Hash, td uint64)
@@ -305,7 +356,7 @@ func (d *Downloader) Synchronise(id string, head types.Hash, td uint64)
 Synchronise tries to sync up our local block chain with a remote peer, both adding various sanity checks as well as wrapping it with various log entries.
 
 <a name="Downloader.Synchronising"></a>
-### func \(\*Downloader\) [Synchronising](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L195>)
+### func \(\*Downloader\) [Synchronising](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L235>)
 
 ```go
 func (d *Downloader) Synchronising() bool
@@ -314,7 +365,7 @@ func (d *Downloader) Synchronising() bool
 Synchronising returns whether the downloader is currently retrieving blocks.
 
 <a name="Downloader.Terminate"></a>
-### func \(\*Downloader\) [Terminate](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L365>)
+### func \(\*Downloader\) [Terminate](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L405>)
 
 ```go
 func (d *Downloader) Terminate()
@@ -323,7 +374,7 @@ func (d *Downloader) Terminate()
 Terminate interrupts the downloader, canceling all pending operations.
 
 <a name="Downloader.UnregisterPeer"></a>
-### func \(\*Downloader\) [UnregisterPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L218>)
+### func \(\*Downloader\) [UnregisterPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L258>)
 
 ```go
 func (d *Downloader) UnregisterPeer(id string) error
@@ -332,7 +383,7 @@ func (d *Downloader) UnregisterPeer(id string) error
 UnregisterPeer remove a peer from the known list, preventing any action from the specified peer.
 
 <a name="Downloader.cancel"></a>
-### func \(\*Downloader\) [cancel](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L347>)
+### func \(\*Downloader\) [cancel](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L387>)
 
 ```go
 func (d *Downloader) cancel()
@@ -341,7 +392,7 @@ func (d *Downloader) cancel()
 cancel cancels all of the operations and resets the queue. It returns true if the cancel operation was completed.
 
 <a name="Downloader.fetchBlocks"></a>
-### func \(\*Downloader\) [fetchBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L559>)
+### func \(\*Downloader\) [fetchBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L599>)
 
 ```go
 func (d *Downloader) fetchBlocks(from uint64) error
@@ -350,7 +401,7 @@ func (d *Downloader) fetchBlocks(from uint64) error
 fetchBlocks iteratively downloads the scheduled hashes, taking any available peers, reserving a chunk of blocks for each, waiting for delivery and also periodically checking for timeouts.
 
 <a name="Downloader.fetchHashes"></a>
-### func \(\*Downloader\) [fetchHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L486>)
+### func \(\*Downloader\) [fetchHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L526>)
 
 ```go
 func (d *Downloader) fetchHashes(p *peer, td uint64, from uint64) error
@@ -359,7 +410,7 @@ func (d *Downloader) fetchHashes(p *peer, td uint64, from uint64) error
 fetchHashes keeps retrieving hashes from the requested number, until no more are returned, potentially throttling on the way.
 
 <a name="Downloader.findAncestor"></a>
-### func \(\*Downloader\) [findAncestor](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L376>)
+### func \(\*Downloader\) [findAncestor](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L416>)
 
 ```go
 func (d *Downloader) findAncestor(p *peer) (uint64, error)
@@ -368,7 +419,7 @@ func (d *Downloader) findAncestor(p *peer) (uint64, error)
 findAncestor tries to locate the common ancestor block of the local chain and a remote peers blockchain. In the general case when our node was in sync and on the correct chain, checking the top N blocks should already get us a match. In the rare scenario when we ended up on a long soft fork \(i.e. none of the head blocks match\), we do a binary search to find the common ancestor.
 
 <a name="Downloader.process"></a>
-### func \(\*Downloader\) [process](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L721>)
+### func \(\*Downloader\) [process](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L761>)
 
 ```go
 func (d *Downloader) process()
@@ -387,7 +438,7 @@ The algorithmic flow is as follows:
 - This step is important: it handles a potential race condition between checking for no more work, and releasing the processing "mutex". In between these state changes, a block may have arrived, but a processing attempt denied, so we need to re\-enter to ensure the block isn't left to idle in the cache.
 
 <a name="Downloader.syncWithPeer"></a>
-### func \(\*Downloader\) [syncWithPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L305>)
+### func \(\*Downloader\) [syncWithPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L345>)
 
 ```go
 func (d *Downloader) syncWithPeer(p *peer, hash types.Hash, td uint64) (err error)
@@ -396,7 +447,7 @@ func (d *Downloader) syncWithPeer(p *peer, hash types.Hash, td uint64) (err erro
 syncWithPeer starts a block synchronization based on the hash chain from the specified peer and head hash.
 
 <a name="Downloader.synchronise"></a>
-### func \(\*Downloader\) [synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L254>)
+### func \(\*Downloader\) [synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L294>)
 
 ```go
 func (d *Downloader) synchronise(id string, hash types.Hash, td uint64) error
@@ -405,18 +456,18 @@ func (d *Downloader) synchronise(id string, hash types.Hash, td uint64) error
 synchronise will select the peer and use it for synchronising. If an empty string is given it will use the best peer possible and synchronize if it's TD is higher than our own. If any of the checks fail an error will be returned. This method is synchronous
 
 <a name="FailedEvent"></a>
-## type [FailedEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L21>)
+## type [FailedEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L27>)
 
-
+FailedEvent is emitted when a sync run fails — Err carries the underlying cause.
 
 ```go
 type FailedEvent struct{ Err error }
 ```
 
 <a name="StartEvent"></a>
-## type [StartEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L20>)
+## type [StartEvent](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/events.go#L23>)
 
-
+StartEvent is emitted when a sync run begins.
 
 ```go
 type StartEvent struct{}
@@ -441,7 +492,7 @@ type blockFetcherFn func([]types.Hash) error
 ```
 
 <a name="blockPack"></a>
-## type [blockPack](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L89-L92>)
+## type [blockPack](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L113-L116>)
 
 
 
@@ -453,7 +504,7 @@ type blockPack struct {
 ```
 
 <a name="blockRetrievalFn"></a>
-## type [blockRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L78>)
+## type [blockRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L102>)
 
 blockRetrievalFn is a callback type for retrieving a block from the local chain.
 
@@ -462,7 +513,7 @@ type blockRetrievalFn func(types.Hash) *nom.DetailedMomentum
 ```
 
 <a name="chainInsertFn"></a>
-## type [chainInsertFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L84>)
+## type [chainInsertFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L108>)
 
 chainInsertFn is a callback type to insert a batch of blocks into the local chain.
 
@@ -471,7 +522,7 @@ type chainInsertFn func([]*nom.DetailedMomentum) (int, error)
 ```
 
 <a name="crossCheck"></a>
-## type [crossCheck](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L99-L102>)
+## type [crossCheck](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L123-L126>)
 
 
 
@@ -483,20 +534,24 @@ type crossCheck struct {
 ```
 
 <a name="fetchRequest"></a>
-## type [fetchRequest](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L44-L48>)
+## type [fetchRequest](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L47-L55>)
 
-fetchRequest is a currently running block retrieval operation.
+fetchRequest is a currently\-running block\-retrieval operation. Tracks which peer is on the hook for which hashes and when the request was issued \(so the cross\-check / TTL machinery can time it out\).
 
 ```go
 type fetchRequest struct {
-    Peer   *peer              // Peer to which the request was sent
-    Hashes map[types.Hash]int // Requested hashes with their insertion index (priority)
-    Time   time.Time          // Time when the request was made
+    // Peer is the peer to which the request was sent.
+    Peer *peer
+    // Hashes is the requested hash set, mapped to insertion index
+    // (priority).
+    Hashes map[types.Hash]int
+    // Time is when the request was made.
+    Time time.Time
 }
 ```
 
 <a name="hashCheckFn"></a>
-## type [hashCheckFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L75>)
+## type [hashCheckFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L99>)
 
 hashCheckFn is a callback type for verifying a hash's presence in the local chain.
 
@@ -505,7 +560,7 @@ type hashCheckFn func(types.Hash) bool
 ```
 
 <a name="hashPack"></a>
-## type [hashPack](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L94-L97>)
+## type [hashPack](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L118-L121>)
 
 
 
@@ -517,7 +572,7 @@ type hashPack struct {
 ```
 
 <a name="headRetrievalFn"></a>
-## type [headRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L81>)
+## type [headRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L105>)
 
 headRetrievalFn is a callback type for retrieving the head block from the local chain.
 
@@ -526,33 +581,50 @@ type headRetrievalFn func() *nom.Momentum
 ```
 
 <a name="peer"></a>
-## type [peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L46-L63>)
+## type [peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L50-L84>)
 
-peer represents an active peer from which hashes and blocks are retrieved.
+peer represents an active peer from which hashes and blocks are retrieved. Tracks the peer's claimed head, an idle/active flag \(so the scheduler does not double\-fetch\), a simple reputation score, and a per\-peer capacity that the scheduler ramps up or down based on response speed \(blockSoftTTL is the threshold\).
 
 ```go
 type peer struct {
-    id   string     // Unique identifier of the peer
-    head types.Hash // Hash of the peers latest known block
+    // id is the unique identifier of the peer.
+    id  string
+    // head is the hash of the peer's latest known block.
+    head types.Hash
 
-    idle int32 // Current activity state of the peer (idle = 0, active = 1)
-    rep  int32 // Simple peer reputation
+    // idle is the current activity state of the peer
+    // (idle = 0, active = 1). Manipulated atomically.
+    idle int32
+    // rep is the simple peer reputation score.
+    rep int32
 
-    capacity int32     // Number of blocks allowed to fetch per request
-    started  time.Time // Time instance when the last fetch was started
+    // capacity is the number of blocks allowed to fetch per
+    // request — adjusts dynamically with response timing.
+    capacity int32
+    // started is the time instance when the last fetch was started.
+    started time.Time
 
-    ignored *set.Set // Set of hashes not to request (didn't have previously)
+    // ignored is the set of hashes not to request (didn't have
+    // previously, do not re-request).
+    ignored *set.Set
 
-    getRelHashes relativeHashFetcherFn // Method to retrieve a batch of hashes from an origin hash
-    getAbsHashes absoluteHashFetcherFn // Method to retrieve a batch of hashes from an absolute position
-    getBlocks    blockFetcherFn        // Method to retrieve a batch of blocks
+    // getRelHashes retrieves a batch of hashes from an origin hash.
+    getRelHashes relativeHashFetcherFn
+    // getAbsHashes retrieves a batch of hashes from an absolute
+    // position (used when the peer supports the
+    // GetBlockHashesFromNumber message).
+    getAbsHashes absoluteHashFetcherFn
+    // getBlocks retrieves a batch of blocks.
+    getBlocks blockFetcherFn
 
-    version int // Eth protocol version number to switch strategies
+    // version is the eth-derived protocol version, used to switch
+    // strategies between supported variants.
+    version int
 }
 ```
 
 <a name="newPeer"></a>
-### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L67>)
+### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L88>)
 
 ```go
 func newPeer(id string, version int, head types.Hash, getRelHashes relativeHashFetcherFn, getAbsHashes absoluteHashFetcherFn, getBlocks blockFetcherFn) *peer
@@ -561,7 +633,7 @@ func newPeer(id string, version int, head types.Hash, getRelHashes relativeHashF
 newPeer create a new downloader peer, with specific hash and block retrieval mechanisms.
 
 <a name="peer.Capacity"></a>
-### func \(\*peer\) [Capacity](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L137>)
+### func \(\*peer\) [Capacity](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L158>)
 
 ```go
 func (p *peer) Capacity() int
@@ -570,7 +642,7 @@ func (p *peer) Capacity() int
 Capacity retrieves the peers block download allowance based on its previously discovered bandwidth capacity.
 
 <a name="peer.Demote"></a>
-### func \(\*peer\) [Demote](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L147>)
+### func \(\*peer\) [Demote](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L168>)
 
 ```go
 func (p *peer) Demote()
@@ -579,7 +651,7 @@ func (p *peer) Demote()
 Demote decreases the peer's reputation or leaves it at 0.
 
 <a name="peer.Fetch"></a>
-### func \(\*peer\) [Fetch](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L88>)
+### func \(\*peer\) [Fetch](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L109>)
 
 ```go
 func (p *peer) Fetch(request *fetchRequest) error
@@ -588,7 +660,7 @@ func (p *peer) Fetch(request *fetchRequest) error
 Fetch sends a block retrieval request to the remote peer.
 
 <a name="peer.Promote"></a>
-### func \(\*peer\) [Promote](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L142>)
+### func \(\*peer\) [Promote](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L163>)
 
 ```go
 func (p *peer) Promote()
@@ -597,7 +669,7 @@ func (p *peer) Promote()
 Promote increases the peer's reputation.
 
 <a name="peer.Reset"></a>
-### func \(\*peer\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L81>)
+### func \(\*peer\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L102>)
 
 ```go
 func (p *peer) Reset()
@@ -606,7 +678,7 @@ func (p *peer) Reset()
 Reset clears the internal state of a peer entity.
 
 <a name="peer.SetIdle"></a>
-### func \(\*peer\) [SetIdle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L108>)
+### func \(\*peer\) [SetIdle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L129>)
 
 ```go
 func (p *peer) SetIdle()
@@ -615,7 +687,7 @@ func (p *peer) SetIdle()
 SetIdle sets the peer to idle, allowing it to execute new retrieval requests. Its block retrieval allowance will also be updated either up\- or downwards, depending on whether the previous fetch completed in time or not.
 
 <a name="peer.String"></a>
-### func \(\*peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L161>)
+### func \(\*peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L182>)
 
 ```go
 func (p *peer) String() string
@@ -624,7 +696,7 @@ func (p *peer) String() string
 String implements fmt.Stringer.
 
 <a name="peerDropFn"></a>
-## type [peerDropFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L87>)
+## type [peerDropFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/downloader.go#L111>)
 
 peerDropFn is a callback type for dropping a peer detected as malicious.
 
@@ -633,7 +705,7 @@ type peerDropFn func(id string)
 ```
 
 <a name="peerSet"></a>
-## type [peerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L171-L174>)
+## type [peerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L192-L195>)
 
 peerSet represents the collection of active peer participating in the block download procedure.
 
@@ -645,7 +717,7 @@ type peerSet struct {
 ```
 
 <a name="newPeerSet"></a>
-### func [newPeerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L177>)
+### func [newPeerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L198>)
 
 ```go
 func newPeerSet() *peerSet
@@ -654,7 +726,7 @@ func newPeerSet() *peerSet
 newPeerSet creates a new peer set top track the active download sources.
 
 <a name="peerSet.AllPeers"></a>
-### func \(\*peerSet\) [AllPeers](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L237>)
+### func \(\*peerSet\) [AllPeers](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L258>)
 
 ```go
 func (ps *peerSet) AllPeers() []*peer
@@ -663,7 +735,7 @@ func (ps *peerSet) AllPeers() []*peer
 AllPeers retrieves a flat list of all the peers within the set.
 
 <a name="peerSet.IdlePeers"></a>
-### func \(\*peerSet\) [IdlePeers](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L250>)
+### func \(\*peerSet\) [IdlePeers](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L271>)
 
 ```go
 func (ps *peerSet) IdlePeers() []*peer
@@ -672,7 +744,7 @@ func (ps *peerSet) IdlePeers() []*peer
 IdlePeers retrieves a flat list of all the currently idle peers within the active peer set, ordered by their reputation.
 
 <a name="peerSet.Len"></a>
-### func \(\*peerSet\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L229>)
+### func \(\*peerSet\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L250>)
 
 ```go
 func (ps *peerSet) Len() int
@@ -681,7 +753,7 @@ func (ps *peerSet) Len() int
 Len returns if the current number of peers in the set.
 
 <a name="peerSet.Peer"></a>
-### func \(\*peerSet\) [Peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L221>)
+### func \(\*peerSet\) [Peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L242>)
 
 ```go
 func (ps *peerSet) Peer(id string) *peer
@@ -690,7 +762,7 @@ func (ps *peerSet) Peer(id string) *peer
 Peer retrieves the registered peer with the given id.
 
 <a name="peerSet.Register"></a>
-### func \(\*peerSet\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L196>)
+### func \(\*peerSet\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L217>)
 
 ```go
 func (ps *peerSet) Register(p *peer) error
@@ -699,7 +771,7 @@ func (ps *peerSet) Register(p *peer) error
 Register injects a new peer into the working set, or returns an error if the peer is already known.
 
 <a name="peerSet.Reset"></a>
-### func \(\*peerSet\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L185>)
+### func \(\*peerSet\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L206>)
 
 ```go
 func (ps *peerSet) Reset()
@@ -708,7 +780,7 @@ func (ps *peerSet) Reset()
 Reset iterates over the current peer set, and resets each of the known peers to prepare for a next batch of block retrieval.
 
 <a name="peerSet.Unregister"></a>
-### func \(\*peerSet\) [Unregister](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L209>)
+### func \(\*peerSet\) [Unregister](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/peer.go#L230>)
 
 ```go
 func (ps *peerSet) Unregister(id string) error
@@ -717,28 +789,41 @@ func (ps *peerSet) Unregister(id string) error
 Unregister removes a remote peer from the active set, disabling any further actions to/from that particular entity.
 
 <a name="queue"></a>
-## type [queue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L51-L63>)
+## type [queue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L65-L88>)
 
-queue represents hashes that are either need fetching or are being fetched
+queue is the download scheduler: it tracks every hash known to be missing locally \(split into "pending fetch" and "already fetched but not yet delivered to the chain"\), prioritizes them by insertion order, and arbitrates which peer fetches which batch.
+
+Concurrency: every public method takes lock; the queue is safe for concurrent use across the downloader's goroutines.
 
 ```go
 type queue struct {
-    hashPool    map[types.Hash]int // Pending hashes, mapping to their insertion index (priority)
-    hashQueue   *prque.Prque       // Priority queue of the block hashes to fetch
-    hashCounter int                // Counter indexing the added hashes to ensure retrieval order
+    // hashPool is the set of pending hashes mapped to insertion
+    // index (priority).
+    hashPool map[types.Hash]int
+    // hashQueue is the priority queue of the block hashes to fetch.
+    hashQueue *prque.Prque
+    // hashCounter is the counter indexing the added hashes to
+    // ensure retrieval order.
+    hashCounter int
 
-    pendPool map[string]*fetchRequest // Currently pending block retrieval operations
+    // pendPool tracks currently pending block-retrieval operations
+    // keyed by peer id.
+    pendPool map[string]*fetchRequest
 
-    blockPool   map[types.Hash]uint64 // Hash-set of the downloaded data blocks, mapping to cache indexes
-    blockCache  []*Block              // Downloaded but not yet delivered blocks
-    blockOffset uint64                // Offset of the first cached block in the block-chain
+    // blockPool maps downloaded block hashes to their cache index.
+    blockPool map[types.Hash]uint64
+    // blockCache holds downloaded but not-yet-delivered blocks.
+    blockCache []*Block
+    // blockOffset is the offset of the first cached block in the
+    // block chain (so cache index = blockOffset + slotIndex).
+    blockOffset uint64
 
     lock sync.RWMutex
 }
 ```
 
 <a name="newQueue"></a>
-### func [newQueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L66>)
+### func [newQueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L91>)
 
 ```go
 func newQueue() *queue
@@ -747,7 +832,7 @@ func newQueue() *queue
 newQueue creates a new download queue for scheduling block retrieval.
 
 <a name="queue.Cancel"></a>
-### func \(\*queue\) [Cancel](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L283>)
+### func \(\*queue\) [Cancel](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L308>)
 
 ```go
 func (q *queue) Cancel(request *fetchRequest)
@@ -756,7 +841,7 @@ func (q *queue) Cancel(request *fetchRequest)
 Cancel aborts a fetch request, returning all pending hashes to the queue.
 
 <a name="queue.Deliver"></a>
-### func \(\*queue\) [Deliver](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L317>)
+### func \(\*queue\) [Deliver](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L342>)
 
 ```go
 func (q *queue) Deliver(id string, blocks []*nom.DetailedMomentum) (err error)
@@ -765,7 +850,7 @@ func (q *queue) Deliver(id string, blocks []*nom.DetailedMomentum) (err error)
 Deliver injects a block retrieval response into the download queue.
 
 <a name="queue.Expire"></a>
-### func \(\*queue\) [Expire](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L295>)
+### func \(\*queue\) [Expire](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L320>)
 
 ```go
 func (q *queue) Expire(timeout time.Duration) []string
@@ -774,7 +859,7 @@ func (q *queue) Expire(timeout time.Duration) []string
 Expire checks for in flight requests that exceeded a timeout allowance, canceling them and returning the responsible peers for penalization.
 
 <a name="queue.GetBlock"></a>
-### func \(\*queue\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L187>)
+### func \(\*queue\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L212>)
 
 ```go
 func (q *queue) GetBlock(hash types.Hash) *Block
@@ -783,7 +868,7 @@ func (q *queue) GetBlock(hash types.Hash) *Block
 GetBlock retrieves a downloaded block, or nil if non\-existent.
 
 <a name="queue.GetHeadBlock"></a>
-### func \(\*queue\) [GetHeadBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L176>)
+### func \(\*queue\) [GetHeadBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L201>)
 
 ```go
 func (q *queue) GetHeadBlock() *Block
@@ -792,7 +877,7 @@ func (q *queue) GetHeadBlock() *Block
 GetHeadBlock retrieves the first block from the cache, or nil if it hasn't been downloaded yet \(or simply non existent\).
 
 <a name="queue.Has"></a>
-### func \(\*queue\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L133>)
+### func \(\*queue\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L158>)
 
 ```go
 func (q *queue) Has(hash types.Hash) bool
@@ -801,7 +886,7 @@ func (q *queue) Has(hash types.Hash) bool
 Has checks if a hash is within the download queue or not.
 
 <a name="queue.InFlight"></a>
-### func \(\*queue\) [InFlight](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L110>)
+### func \(\*queue\) [InFlight](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L135>)
 
 ```go
 func (q *queue) InFlight() int
@@ -810,7 +895,7 @@ func (q *queue) InFlight() int
 InFlight retrieves the number of fetch requests currently in flight.
 
 <a name="queue.Insert"></a>
-### func \(\*queue\) [Insert](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L148>)
+### func \(\*queue\) [Insert](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L173>)
 
 ```go
 func (q *queue) Insert(hashes []types.Hash, fifo bool) []types.Hash
@@ -819,7 +904,7 @@ func (q *queue) Insert(hashes []types.Hash, fifo bool) []types.Hash
 Insert adds a set of hashes for the download queue for scheduling, returning the new hashes encountered.
 
 <a name="queue.Pending"></a>
-### func \(\*queue\) [Pending](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L102>)
+### func \(\*queue\) [Pending](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L127>)
 
 ```go
 func (q *queue) Pending() int
@@ -828,7 +913,7 @@ func (q *queue) Pending() int
 Pending retrieves the number of hashes pending for retrieval.
 
 <a name="queue.Prepare"></a>
-### func \(\*queue\) [Prepare](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L373>)
+### func \(\*queue\) [Prepare](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L398>)
 
 ```go
 func (q *queue) Prepare(offset uint64)
@@ -837,7 +922,7 @@ func (q *queue) Prepare(offset uint64)
 Prepare configures the block cache offset to allow accepting inbound blocks.
 
 <a name="queue.Reserve"></a>
-### func \(\*queue\) [Reserve](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L231>)
+### func \(\*queue\) [Reserve](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L256>)
 
 ```go
 func (q *queue) Reserve(p *peer, count int) *fetchRequest
@@ -846,7 +931,7 @@ func (q *queue) Reserve(p *peer, count int) *fetchRequest
 Reserve reserves a set of hashes for the given peer, skipping any previously failed download.
 
 <a name="queue.Reset"></a>
-### func \(\*queue\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L77>)
+### func \(\*queue\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L102>)
 
 ```go
 func (q *queue) Reset()
@@ -855,7 +940,7 @@ func (q *queue) Reset()
 Reset clears out the queue contents.
 
 <a name="queue.Size"></a>
-### func \(\*queue\) [Size](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L94>)
+### func \(\*queue\) [Size](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L119>)
 
 ```go
 func (q *queue) Size() (int, int)
@@ -864,7 +949,7 @@ func (q *queue) Size() (int, int)
 Size retrieves the number of hashes in the queue, returning separately for pending and already downloaded.
 
 <a name="queue.TakeBlocks"></a>
-### func \(\*queue\) [TakeBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L204>)
+### func \(\*queue\) [TakeBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L229>)
 
 ```go
 func (q *queue) TakeBlocks() []*Block
@@ -873,7 +958,7 @@ func (q *queue) TakeBlocks() []*Block
 TakeBlocks retrieves and permanently removes a batch of blocks from the cache.
 
 <a name="queue.Throttle"></a>
-### func \(\*queue\) [Throttle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L119>)
+### func \(\*queue\) [Throttle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/downloader/queue.go#L144>)
 
 ```go
 func (q *queue) Throttle() bool

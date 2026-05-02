@@ -35,21 +35,45 @@ const (
 	eth61 = 61 // Constant to check for new protocol support
 )
 
+// log is the package-level logger for the downloader subsystem.
+//
+// The exported request-size and timeout knobs below tune the
+// hash-walk and block-fetch phases. They are vars (not consts)
+// so tests can shrink them.
 var (
 	log = common.DownloaderLogger
 
-	MinHashFetch  = 512 // Minimum amount of hashes to not consider a peer stalling
-	MaxHashFetch  = 512 // Amount of hashes to be fetched per retrieval request
-	MaxBlockFetch = 128 // Amount of blocks to be fetched per retrieval request
+	// MinHashFetch is the minimum amount of hashes a peer must
+	// return before it is not considered stalling.
+	MinHashFetch = 512
+	// MaxHashFetch is the amount of hashes to be fetched per
+	// retrieval request.
+	MaxHashFetch = 512
+	// MaxBlockFetch is the amount of blocks to be fetched per
+	// retrieval request.
+	MaxBlockFetch = 128
 
-	hashTTL         = 5 * time.Second  // Time it takes for a hash request to time out
-	blockSoftTTL    = 3 * time.Second  // Request completion threshold for increasing or decreasing a peer's bandwidth
-	blockHardTTL    = 3 * blockSoftTTL // Maximum time allowance before a block request is considered expired
-	crossCheckCycle = time.Second      // Period after which to check for expired cross checks
+	// hashTTL is the time it takes for a hash request to time out.
+	hashTTL = 5 * time.Second
+	// blockSoftTTL is the request completion threshold for
+	// increasing or decreasing a peer's bandwidth.
+	blockSoftTTL = 3 * time.Second
+	// blockHardTTL is the maximum time allowance before a block
+	// request is considered expired.
+	blockHardTTL = 3 * blockSoftTTL
+	// crossCheckCycle is the period after which to check for
+	// expired cross checks.
+	crossCheckCycle = time.Second
 
-	maxQueuedHashes = 256 * 1024 // Maximum number of hashes to queue for import (DOS protection)
-	maxBannedHashes = 4096       // Number of bannable hashes before phasing old ones out
-	maxBlockProcess = 256        // Number of blocks to import at once into the chain
+	// maxQueuedHashes is the maximum number of hashes to queue for
+	// import (DOS protection).
+	maxQueuedHashes = 256 * 1024
+	// maxBannedHashes is the number of bannable hashes before
+	// phasing old ones out.
+	maxBannedHashes = 4096
+	// maxBlockProcess is the number of blocks to import at once
+	// into the chain.
+	maxBlockProcess = 256
 )
 
 var (
@@ -101,11 +125,27 @@ type crossCheck struct {
 	parent types.Hash
 }
 
+// Downloader is the bulk-sync chain catch-up engine. Given a peer
+// announcement of a longer / heavier chain, the downloader walks
+// the hash chain back to a common ancestor, requests the missing
+// blocks in parallel from active peers, validates them via the
+// cross-check mechanism, and inserts them into the local chain
+// in batches.
+//
+// Concurrency: the downloader runs three goroutines internally
+// (hash fetcher, block fetcher, processor), arbitrated through
+// channels and the [queue] scheduler. The exported entry points
+// are safe to call from any goroutine.
 type Downloader struct {
-	queue  *queue                     // Scheduler for selecting the hashes to download
-	peers  *peerSet                   // Set of active peers from which download can proceed
-	checks map[types.Hash]*crossCheck // Pending cross checks to verify a hash chain
-	banned *set.Set                   // Set of hashes we've received and banned
+	// queue is the scheduler for selecting the hashes to download.
+	queue *queue
+	// peers is the set of active peers from which download can
+	// proceed.
+	peers *peerSet
+	// checks holds pending cross checks to verify a hash chain.
+	checks map[types.Hash]*crossCheck
+	// banned holds hashes we've received and banned.
+	banned *set.Set
 
 	interrupt int32 // Atomic boolean to signal termination
 

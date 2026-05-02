@@ -8,12 +8,19 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
+// broadcaster is the [Broadcaster] implementation: a thin glue
+// layer that commits self-produced blocks via the chain insert
+// lock and then forwards them to the protocol manager for peer
+// announcement.
 type broadcaster struct {
 	log      common.Logger
 	chain    chain.Chain
 	protocol *ProtocolManager
 }
 
+// NewBroadcaster wires a [Broadcaster] over the chain and the
+// supplied protocol manager. The pillar producer and the RPC
+// signing path call into the returned handle.
 func NewBroadcaster(chain chain.Chain, protocol *ProtocolManager) Broadcaster {
 	return &broadcaster{
 		log:      common.ProtocolLogger.New("submodule", "broadcaster"),
@@ -22,6 +29,7 @@ func NewBroadcaster(chain chain.Chain, protocol *ProtocolManager) Broadcaster {
 	}
 }
 
+// SyncInfo proxies to the protocol manager's sync status.
 func (b *broadcaster) SyncInfo() *SyncInfo {
 	return b.protocol.SyncInfo()
 }

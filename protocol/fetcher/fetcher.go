@@ -31,14 +31,34 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// Fetcher tuning constants. arriveTimeout / gatherSlack control
+// the speculative-wait window before requesting an announced block
+// (during which the block might still arrive via natural broadcast);
+// the rest cap per-peer memory and bound how far ahead/behind the
+// fetcher will queue.
 const (
-	arriveTimeout = 500 * time.Millisecond // Time allowance before an announced block is explicitly requested
-	gatherSlack   = 100 * time.Millisecond // Interval used to collate almost-expired announces with fetches
-	fetchTimeout  = 5 * time.Second        // Maximum alloted time to return an explicitly requested block
-	maxUncleDist  = 7                      // Maximum allowed backward distance from the chain head
-	maxQueueDist  = 32                     // Maximum allowed distance from the chain head to queue
-	hashLimit     = 256                    // Maximum number of unique blocks a peer may have announced
-	blockLimit    = 64                     // Maximum number of unique blocks a per may have delivered
+	// arriveTimeout is the time allowance before an announced
+	// block is explicitly requested.
+	arriveTimeout = 500 * time.Millisecond
+	// gatherSlack is the interval used to collate almost-expired
+	// announces with fetches into batches.
+	gatherSlack = 100 * time.Millisecond
+	// fetchTimeout is the maximum allotted time to return an
+	// explicitly requested block.
+	fetchTimeout = 5 * time.Second
+	// maxUncleDist is the maximum allowed backward distance from
+	// the chain head — older announcements are discarded.
+	maxUncleDist = 7
+	// maxQueueDist is the maximum allowed distance from the chain
+	// head to queue — too-far-ahead announcements imply the
+	// downloader, not the fetcher, should handle them.
+	maxQueueDist = 32
+	// hashLimit is the maximum number of unique blocks a peer may
+	// have announced (DOS protection).
+	hashLimit = 256
+	// blockLimit is the maximum number of unique blocks a peer
+	// may have delivered (DOS protection).
+	blockLimit = 64
 )
 
 var (
@@ -67,24 +87,38 @@ type chainInsertFn func([]*nom.DetailedMomentum) (int, error)
 // peerDropFn is a callback type for dropping a peer detected as malicious.
 type peerDropFn func(id string)
 
-// announce is the hash notification of the availability of a new block in the
-// network.
+// announce is the hash notification of the availability of a new
+// block in the network. Multiple peers may announce the same hash
+// — the fetcher coalesces these and only fetches once.
 type announce struct {
-	hash types.Hash // Hash of the block being announced
-	time time.Time  // Timestamp of the announcement
+	// hash of the block being announced.
+	hash types.Hash
+	// time the announcement was received.
+	time time.Time
 
-	origin string           // Header of the peer originating the notification
-	fetch  blockRequesterFn // Fetcher function to retrieve
+	// origin is the id of the peer originating the notification.
+	origin string
+	// fetch is the per-peer callback to retrieve the block.
+	fetch blockRequesterFn
 }
 
-// inject represents a schedules import operation.
+// inject represents a scheduled import operation — a fully
+// retrieved block waiting to be inserted into the chain.
 type inject struct {
 	origin   string
 	detailed *nom.DetailedMomentum
 }
 
-// Fetcher is responsible for accumulating block announcements from various peers
-// and scheduling them for retrieval.
+// Fetcher is responsible for accumulating block announcements
+// from various peers and scheduling them for retrieval. It is
+// the announce-driven counterpart to the bulk-pull
+// [github.com/zenon-network/go-zenon/protocol/downloader] —
+// optimized for the latency-sensitive case where a peer just
+// produced a single block and the local node should fetch it
+// promptly to keep up with the chain head.
+//
+// Concurrency: a single goroutine drives the [Fetcher.loop] state
+// machine; public methods enqueue work via channels.
 type Fetcher struct {
 	// Various event channels
 	notify chan *announce
@@ -118,7 +152,11 @@ type Fetcher struct {
 	wg sync.WaitGroup
 }
 
-// New creates a block fetcher to retrieve blocks based on hash announcements.
+// New creates a block fetcher to retrieve blocks based on hash
+// announcements. The callback parameters wire the fetcher into
+// the chain (getBlock, chainHeight, insertChain), the protocol
+// manager (broadcastBlock, dropPeer), and the verifier
+// (validateBlock).
 func New(getBlock blockRetrievalFn, validateBlock blockValidatorFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertChain chainInsertFn, dropPeer peerDropFn) *Fetcher {
 	return &Fetcher{
 		notify:         make(chan *announce),

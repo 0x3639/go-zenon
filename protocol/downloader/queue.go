@@ -40,24 +40,49 @@ var (
 	errStaleDelivery    = errors.New("stale delivery")
 )
 
-// fetchRequest is a currently running block retrieval operation.
+// fetchRequest is a currently-running block-retrieval operation.
+// Tracks which peer is on the hook for which hashes and when the
+// request was issued (so the cross-check / TTL machinery can time
+// it out).
 type fetchRequest struct {
-	Peer   *peer              // Peer to which the request was sent
-	Hashes map[types.Hash]int // Requested hashes with their insertion index (priority)
-	Time   time.Time          // Time when the request was made
+	// Peer is the peer to which the request was sent.
+	Peer *peer
+	// Hashes is the requested hash set, mapped to insertion index
+	// (priority).
+	Hashes map[types.Hash]int
+	// Time is when the request was made.
+	Time time.Time
 }
 
-// queue represents hashes that are either need fetching or are being fetched
+// queue is the download scheduler: it tracks every hash known to
+// be missing locally (split into "pending fetch" and "already
+// fetched but not yet delivered to the chain"), prioritizes them
+// by insertion order, and arbitrates which peer fetches which
+// batch.
+//
+// Concurrency: every public method takes lock; the queue is
+// safe for concurrent use across the downloader's goroutines.
 type queue struct {
-	hashPool    map[types.Hash]int // Pending hashes, mapping to their insertion index (priority)
-	hashQueue   *prque.Prque       // Priority queue of the block hashes to fetch
-	hashCounter int                // Counter indexing the added hashes to ensure retrieval order
+	// hashPool is the set of pending hashes mapped to insertion
+	// index (priority).
+	hashPool map[types.Hash]int
+	// hashQueue is the priority queue of the block hashes to fetch.
+	hashQueue *prque.Prque
+	// hashCounter is the counter indexing the added hashes to
+	// ensure retrieval order.
+	hashCounter int
 
-	pendPool map[string]*fetchRequest // Currently pending block retrieval operations
+	// pendPool tracks currently pending block-retrieval operations
+	// keyed by peer id.
+	pendPool map[string]*fetchRequest
 
-	blockPool   map[types.Hash]uint64 // Hash-set of the downloaded data blocks, mapping to cache indexes
-	blockCache  []*Block              // Downloaded but not yet delivered blocks
-	blockOffset uint64                // Offset of the first cached block in the block-chain
+	// blockPool maps downloaded block hashes to their cache index.
+	blockPool map[types.Hash]uint64
+	// blockCache holds downloaded but not-yet-delivered blocks.
+	blockCache []*Block
+	// blockOffset is the offset of the first cached block in the
+	// block chain (so cache index = blockOffset + slotIndex).
+	blockOffset uint64
 
 	lock sync.RWMutex
 }

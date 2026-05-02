@@ -10,9 +10,23 @@ Package fetcher retrieves and validates individual blocks announced by peers.
 
 ### Overview
 
-On a peer announcement, fetcher requests the missing block, runs it through the verifier, and hands it to the chain. Bulk catch\-up is handled by [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>).
+The fetcher is the announce\-driven counterpart to the [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>): optimized for the latency\-sensitive case where a peer has just produced a single block and the local node should fetch it promptly to keep up with the chain head.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+On a peer announcement \(\[NewBlockHashesMsg\]\), the fetcher records the announce, waits a brief window \(\[arriveTimeout\] = 500ms\) in case the block arrives via natural broadcast, then explicitly requests it. Validated blocks are inserted via the \[chainInsertFn\] callback, with per\-peer hash and block caps \(\[hashLimit\], \[blockLimit\]\) for DOS protection.
+
+### Concurrency
+
+One goroutine drives the \[Fetcher.loop\] state machine; public methods enqueue work via channels.
+
+### Generated Files
+
+None. fetcher.go carries the original go\-ethereum LGPL\-3.0\+ header.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>) — the parent manager that wires the fetcher to the wire\-protocol loop.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) — handles bulk catch\-up; the fetcher handles individual blocks.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — block model the fetcher inserts.
 
 Package fetcher contains the block announcement based synchonisation.
 
@@ -46,17 +60,32 @@ Package fetcher contains the block announcement based synchonisation.
 
 ## Constants
 
-<a name="arriveTimeout"></a>
+<a name="arriveTimeout"></a>Fetcher tuning constants. arriveTimeout / gatherSlack control the speculative\-wait window before requesting an announced block \(during which the block might still arrive via natural broadcast\); the rest cap per\-peer memory and bound how far ahead/behind the fetcher will queue.
 
 ```go
 const (
-    arriveTimeout = 500 * time.Millisecond // Time allowance before an announced block is explicitly requested
-    gatherSlack   = 100 * time.Millisecond // Interval used to collate almost-expired announces with fetches
-    fetchTimeout  = 5 * time.Second        // Maximum alloted time to return an explicitly requested block
-    maxUncleDist  = 7                      // Maximum allowed backward distance from the chain head
-    maxQueueDist  = 32                     // Maximum allowed distance from the chain head to queue
-    hashLimit     = 256                    // Maximum number of unique blocks a peer may have announced
-    blockLimit    = 64                     // Maximum number of unique blocks a per may have delivered
+    // arriveTimeout is the time allowance before an announced
+    // block is explicitly requested.
+    arriveTimeout = 500 * time.Millisecond
+    // gatherSlack is the interval used to collate almost-expired
+    // announces with fetches into batches.
+    gatherSlack = 100 * time.Millisecond
+    // fetchTimeout is the maximum allotted time to return an
+    // explicitly requested block.
+    fetchTimeout = 5 * time.Second
+    // maxUncleDist is the maximum allowed backward distance from
+    // the chain head — older announcements are discarded.
+    maxUncleDist = 7
+    // maxQueueDist is the maximum allowed distance from the chain
+    // head to queue — too-far-ahead announcements imply the
+    // downloader, not the fetcher, should handle them.
+    maxQueueDist = 32
+    // hashLimit is the maximum number of unique blocks a peer may
+    // have announced (DOS protection).
+    hashLimit = 256
+    // blockLimit is the maximum number of unique blocks a peer
+    // may have delivered (DOS protection).
+    blockLimit = 64
 )
 ```
 
@@ -72,9 +101,11 @@ var (
 ```
 
 <a name="Fetcher"></a>
-## type [Fetcher](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L88-L119>)
+## type [Fetcher](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L122-L153>)
 
-Fetcher is responsible for accumulating block announcements from various peers and scheduling them for retrieval.
+Fetcher is responsible for accumulating block announcements from various peers and scheduling them for retrieval. It is the announce\-driven counterpart to the bulk\-pull [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) — optimized for the latency\-sensitive case where a peer just produced a single block and the local node should fetch it promptly to keep up with the chain head.
+
+Concurrency: a single goroutine drives the \[Fetcher.loop\] state machine; public methods enqueue work via channels.
 
 ```go
 type Fetcher struct {
@@ -112,16 +143,16 @@ type Fetcher struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L122>)
+### func [New](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L160>)
 
 ```go
 func New(getBlock blockRetrievalFn, validateBlock blockValidatorFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertChain chainInsertFn, dropPeer peerDropFn) *Fetcher
 ```
 
-New creates a block fetcher to retrieve blocks based on hash announcements.
+New creates a block fetcher to retrieve blocks based on hash announcements. The callback parameters wire the fetcher into the chain \(getBlock, chainHeight, insertChain\), the protocol manager \(broadcastBlock, dropPeer\), and the verifier \(validateBlock\).
 
 <a name="Fetcher.Enqueue"></a>
-### func \(\*Fetcher\) [Enqueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L177>)
+### func \(\*Fetcher\) [Enqueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L215>)
 
 ```go
 func (f *Fetcher) Enqueue(peer string, block *nom.DetailedMomentum) error
@@ -130,7 +161,7 @@ func (f *Fetcher) Enqueue(peer string, block *nom.DetailedMomentum) error
 Enqueue tries to fill gaps the the fetcher's future import queue.
 
 <a name="Fetcher.Filter"></a>
-### func \(\*Fetcher\) [Filter](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L192>)
+### func \(\*Fetcher\) [Filter](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L230>)
 
 ```go
 func (f *Fetcher) Filter(blocks []*nom.DetailedMomentum) []*nom.DetailedMomentum
@@ -139,7 +170,7 @@ func (f *Fetcher) Filter(blocks []*nom.DetailedMomentum) []*nom.DetailedMomentum
 Filter extracts all the blocks that were explicitly requested by the fetcher, returning those that should be handled differently.
 
 <a name="Fetcher.Notify"></a>
-### func \(\*Fetcher\) [Notify](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L161>)
+### func \(\*Fetcher\) [Notify](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L199>)
 
 ```go
 func (f *Fetcher) Notify(peer string, hash types.Hash, time time.Time, fetcher blockRequesterFn) error
@@ -148,7 +179,7 @@ func (f *Fetcher) Notify(peer string, hash types.Hash, time time.Time, fetcher b
 Notify announces the fetcher of the potential availability of a new block in the network.
 
 <a name="Fetcher.Start"></a>
-### func \(\*Fetcher\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L146>)
+### func \(\*Fetcher\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L184>)
 
 ```go
 func (f *Fetcher) Start()
@@ -157,7 +188,7 @@ func (f *Fetcher) Start()
 Start boots up the announcement based synchoniser, accepting and processing hash notifications and block fetches until termination requested.
 
 <a name="Fetcher.Stop"></a>
-### func \(\*Fetcher\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L154>)
+### func \(\*Fetcher\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L192>)
 
 ```go
 func (f *Fetcher) Stop()
@@ -166,7 +197,7 @@ func (f *Fetcher) Stop()
 Stop terminates the announcement based synchroniser, canceling all pending operations.
 
 <a name="Fetcher.enqueue"></a>
-### func \(\*Fetcher\) [enqueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L381>)
+### func \(\*Fetcher\) [enqueue](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L419>)
 
 ```go
 func (f *Fetcher) enqueue(peer string, detailed *nom.DetailedMomentum)
@@ -175,7 +206,7 @@ func (f *Fetcher) enqueue(peer string, detailed *nom.DetailedMomentum)
 enqueue schedules a new future import operation, if the block to be imported has not yet been seen.
 
 <a name="Fetcher.forgetBlock"></a>
-### func \(\*Fetcher\) [forgetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L485>)
+### func \(\*Fetcher\) [forgetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L523>)
 
 ```go
 func (f *Fetcher) forgetBlock(hash types.Hash)
@@ -184,7 +215,7 @@ func (f *Fetcher) forgetBlock(hash types.Hash)
 forgetBlock removes all traces of a queued block frmo the fetcher's internal state.
 
 <a name="Fetcher.forgetHash"></a>
-### func \(\*Fetcher\) [forgetHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L463>)
+### func \(\*Fetcher\) [forgetHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L501>)
 
 ```go
 func (f *Fetcher) forgetHash(hash types.Hash)
@@ -193,7 +224,7 @@ func (f *Fetcher) forgetHash(hash types.Hash)
 forgetHash removes all traces of a block announcement from the fetcher's internal state.
 
 <a name="Fetcher.insert"></a>
-### func \(\*Fetcher\) [insert](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L413>)
+### func \(\*Fetcher\) [insert](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L451>)
 
 ```go
 func (f *Fetcher) insert(peer string, detailed *nom.DetailedMomentum)
@@ -202,7 +233,7 @@ func (f *Fetcher) insert(peer string, detailed *nom.DetailedMomentum)
 insert spawns a new goroutine to run a block insertion into the chain. If the block's number is at the same height as the current import phase, if updates the phase states accordingly.
 
 <a name="Fetcher.loop"></a>
-### func \(\*Fetcher\) [loop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L218>)
+### func \(\*Fetcher\) [loop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L256>)
 
 ```go
 func (f *Fetcher) loop()
@@ -211,7 +242,7 @@ func (f *Fetcher) loop()
 Loop is the main fetcher loop, checking and processing various notification events.
 
 <a name="Fetcher.reschedule"></a>
-### func \(\*Fetcher\) [reschedule](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L364>)
+### func \(\*Fetcher\) [reschedule](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L402>)
 
 ```go
 func (f *Fetcher) reschedule(fetch *time.Timer)
@@ -220,22 +251,26 @@ func (f *Fetcher) reschedule(fetch *time.Timer)
 reschedule resets the specified fetch timer to the next announce timeout.
 
 <a name="announce"></a>
-## type [announce](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L72-L78>)
+## type [announce](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L93-L103>)
 
-announce is the hash notification of the availability of a new block in the network.
+announce is the hash notification of the availability of a new block in the network. Multiple peers may announce the same hash — the fetcher coalesces these and only fetches once.
 
 ```go
 type announce struct {
-    hash types.Hash // Hash of the block being announced
-    time time.Time  // Timestamp of the announcement
+    // hash of the block being announced.
+    hash types.Hash
+    // time the announcement was received.
+    time time.Time
 
-    origin string           // Header of the peer originating the notification
-    fetch  blockRequesterFn // Fetcher function to retrieve
+    // origin is the id of the peer originating the notification.
+    origin string
+    // fetch is the per-peer callback to retrieve the block.
+    fetch blockRequesterFn
 }
 ```
 
 <a name="blockBroadcasterFn"></a>
-## type [blockBroadcasterFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L59>)
+## type [blockBroadcasterFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L79>)
 
 blockBroadcasterFn is a callback type for broadcasting a block to connected peers.
 
@@ -244,7 +279,7 @@ type blockBroadcasterFn func(block *nom.DetailedMomentum, propagate bool)
 ```
 
 <a name="blockRequesterFn"></a>
-## type [blockRequesterFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L53>)
+## type [blockRequesterFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L73>)
 
 blockRequesterFn is a callback type for sending a block retrieval request.
 
@@ -253,7 +288,7 @@ type blockRequesterFn func([]types.Hash) error
 ```
 
 <a name="blockRetrievalFn"></a>
-## type [blockRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L50>)
+## type [blockRetrievalFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L70>)
 
 blockRetrievalFn is a callback type for retrieving a block from the local chain.
 
@@ -262,7 +297,7 @@ type blockRetrievalFn func(types.Hash) *nom.DetailedMomentum
 ```
 
 <a name="blockValidatorFn"></a>
-## type [blockValidatorFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L56>)
+## type [blockValidatorFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L76>)
 
 blockValidatorFn is a callback type to verify a block's header for fast propagation.
 
@@ -271,7 +306,7 @@ type blockValidatorFn func(block *nom.Momentum, parent *nom.Momentum) error
 ```
 
 <a name="chainHeightFn"></a>
-## type [chainHeightFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L62>)
+## type [chainHeightFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L82>)
 
 chainHeightFn is a callback type to retrieve the current chain height.
 
@@ -280,7 +315,7 @@ type chainHeightFn func() uint64
 ```
 
 <a name="chainInsertFn"></a>
-## type [chainInsertFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L65>)
+## type [chainInsertFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L85>)
 
 chainInsertFn is a callback type to insert a batch of blocks into the local chain.
 
@@ -289,9 +324,9 @@ type chainInsertFn func([]*nom.DetailedMomentum) (int, error)
 ```
 
 <a name="inject"></a>
-## type [inject](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L81-L84>)
+## type [inject](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L107-L110>)
 
-inject represents a schedules import operation.
+inject represents a scheduled import operation — a fully retrieved block waiting to be inserted into the chain.
 
 ```go
 type inject struct {
@@ -301,7 +336,7 @@ type inject struct {
 ```
 
 <a name="peerDropFn"></a>
-## type [peerDropFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L68>)
+## type [peerDropFn](<https://github.com/zenon-network/go-zenon/blob/master/protocol/fetcher/fetcher.go#L88>)
 
 peerDropFn is a callback type for dropping a peer detected as malicious.
 

@@ -20,17 +20,34 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
-// Supported versions of the eth protocol (first is primary).
+// ProtocolVersions lists the supported versions of the eth-derived
+// wire protocol (first is primary).
 var ProtocolVersions = []uint{61}
 
-// Number of implemented message corresponding to different protocol versions.
+// ProtocolLengths is the message-code count for each entry in
+// [ProtocolVersions].
 var ProtocolLengths = []uint64{9}
 
+// ProtocolMaxMsgSize is the maximum cap on the size of a protocol
+// message (10 MiB).
 const (
-	ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
+	ProtocolMaxMsgSize = 10 * 1024 * 1024
 )
 
-// eth protocol message codes
+// Wire-protocol message codes (carried as the message type byte
+// on every framed peer message).
+//
+//   - StatusMsg — protocol handshake.
+//   - NewBlockHashesMsg — peer announces newly produced momentums
+//     by hash so receivers can fetch on demand.
+//   - TxMsg — peer relays unconfirmed account blocks.
+//   - GetBlockHashesMsg / BlockHashesMsg — hash-walk request /
+//     response.
+//   - GetBlocksMsg / BlocksMsg — bulk-block request / response
+//     (used by the downloader).
+//   - NewBlockMsg — peer announces a fully-broadcast new momentum
+//     (with content).
+//   - GetBlockHashesFromNumberMsg — number-keyed hash-walk request.
 const (
 	StatusMsg = iota
 	NewBlockHashesMsg
@@ -43,8 +60,11 @@ const (
 	GetBlockHashesFromNumberMsg
 )
 
+// errCode is the wire-level error discriminator carried in
+// disconnect messages.
 type errCode int
 
+// Wire-level error codes used in disconnect / drop messages.
 const (
 	ErrMsgTooLarge = iota
 	ErrDecode
@@ -74,7 +94,11 @@ var errorToString = map[int]string{
 	ErrSuspendedPeer:           "Suspended peer",
 }
 
-// statusData is the network packet for the status message.
+// statusData is the network packet for the status message — the
+// initial handshake. Two peers consider themselves compatible when
+// (ProtocolVersion, NetworkId, GenesisBlock) all agree; the (TD,
+// CurrentBlock) pair lets each side decide whether the other has a
+// longer / shorter chain.
 type statusData struct {
 	ProtocolVersion uint32
 	NetworkId       uint32

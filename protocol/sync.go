@@ -28,12 +28,19 @@ const (
 	forceSyncCycle = 4 * time.Second // Time interval to force syncs, even if few peers are available
 )
 
+// txsync queues a batch of transactions (account blocks) destined
+// for one peer. The [ProtocolManager.txsyncLoop] goroutine
+// serializes sends across peers so any one send does not block
+// the others.
 type txsync struct {
 	p   *peer
 	txs []*nom.AccountBlock
 }
 
-// syncTransactions starts sending all currently pending transactions to the given peer.
+// syncTransactions starts sending all currently pending
+// transactions (account blocks in the local pool) to the given
+// peer. Used when a new peer joins so it is brought up to speed
+// on uncommitted state.
 func (pm *ProtocolManager) syncTransactions(p *peer) {
 	txs := pm.txpool.GetTransactions()
 	if len(txs) == 0 {

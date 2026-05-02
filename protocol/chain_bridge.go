@@ -14,6 +14,17 @@ import (
 	"github.com/zenon-network/go-zenon/vm"
 )
 
+// chainBridge is the [ChainBridge] implementation: it adapts the
+// chain / consensus / verifier / VM-supervisor stack to the
+// peer-facing API the protocol manager uses.
+//
+// On the read side it exposes momentum / account-block lookups,
+// the genesis identifier, and the (height, hash, genesis hash)
+// status triple used by the protocol handshake. On the write
+// side, [chainBridge.AddAccountBlocks] applies single account
+// blocks via the supervisor, while [chainBridge.InsertChain]
+// commits a contiguous batch of [nom.DetailedMomentum]s — used by
+// the bulk-sync downloader.
 type chainBridge struct {
 	chain      chain.Chain
 	consensus  consensus.Consensus
@@ -21,6 +32,8 @@ type chainBridge struct {
 	supervisor *vm.Supervisor
 }
 
+// NewChainBridge wires a [ChainBridge] over the supplied chain,
+// consensus, verifier, and VM supervisor handles.
 func NewChainBridge(chain chain.Chain, consensus consensus.Consensus, verifier verifier.Verifier, supervisor *vm.Supervisor) ChainBridge {
 	return chainBridge{
 		chain:      chain,
@@ -30,6 +43,10 @@ func NewChainBridge(chain chain.Chain, consensus consensus.Consensus, verifier v
 	}
 }
 
+// AddAccountBlocks runs each block through the VM supervisor and
+// commits it under the chain insert lock. Skips blocks whose
+// patch is already known and ignores [nom.BlockTypeContractSend]
+// (those are nested inside their parent receive).
 func (c chainBridge) AddAccountBlocks(blocks []*nom.AccountBlock) error {
 	insert := c.chain.AcquireInsert(fmt.Sprintf("Insert blocks in chain-bridge. Len:%v", len(blocks)))
 	defer insert.Unlock()
@@ -110,6 +127,20 @@ func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock 
 	return frontier.Height, frontier.Hash, c.chain.GetGenesisMomentum().Hash
 }
 
+// InsertChain commits a contiguous batch of [nom.DetailedMomentum]
+// entries under a single insert lock. Steps:
+//
+//  1. Strip already-inserted momentums from the head.
+//  2. If the new chain branches off an older ancestor (side-chain
+//     reorg), check the rollback distance is bounded (≤ 30
+//     momentums) and that the new chain is strictly longer; then
+//     roll the local chain back to the branch point.
+//  3. For each momentum, apply every account block via the
+//     supervisor (force-add since the chain content is already
+//     committed by the producer), then commit the momentum.
+//
+// Returns the number of momentums successfully inserted before
+// any error.
 func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error) {
 	a := momentums[0]
 	b := momentums[len(momentums)-1]

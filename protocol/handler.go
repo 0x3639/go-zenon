@@ -35,6 +35,12 @@ func errResp(code errCode, format string, v ...interface{}) error {
 	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
 }
 
+// ProtocolManager runs the eth-derived wire protocol on top of the
+// p2p server. It owns the per-peer message-loop dispatch
+// ([handle]), the bulk-sync downloader, the single-block fetcher,
+// and the peer set; emits [downloader] / [fetcher] events; and
+// proxies block / transaction announcements between peers and the
+// chain.
 type ProtocolManager struct {
 	minPeers       int
 	protVer, netId int
@@ -59,8 +65,14 @@ type ProtocolManager struct {
 	quit bool
 }
 
-// NewProtocolManager returns a new ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
-// with the ethereum network.
+// NewProtocolManager returns a new sub-protocol manager wired to
+// bridge for chain reads/writes. minPeers is the soft floor below
+// which the manager waits before initiating sync; networkId is
+// the chain's identifier (mismatching peers are dropped during the
+// status handshake).
+//
+// (The "ethereum sub protocol" naming is historical — Zenon
+// inherited the wire protocol from go-ethereum.)
 func NewProtocolManager(minPeers int, networkId uint64, bridge ChainBridge) *ProtocolManager {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
@@ -116,6 +128,9 @@ func NewProtocolManager(minPeers int, networkId uint64, bridge ChainBridge) *Pro
 	return manager
 }
 
+// removePeer drops a peer cleanly: unregisters it from the
+// downloader and the peer set, and forces a hard disconnect at
+// the p2p layer. Idempotent — already-removed peers no-op.
 func (pm *ProtocolManager) removePeer(id string) {
 	// Short circuit if the peer was already removed
 	peer := pm.peers.Peer(id)

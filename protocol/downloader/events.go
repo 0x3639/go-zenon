@@ -16,6 +16,12 @@
 
 package downloader
 
+// DoneEvent is emitted when a sync run completes successfully.
 type DoneEvent struct{}
+
+// StartEvent is emitted when a sync run begins.
 type StartEvent struct{}
+
+// FailedEvent is emitted when a sync run fails — Err carries the
+// underlying cause.
 type FailedEvent struct{ Err error }

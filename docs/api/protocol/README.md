@@ -6,13 +6,42 @@
 import "github.com/zenon-network/go-zenon/protocol"
 ```
 
-Package protocol bridges the chain layer to the P2P network.
+Package protocol implements the eth\-derived wire protocol that glues the chain layer to the P2P network.
 
 ### Overview
 
-protocol owns the ChainBridge that wires [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) reads/writes to peer\-facing requests, the Broadcaster that announces newly produced blocks, and the ProtocolManager that arbitrates which peers feed the chain.
+protocol owns three things:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- The [ProtocolManager](<#ProtocolManager>) \(handler.go\) running per\-peer message loops on top of [github.com/zenon\\\-network/go\\\-zenon/p2p](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/>). Implements the status handshake, broadcasts new blocks and transactions, and dispatches incoming messages to the downloader, fetcher, and chain bridge.
+- The [Broadcaster](<#Broadcaster>) \(broadcaster.go\) — the local\-side surface for self\-produced blocks. The pillar producer and the RPC signing path call here; the broadcaster commits via the chain insert lock and forwards to the protocol manager for peer announcement.
+- The [ChainBridge](<#ChainBridge>) \(chain\_bridge.go\) — adapts the chain / consensus / verifier / VM\-supervisor stack to the peer\-facing API, handling both single\-block applies and contiguous\-batch chain inserts \(with bounded reorg\).
+
+Bulk catch\-up runs through the [protocol/downloader](<https://pkg.go.dev/protocol/downloader/>) sub\-package; single\-block on\-announcement fetches go through [protocol/fetcher](<https://pkg.go.dev/protocol/fetcher/>).
+
+### Wire Format
+
+The protocol\-message codes live in protocol.go \(StatusMsg, NewBlockHashesMsg, TxMsg, GetBlockHashes/BlockHashes, GetBlocks/Blocks, NewBlockMsg, GetBlockHashesFromNumberMsg\). The protocol\-version \(61\) and message length \(9\) are inherited from the eth\-61 protocol family that Zenon's p2p layer was derived from.
+
+### Peer Suppression
+
+Each \[peer\] keeps an LRU set of recently\-seen transaction and block hashes \(\[maxKnownTxs\] / \[maxKnownBlocks\]\) so the same announcement is not re\-broadcast in a loop. The bounds also cap per\-peer memory consumption, preventing a flood of unique announcements from exhausting node memory.
+
+### Concurrency
+
+Each peer runs its message loop in its own goroutine; the manager owns one \[ProtocolManager.txsyncLoop\] goroutine for pending\-transaction sync to new peers, and the downloader / fetcher each run their own scheduler goroutines.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/p2p](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/>) — supplies the transport\-layer Peer / MsgReadWriter primitives.
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — chain reads and writes through [ChainBridge](<#ChainBridge>).
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — validates inbound blocks before insertion.
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — applies account blocks and momentums.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) — bulk\-sync chain catch\-up.
+- [github.com/zenon\\\-network/go\\\-zenon/protocol/fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>) — single\-block fetch on announcement.
+
+### License
+
+The handler.go, peer.go, protocol.go, and sync.go files \(along with the downloader and fetcher sub\-packages\) carry the original go\-ethereum LGPL\-3.0\+ headers. New Zenon\-specific files \(broadcaster.go, chain\_bridge.go, interfaces.go\) are covered by this project's license.
 
 ## Index
 
@@ -94,16 +123,28 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="maxKnownTxs"></a>
+<a name="maxKnownTxs"></a>LRU sizes for the per\-peer relay\-suppression sets. Caps the memory a single peer can force the local node to allocate, so a flood of unique announcements cannot exhaust memory.
 
 ```go
 const (
-    maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
-    maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
+    // maxKnownTxs is the maximum count of transaction hashes a peer
+    // tracks (prevent DOS).
+    maxKnownTxs = 32768
+    // maxKnownBlocks is the maximum count of block hashes a peer
+    // tracks (prevent DOS).
+    maxKnownBlocks = 1024
 )
 ```
 
-<a name="StatusMsg"></a>eth protocol message codes
+<a name="StatusMsg"></a>Wire\-protocol message codes \(carried as the message type byte on every framed peer message\).
+
+- StatusMsg — protocol handshake.
+- NewBlockHashesMsg — peer announces newly produced momentums by hash so receivers can fetch on demand.
+- TxMsg — peer relays unconfirmed account blocks.
+- GetBlockHashesMsg / BlockHashesMsg — hash\-walk request / response.
+- GetBlocksMsg / BlocksMsg — bulk\-block request / response \(used by the downloader\).
+- NewBlockMsg — peer announces a fully\-broadcast new momentum \(with content\).
+- GetBlockHashesFromNumberMsg — number\-keyed hash\-walk request.
 
 ```go
 const (
@@ -119,7 +160,7 @@ const (
 )
 ```
 
-<a name="ErrMsgTooLarge"></a>
+<a name="ErrMsgTooLarge"></a>Wire\-level error codes used in disconnect / drop messages.
 
 ```go
 const (
@@ -135,11 +176,11 @@ const (
 )
 ```
 
-<a name="ProtocolMaxMsgSize"></a>
+<a name="ProtocolMaxMsgSize"></a>ProtocolMaxMsgSize is the maximum cap on the size of a protocol message \(10 MiB\).
 
 ```go
 const (
-    ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
+    ProtocolMaxMsgSize = 10 * 1024 * 1024
 )
 ```
 
@@ -153,7 +194,7 @@ const (
 
 ## Variables
 
-<a name="errAlreadyRegistered"></a>
+<a name="errAlreadyRegistered"></a>Sentinel errors returned by \[peerSet.Register\] / \[peerSet.Unregister\].
 
 ```go
 var (
@@ -162,13 +203,13 @@ var (
 )
 ```
 
-<a name="ProtocolLengths"></a>Number of implemented message corresponding to different protocol versions.
+<a name="ProtocolLengths"></a>ProtocolLengths is the message\-code count for each entry in [ProtocolVersions](<#ProtocolVersions>).
 
 ```go
 var ProtocolLengths = []uint64{9}
 ```
 
-<a name="ProtocolVersions"></a>Supported versions of the eth protocol \(first is primary\).
+<a name="ProtocolVersions"></a>ProtocolVersions lists the supported versions of the eth\-derived wire protocol \(first is primary\).
 
 ```go
 var ProtocolVersions = []uint{61}
@@ -190,7 +231,7 @@ var errorToString = map[int]string{
 }
 ```
 
-<a name="log"></a>
+<a name="log"></a>log is the package\-level protocol logger.
 
 ```go
 var (
@@ -208,31 +249,38 @@ func errResp(code errCode, format string, v ...interface{}) error
 
 
 <a name="Broadcaster"></a>
-## type [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L52-L56>)
+## type [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L91-L102>)
 
-
+Broadcaster is the local\-side surface for self\-produced blocks: the pillar / RPC submit blocks here, and the broadcaster commits them to the chain and announces them to peers.
 
 ```go
 type Broadcaster interface {
+    // SyncInfo returns the current sync status (proxied from the
+    // protocol manager).
     SyncInfo() *SyncInfo
+    // CreateMomentum is called when our node created a momentum.
+    // The momentum will be inserted in the chain and broadcasted.
     CreateMomentum(*nom.MomentumTransaction)
+    // CreateAccountBlock is called when our node created an
+    // account block. The block will be inserted in the chain and
+    // broadcasted.
     CreateAccountBlock(*nom.AccountBlockTransaction)
 }
 ```
 
 <a name="NewBroadcaster"></a>
-### func [NewBroadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L17>)
+### func [NewBroadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L24>)
 
 ```go
 func NewBroadcaster(chain chain.Chain, protocol *ProtocolManager) Broadcaster
 ```
 
-
+NewBroadcaster wires a [Broadcaster](<#Broadcaster>) over the chain and the supplied protocol manager. The pillar producer and the RPC signing path call into the returned handle.
 
 <a name="ChainBridge"></a>
-## type [ChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L47-L50>)
+## type [ChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L83-L86>)
 
-
+ChainBridge is the protocol layer's full view of the chain: transaction pool \+ chain manager. Implemented by \[chainBridge\] and consumed by [ProtocolManager](<#ProtocolManager>) / [downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) / [fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>).
 
 ```go
 type ChainBridge interface {
@@ -242,18 +290,18 @@ type ChainBridge interface {
 ```
 
 <a name="NewChainBridge"></a>
-### func [NewChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L24>)
+### func [NewChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L37>)
 
 ```go
 func NewChainBridge(chain chain.Chain, consensus consensus.Consensus, verifier verifier.Verifier, supervisor *vm.Supervisor) ChainBridge
 ```
 
-
+NewChainBridge wires a [ChainBridge](<#ChainBridge>) over the supplied chain, consensus, verifier, and VM supervisor handles.
 
 <a name="ProtocolManager"></a>
-## type [ProtocolManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L38-L60>)
+## type [ProtocolManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L44-L66>)
 
-
+ProtocolManager runs the eth\-derived wire protocol on top of the p2p server. It owns the per\-peer message\-loop dispatch \(\[handle\]\), the bulk\-sync downloader, the single\-block fetcher, and the peer set; emits [downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) / [fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>) events; and proxies block / transaction announcements between peers and the chain.
 
 ```go
 type ProtocolManager struct {
@@ -282,16 +330,18 @@ type ProtocolManager struct {
 ```
 
 <a name="NewProtocolManager"></a>
-### func [NewProtocolManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L64>)
+### func [NewProtocolManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L76>)
 
 ```go
 func NewProtocolManager(minPeers int, networkId uint64, bridge ChainBridge) *ProtocolManager
 ```
 
-NewProtocolManager returns a new ethereum sub protocol manager. The Ethereum sub protocol manages peers capable with the ethereum network.
+NewProtocolManager returns a new sub\-protocol manager wired to bridge for chain reads/writes. minPeers is the soft floor below which the manager waits before initiating sync; networkId is the chain's identifier \(mismatching peers are dropped during the status handshake\).
+
+\(The "ethereum sub protocol" naming is historical — Zenon inherited the wire protocol from go\-ethereum.\)
 
 <a name="ProtocolManager.BroadcastAccountBlock"></a>
-### func \(\*ProtocolManager\) [BroadcastAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L464>)
+### func \(\*ProtocolManager\) [BroadcastAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L479>)
 
 ```go
 func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock)
@@ -300,7 +350,7 @@ func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock)
 BroadcastAccountBlock will propagate a transaction to all peers which are not known to already have the given transaction.
 
 <a name="ProtocolManager.BroadcastMomentum"></a>
-### func \(\*ProtocolManager\) [BroadcastMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L431>)
+### func \(\*ProtocolManager\) [BroadcastMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L446>)
 
 ```go
 func (pm *ProtocolManager) BroadcastMomentum(detailed *nom.DetailedMomentum, propagate bool)
@@ -309,7 +359,7 @@ func (pm *ProtocolManager) BroadcastMomentum(detailed *nom.DetailedMomentum, pro
 BroadcastMomentum will propagate a block to a subset of it's peers, or will only announce it's availability \(depending what's requested\).
 
 <a name="ProtocolManager.Start"></a>
-### func \(\*ProtocolManager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L138>)
+### func \(\*ProtocolManager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L153>)
 
 ```go
 func (pm *ProtocolManager) Start()
@@ -318,7 +368,7 @@ func (pm *ProtocolManager) Start()
 
 
 <a name="ProtocolManager.Stop"></a>
-### func \(\*ProtocolManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L151>)
+### func \(\*ProtocolManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L166>)
 
 ```go
 func (pm *ProtocolManager) Stop()
@@ -327,7 +377,7 @@ func (pm *ProtocolManager) Stop()
 
 
 <a name="ProtocolManager.SyncInfo"></a>
-### func \(\*ProtocolManager\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L475>)
+### func \(\*ProtocolManager\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L490>)
 
 ```go
 func (pm *ProtocolManager) SyncInfo() *SyncInfo
@@ -336,7 +386,7 @@ func (pm *ProtocolManager) SyncInfo() *SyncInfo
 
 
 <a name="ProtocolManager.handle"></a>
-### func \(\*ProtocolManager\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L173>)
+### func \(\*ProtocolManager\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L188>)
 
 ```go
 func (pm *ProtocolManager) handle(p *peer) error
@@ -345,7 +395,7 @@ func (pm *ProtocolManager) handle(p *peer) error
 handle is the callback invoked to manage the life cycle of an eth peer. When this function terminates, the peer is disconnected.
 
 <a name="ProtocolManager.handleMsg"></a>
-### func \(\*ProtocolManager\) [handleMsg](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L208>)
+### func \(\*ProtocolManager\) [handleMsg](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L223>)
 
 ```go
 func (pm *ProtocolManager) handleMsg(p *peer) error
@@ -354,7 +404,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error
 handleMsg is invoked whenever an inbound message is received from a remote peer. The remote connection is torn down upon returning any error.
 
 <a name="ProtocolManager.newPeer"></a>
-### func \(\*ProtocolManager\) [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L167>)
+### func \(\*ProtocolManager\) [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L182>)
 
 ```go
 func (pm *ProtocolManager) newPeer(pv, nv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer
@@ -363,16 +413,16 @@ func (pm *ProtocolManager) newPeer(pv, nv int, p *p2p.Peer, rw p2p.MsgReadWriter
 
 
 <a name="ProtocolManager.removePeer"></a>
-### func \(\*ProtocolManager\) [removePeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L119>)
+### func \(\*ProtocolManager\) [removePeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L134>)
 
 ```go
 func (pm *ProtocolManager) removePeer(id string)
 ```
 
-
+removePeer drops a peer cleanly: unregisters it from the downloader and the peer set, and forces a hard disconnect at the p2p layer. Idempotent — already\-removed peers no\-op.
 
 <a name="ProtocolManager.syncInfo"></a>
-### func \(\*ProtocolManager\) [syncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L155>)
+### func \(\*ProtocolManager\) [syncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L162>)
 
 ```go
 func (pm *ProtocolManager) syncInfo() *SyncInfo
@@ -381,16 +431,16 @@ func (pm *ProtocolManager) syncInfo() *SyncInfo
 
 
 <a name="ProtocolManager.syncTransactions"></a>
-### func \(\*ProtocolManager\) [syncTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L37>)
+### func \(\*ProtocolManager\) [syncTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L44>)
 
 ```go
 func (pm *ProtocolManager) syncTransactions(p *peer)
 ```
 
-syncTransactions starts sending all currently pending transactions to the given peer.
+syncTransactions starts sending all currently pending transactions \(account blocks in the local pool\) to the given peer. Used when a new peer joins so it is brought up to speed on uncommitted state.
 
 <a name="ProtocolManager.syncer"></a>
-### func \(\*ProtocolManager\) [syncer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L121>)
+### func \(\*ProtocolManager\) [syncer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L128>)
 
 ```go
 func (pm *ProtocolManager) syncer()
@@ -399,7 +449,7 @@ func (pm *ProtocolManager) syncer()
 syncer is responsible for periodically synchronising with the network, both downloading hashes and blocks as well as handling the announcement handler.
 
 <a name="ProtocolManager.synchronise"></a>
-### func \(\*ProtocolManager\) [synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L184>)
+### func \(\*ProtocolManager\) [synchronise](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L191>)
 
 ```go
 func (pm *ProtocolManager) synchronise(peer *peer)
@@ -408,7 +458,7 @@ func (pm *ProtocolManager) synchronise(peer *peer)
 synchronise tries to sync up our local block chain with a remote peer.
 
 <a name="ProtocolManager.txsyncLoop"></a>
-### func \(\*ProtocolManager\) [txsyncLoop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L52>)
+### func \(\*ProtocolManager\) [txsyncLoop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L59>)
 
 ```go
 func (pm *ProtocolManager) txsyncLoop()
@@ -417,9 +467,9 @@ func (pm *ProtocolManager) txsyncLoop()
 txsyncLoop takes care of the initial transaction sync for each new connection. When a new peer appears, we relay all currently pending transactions. In order to minimise egress bandwidth usage, we send the transactions in small packs to one peer at a time.
 
 <a name="SyncInfo"></a>
-## type [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L22-L26>)
+## type [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L35-L39>)
 
-
+SyncInfo is the RPC\-friendly view of the protocol manager's sync progress: current state plus the \(current, target\) height pair so clients can show a percentage.
 
 ```go
 type SyncInfo struct {
@@ -430,29 +480,34 @@ type SyncInfo struct {
 ```
 
 <a name="SyncState"></a>
-## type [SyncState](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L9>)
+## type [SyncState](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L12>)
 
-
+SyncState reports where a node sits in the catch\-up cycle. Surfaced through [SyncInfo](<#SyncInfo>) for RPC consumers and used by the protocol manager to gate which peer messages it processes.
 
 ```go
 type SyncState int
 ```
 
-<a name="Unknown"></a>
+<a name="Unknown"></a>Sync state discriminators.
 
 ```go
 const (
+    // Unknown is the initial state before sync has been attempted.
     Unknown SyncState = iota
+    // Syncing means the node is actively pulling blocks from peers.
     Syncing
+    // SyncDone means the node's frontier matches the network.
     SyncDone
+    // NotEnoughPeers means the node cannot start syncing because
+    // it lacks the minimum peer count.
     NotEnoughPeers
 )
 ```
 
 <a name="broadcaster"></a>
-## type [broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L11-L15>)
+## type [broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L15-L19>)
 
-
+broadcaster is the [Broadcaster](<#Broadcaster>) implementation: a thin glue layer that commits self\-produced blocks via the chain insert lock and then forwards them to the protocol manager for peer announcement.
 
 ```go
 type broadcaster struct {
@@ -463,7 +518,7 @@ type broadcaster struct {
 ```
 
 <a name="broadcaster.CreateAccountBlock"></a>
-### func \(\*broadcaster\) [CreateAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L54>)
+### func \(\*broadcaster\) [CreateAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L62>)
 
 ```go
 func (b *broadcaster) CreateAccountBlock(accountBlockTransaction *nom.AccountBlockTransaction)
@@ -472,7 +527,7 @@ func (b *broadcaster) CreateAccountBlock(accountBlockTransaction *nom.AccountBlo
 CreateAccountBlock is called when our node created an account block. The account\-block will be inserted in the chain and broadcasted.
 
 <a name="broadcaster.CreateMomentum"></a>
-### func \(\*broadcaster\) [CreateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L31>)
+### func \(\*broadcaster\) [CreateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L39>)
 
 ```go
 func (b *broadcaster) CreateMomentum(momentumTransaction *nom.MomentumTransaction)
@@ -481,18 +536,20 @@ func (b *broadcaster) CreateMomentum(momentumTransaction *nom.MomentumTransactio
 CreateMomentum is called when our node created a momentum. The momentum will be inserted in the chain and broadcasted.
 
 <a name="broadcaster.SyncInfo"></a>
-### func \(\*broadcaster\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L25>)
+### func \(\*broadcaster\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/broadcaster.go#L33>)
 
 ```go
 func (b *broadcaster) SyncInfo() *SyncInfo
 ```
 
-
+SyncInfo proxies to the protocol manager's sync status.
 
 <a name="chainBridge"></a>
-## type [chainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L17-L22>)
+## type [chainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L28-L33>)
 
+chainBridge is the [ChainBridge](<#ChainBridge>) implementation: it adapts the chain / consensus / verifier / VM\-supervisor stack to the peer\-facing API the protocol manager uses.
 
+On the read side it exposes momentum / account\-block lookups, the genesis identifier, and the \(height, hash, genesis hash\) status triple used by the protocol handshake. On the write side, \[chainBridge.AddAccountBlocks\] applies single account blocks via the supervisor, while \[chainBridge.InsertChain\] commits a contiguous batch of \[nom.DetailedMomentum\]s — used by the bulk\-sync downloader.
 
 ```go
 type chainBridge struct {
@@ -504,16 +561,16 @@ type chainBridge struct {
 ```
 
 <a name="chainBridge.AddAccountBlocks"></a>
-### func \(chainBridge\) [AddAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L33>)
+### func \(chainBridge\) [AddAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L50>)
 
 ```go
 func (c chainBridge) AddAccountBlocks(blocks []*nom.AccountBlock) error
 ```
 
-
+AddAccountBlocks runs each block through the VM supervisor and commits it under the chain insert lock. Skips blocks whose patch is already known and ignores [nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) \(those are nested inside their parent receive\).
 
 <a name="chainBridge.CurrentBlock"></a>
-### func \(chainBridge\) [CurrentBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L94>)
+### func \(chainBridge\) [CurrentBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L111>)
 
 ```go
 func (c chainBridge) CurrentBlock() *nom.Momentum
@@ -522,7 +579,7 @@ func (c chainBridge) CurrentBlock() *nom.Momentum
 
 
 <a name="chainBridge.GetBlock"></a>
-### func \(chainBridge\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L76>)
+### func \(chainBridge\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L93>)
 
 ```go
 func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum
@@ -531,7 +588,7 @@ func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum
 
 
 <a name="chainBridge.GetBlockByNumber"></a>
-### func \(chainBridge\) [GetBlockByNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L101>)
+### func \(chainBridge\) [GetBlockByNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L118>)
 
 ```go
 func (c chainBridge) GetBlockByNumber(num uint64) (*nom.Momentum, error)
@@ -540,7 +597,7 @@ func (c chainBridge) GetBlockByNumber(num uint64) (*nom.Momentum, error)
 
 
 <a name="chainBridge.GetBlockHashesFromHash"></a>
-### func \(chainBridge\) [GetBlockHashesFromHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L65>)
+### func \(chainBridge\) [GetBlockHashesFromHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L82>)
 
 ```go
 func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]types.Hash, error)
@@ -549,7 +606,7 @@ func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]t
 
 
 <a name="chainBridge.GetTransactions"></a>
-### func \(chainBridge\) [GetTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L56>)
+### func \(chainBridge\) [GetTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L73>)
 
 ```go
 func (c chainBridge) GetTransactions() []*nom.AccountBlock
@@ -558,7 +615,7 @@ func (c chainBridge) GetTransactions() []*nom.AccountBlock
 
 
 <a name="chainBridge.HasBlock"></a>
-### func \(chainBridge\) [HasBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L61>)
+### func \(chainBridge\) [HasBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L78>)
 
 ```go
 func (c chainBridge) HasBlock(hash types.Hash) bool
@@ -567,16 +624,22 @@ func (c chainBridge) HasBlock(hash types.Hash) bool
 
 
 <a name="chainBridge.InsertChain"></a>
-### func \(chainBridge\) [InsertChain](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L113>)
+### func \(chainBridge\) [InsertChain](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L144>)
 
 ```go
 func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 ```
 
+InsertChain commits a contiguous batch of [nom.DetailedMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#DetailedMomentum>) entries under a single insert lock. Steps:
 
+1. Strip already\-inserted momentums from the head.
+2. If the new chain branches off an older ancestor \(side\-chain reorg\), check the rollback distance is bounded \(≤ 30 momentums\) and that the new chain is strictly longer; then roll the local chain back to the branch point.
+3. For each momentum, apply every account block via the supervisor \(force\-add since the chain content is already committed by the producer\), then commit the momentum.
+
+Returns the number of momentums successfully inserted before any error.
 
 <a name="chainBridge.Status"></a>
-### func \(chainBridge\) [Status](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L105>)
+### func \(chainBridge\) [Status](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L122>)
 
 ```go
 func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash)
@@ -585,34 +648,46 @@ func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock 
 
 
 <a name="chainManager"></a>
-## type [chainManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L36-L45>)
+## type [chainManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L57-L78>)
 
-
+chainManager is the protocol layer's view of the momentum chain. It exposes the read paths the downloader/fetcher need plus the mutation entry\-point \(\[chainManager.InsertChain\]\) the bulk\-sync uses to commit a batch of momentums.
 
 ```go
 type chainManager interface {
+    // HasBlock reports whether hash is known.
     HasBlock(hash types.Hash) bool
+    // GetBlockHashesFromHash returns up to amount predecessor
+    // hashes ending at hash; used by sync to walk back from a peer
+    // announcement to a common ancestor.
     GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]types.Hash, error)
+    // GetBlock returns the [nom.DetailedMomentum] for hash.
     GetBlock(hash types.Hash) (block *nom.DetailedMomentum)
+    // GetBlockByNumber returns the momentum at height num.
     GetBlockByNumber(num uint64) (*nom.Momentum, error)
+    // CurrentBlock returns the local frontier momentum.
     CurrentBlock() *nom.Momentum
+    // Status returns the (height, frontier hash, genesis hash)
+    // triple the protocol's status handshake exchanges with peers.
     Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash)
 
+    // InsertChain admits a contiguous batch of momentums (with
+    // their account blocks). Returns the number of momentums
+    // successfully inserted before any error.
     InsertChain(chain []*nom.DetailedMomentum) (int, error)
 }
 ```
 
 <a name="errCode"></a>
-## type [errCode](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L46>)
+## type [errCode](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L65>)
 
-
+errCode is the wire\-level error discriminator carried in disconnect messages.
 
 ```go
 type errCode int
 ```
 
 <a name="errCode.String"></a>
-### func \(errCode\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L60>)
+### func \(errCode\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L80>)
 
 ```go
 func (e errCode) String() string
@@ -621,7 +696,7 @@ func (e errCode) String() string
 
 
 <a name="getBlockHashesData"></a>
-## type [getBlockHashesData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L88-L91>)
+## type [getBlockHashesData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L112-L115>)
 
 getBlockHashesData is the network packet for the hash based block retrieval message.
 
@@ -633,7 +708,7 @@ type getBlockHashesData struct {
 ```
 
 <a name="getBlockHashesFromNumberData"></a>
-## type [getBlockHashesFromNumberData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L95-L98>)
+## type [getBlockHashesFromNumberData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L119-L122>)
 
 getBlockHashesFromNumberData is the network packet for the number based block retrieval message.
 
@@ -645,9 +720,9 @@ type getBlockHashesFromNumberData struct {
 ```
 
 <a name="peer"></a>
-## type [peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L43-L59>)
+## type [peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L58-L80>)
 
-
+peer is the per\-connection protocol\-level wrapper around a [p2p.Peer](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/#Peer>). Tracks the negotiated protocol version, the peer's claimed head momentum \(height \+ hash\), and LRU sets of recently\-relayed transaction and block hashes \(used to suppress re\-broadcasts so the same announcement does not bounce back and forth — this is the protection against the network flooding that motivates \[maxKnownTxs\] / \[maxKnownBlocks\]\).
 
 ```go
 type peer struct {
@@ -655,8 +730,10 @@ type peer struct {
 
     rw  p2p.MsgReadWriter
 
-    version int // Protocol version negotiated
-    network int // Network ID being on
+    // version is the protocol version negotiated.
+    version int
+    // network is the network ID being on.
+    network int
 
     id  string
 
@@ -664,13 +741,17 @@ type peer struct {
     td   uint64
     lock sync.RWMutex
 
-    knownTxs    *lru.Cache // Set of transaction hashes known to be known by this peer
-    knownBlocks *lru.Cache // Set of block hashes known to be known by this peer
+    // knownTxs is the set of transaction hashes known to be known
+    // by this peer (recent relay history).
+    knownTxs *lru.Cache
+    // knownBlocks is the set of block hashes known to be known by
+    // this peer (recent relay history).
+    knownBlocks *lru.Cache
 }
 ```
 
 <a name="newPeer"></a>
-### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L61>)
+### func [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L82>)
 
 ```go
 func newPeer(version, network int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer
@@ -679,7 +760,7 @@ func newPeer(version, network int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer
 
 
 <a name="peer.Handshake"></a>
-### func \(\*peer\) [Handshake](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L204>)
+### func \(\*peer\) [Handshake](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L225>)
 
 ```go
 func (p *peer) Handshake(td uint64, head types.Hash, genesis types.Hash) error
@@ -688,7 +769,7 @@ func (p *peer) Handshake(td uint64, head types.Hash, genesis types.Hash) error
 Handshake executes the eth protocol handshake, negotiating version number, network IDs, difficulties, head and genesis blocks.
 
 <a name="peer.Head"></a>
-### func \(\*peer\) [Head](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L81>)
+### func \(\*peer\) [Head](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L102>)
 
 ```go
 func (p *peer) Head() (hash types.Hash)
@@ -697,7 +778,7 @@ func (p *peer) Head() (hash types.Hash)
 Head retrieves a copy of the current head \(most recent\) hash of the peer.
 
 <a name="peer.MarkBlock"></a>
-### func \(\*peer\) [MarkBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L115>)
+### func \(\*peer\) [MarkBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L136>)
 
 ```go
 func (p *peer) MarkBlock(hash types.Hash)
@@ -706,7 +787,7 @@ func (p *peer) MarkBlock(hash types.Hash)
 MarkBlock marks a block as known for the peer, ensuring that the block will never be propagated to this particular peer.
 
 <a name="peer.MarkTransaction"></a>
-### func \(\*peer\) [MarkTransaction](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L121>)
+### func \(\*peer\) [MarkTransaction](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L142>)
 
 ```go
 func (p *peer) MarkTransaction(hash types.Hash)
@@ -715,7 +796,7 @@ func (p *peer) MarkTransaction(hash types.Hash)
 MarkTransaction marks a transaction as known for the peer, ensuring that it will never be propagated to this particular peer.
 
 <a name="peer.RequestBlocks"></a>
-### func \(\*peer\) [RequestBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L197>)
+### func \(\*peer\) [RequestBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L218>)
 
 ```go
 func (p *peer) RequestBlocks(hashes []types.Hash) error
@@ -724,7 +805,7 @@ func (p *peer) RequestBlocks(hashes []types.Hash) error
 RequestBlocks fetches a batch of blocks corresponding to the specified hashes.
 
 <a name="peer.RequestHashes"></a>
-### func \(\*peer\) [RequestHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L184>)
+### func \(\*peer\) [RequestHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L205>)
 
 ```go
 func (p *peer) RequestHashes(from types.Hash) error
@@ -733,7 +814,7 @@ func (p *peer) RequestHashes(from types.Hash) error
 RequestHashes fetches a batch of hashes from a peer, starting at from, going towards the genesis block.
 
 <a name="peer.RequestHashesFromNumber"></a>
-### func \(\*peer\) [RequestHashesFromNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L191>)
+### func \(\*peer\) [RequestHashesFromNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L212>)
 
 ```go
 func (p *peer) RequestHashesFromNumber(from uint64, count int) error
@@ -742,7 +823,7 @@ func (p *peer) RequestHashesFromNumber(from uint64, count int) error
 RequestHashesFromNumber fetches a batch of hashes from a peer, starting at the requested block number, going upwards towards the genesis block.
 
 <a name="peer.SendBlockHashes"></a>
-### func \(\*peer\) [SendBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L135>)
+### func \(\*peer\) [SendBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L156>)
 
 ```go
 func (p *peer) SendBlockHashes(hashes []types.Hash) error
@@ -751,7 +832,7 @@ func (p *peer) SendBlockHashes(hashes []types.Hash) error
 SendBlockHashes sends a batch of known hashes to the remote peer.
 
 <a name="peer.SendBlocks"></a>
-### func \(\*peer\) [SendBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L140>)
+### func \(\*peer\) [SendBlocks](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L161>)
 
 ```go
 func (p *peer) SendBlocks(blocks []*nom.DetailedMomentum) error
@@ -760,7 +841,7 @@ func (p *peer) SendBlocks(blocks []*nom.DetailedMomentum) error
 SendBlocks sends a batch of blocks to the remote peer.
 
 <a name="peer.SendNewBlockHashes"></a>
-### func \(\*peer\) [SendNewBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L168>)
+### func \(\*peer\) [SendNewBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L189>)
 
 ```go
 func (p *peer) SendNewBlockHashes(hashes []types.Hash) error
@@ -769,7 +850,7 @@ func (p *peer) SendNewBlockHashes(hashes []types.Hash) error
 SendNewBlockHashes announces the availability of a number of blocks through a hash notification.
 
 <a name="peer.SendNewMomentum"></a>
-### func \(\*peer\) [SendNewMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L176>)
+### func \(\*peer\) [SendNewMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L197>)
 
 ```go
 func (p *peer) SendNewMomentum(detailed *nom.DetailedMomentum) error
@@ -778,7 +859,7 @@ func (p *peer) SendNewMomentum(detailed *nom.DetailedMomentum) error
 SendNewMomentum propagates an entire block to a remote peer.
 
 <a name="peer.SendTransactions"></a>
-### func \(\*peer\) [SendTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L127>)
+### func \(\*peer\) [SendTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L148>)
 
 ```go
 func (p *peer) SendTransactions(txs []*nom.AccountBlock) error
@@ -787,7 +868,7 @@ func (p *peer) SendTransactions(txs []*nom.AccountBlock) error
 SendTransactions sends transactions to the peer and includes the hashes in its transaction hash set for future reference.
 
 <a name="peer.SetHead"></a>
-### func \(\*peer\) [SetHead](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L90>)
+### func \(\*peer\) [SetHead](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L111>)
 
 ```go
 func (p *peer) SetHead(hash types.Hash)
@@ -796,7 +877,7 @@ func (p *peer) SetHead(hash types.Hash)
 SetHead updates the head \(most recent\) hash of the peer.
 
 <a name="peer.SetTd"></a>
-### func \(\*peer\) [SetTd](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L106>)
+### func \(\*peer\) [SetTd](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L127>)
 
 ```go
 func (p *peer) SetTd(td uint64)
@@ -805,7 +886,7 @@ func (p *peer) SetTd(td uint64)
 SetTd updates the current total difficulty of a peer.
 
 <a name="peer.String"></a>
-### func \(\*peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L247>)
+### func \(\*peer\) [String](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L268>)
 
 ```go
 func (p *peer) String() string
@@ -814,7 +895,7 @@ func (p *peer) String() string
 String implements fmt.Stringer.
 
 <a name="peer.Td"></a>
-### func \(\*peer\) [Td](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L98>)
+### func \(\*peer\) [Td](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L119>)
 
 ```go
 func (p *peer) Td() uint64
@@ -823,7 +904,7 @@ func (p *peer) Td() uint64
 Td retrieves the current total difficulty of a peer.
 
 <a name="peerSet"></a>
-## type [peerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L255-L258>)
+## type [peerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L276-L279>)
 
 peerSet represents the collection of active peers currently participating in the Ethereum sub\-protocol.
 
@@ -835,7 +916,7 @@ type peerSet struct {
 ```
 
 <a name="newPeerSet"></a>
-### func [newPeerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L261>)
+### func [newPeerSet](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L282>)
 
 ```go
 func newPeerSet() *peerSet
@@ -844,7 +925,7 @@ func newPeerSet() *peerSet
 newPeerSet creates a new peer set to track the active participants.
 
 <a name="peerSet.BestPeer"></a>
-### func \(\*peerSet\) [BestPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L340>)
+### func \(\*peerSet\) [BestPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L361>)
 
 ```go
 func (ps *peerSet) BestPeer() *peer
@@ -853,7 +934,7 @@ func (ps *peerSet) BestPeer() *peer
 BestPeer retrieves the known peer with the currently highest total difficulty.
 
 <a name="peerSet.Len"></a>
-### func \(\*peerSet\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L302>)
+### func \(\*peerSet\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L323>)
 
 ```go
 func (ps *peerSet) Len() int
@@ -862,7 +943,7 @@ func (ps *peerSet) Len() int
 Len returns if the current number of peers in the set.
 
 <a name="peerSet.Peer"></a>
-### func \(\*peerSet\) [Peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L294>)
+### func \(\*peerSet\) [Peer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L315>)
 
 ```go
 func (ps *peerSet) Peer(id string) *peer
@@ -871,7 +952,7 @@ func (ps *peerSet) Peer(id string) *peer
 Peer retrieves the registered peer with the given id.
 
 <a name="peerSet.PeersWithoutBlock"></a>
-### func \(\*peerSet\) [PeersWithoutBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L311>)
+### func \(\*peerSet\) [PeersWithoutBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L332>)
 
 ```go
 func (ps *peerSet) PeersWithoutBlock(hash types.Hash) []*peer
@@ -880,7 +961,7 @@ func (ps *peerSet) PeersWithoutBlock(hash types.Hash) []*peer
 PeersWithoutBlock retrieves a list of peers that do not have a given block in their set of known hashes.
 
 <a name="peerSet.PeersWithoutTx"></a>
-### func \(\*peerSet\) [PeersWithoutTx](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L326>)
+### func \(\*peerSet\) [PeersWithoutTx](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L347>)
 
 ```go
 func (ps *peerSet) PeersWithoutTx(hash types.Hash) []*peer
@@ -889,7 +970,7 @@ func (ps *peerSet) PeersWithoutTx(hash types.Hash) []*peer
 PeersWithoutTx retrieves a list of peers that do not have a given transaction in their set of known hashes.
 
 <a name="peerSet.Register"></a>
-### func \(\*peerSet\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L269>)
+### func \(\*peerSet\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L290>)
 
 ```go
 func (ps *peerSet) Register(p *peer) error
@@ -898,7 +979,7 @@ func (ps *peerSet) Register(p *peer) error
 Register injects a new peer into the working set, or returns an error if the peer is already known.
 
 <a name="peerSet.Unregister"></a>
-### func \(\*peerSet\) [Unregister](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L282>)
+### func \(\*peerSet\) [Unregister](<https://github.com/zenon-network/go-zenon/blob/master/protocol/peer.go#L303>)
 
 ```go
 func (ps *peerSet) Unregister(id string) error
@@ -907,9 +988,9 @@ func (ps *peerSet) Unregister(id string) error
 Unregister removes a remote peer from the active set, disabling any further actions to/from that particular entity.
 
 <a name="statusData"></a>
-## type [statusData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L78-L84>)
+## type [statusData](<https://github.com/zenon-network/go-zenon/blob/master/protocol/protocol.go#L102-L108>)
 
-statusData is the network packet for the status message.
+statusData is the network packet for the status message — the initial handshake. Two peers consider themselves compatible when \(ProtocolVersion, NetworkId, GenesisBlock\) all agree; the \(TD, CurrentBlock\) pair lets each side decide whether the other has a longer / shorter chain.
 
 ```go
 type statusData struct {
@@ -922,12 +1003,13 @@ type statusData struct {
 ```
 
 <a name="txPool"></a>
-## type [txPool](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L28-L34>)
+## type [txPool](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L44-L51>)
 
-
+txPool is the protocol layer's view of the unconfirmed\-account\-block pool: it can admit incoming blocks from peers and surface pending blocks to be relayed.
 
 ```go
 type txPool interface {
+    // AddAccountBlocks admits blocks into the local chain pool.
     AddAccountBlocks([]*nom.AccountBlock) error
 
     // GetTransactions should return pending transactions.
@@ -937,9 +1019,9 @@ type txPool interface {
 ```
 
 <a name="txsync"></a>
-## type [txsync](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L31-L34>)
+## type [txsync](<https://github.com/zenon-network/go-zenon/blob/master/protocol/sync.go#L35-L38>)
 
-
+txsync queues a batch of transactions \(account blocks\) destined for one peer. The \[ProtocolManager.txsyncLoop\] goroutine serializes sends across peers so any one send does not block the others.
 
 ```go
 type txsync struct {

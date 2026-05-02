@@ -30,23 +30,40 @@ import (
 	"github.com/zenon-network/go-zenon/protocol/downloader"
 )
 
+// Sentinel errors returned by [peerSet.Register] / [peerSet.Unregister].
 var (
 	errAlreadyRegistered = errors.New("peer is already registered")
 	errNotRegistered     = errors.New("peer is not registered")
 )
 
+// LRU sizes for the per-peer relay-suppression sets. Caps the
+// memory a single peer can force the local node to allocate, so a
+// flood of unique announcements cannot exhaust memory.
 const (
-	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
-	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
+	// maxKnownTxs is the maximum count of transaction hashes a peer
+	// tracks (prevent DOS).
+	maxKnownTxs = 32768
+	// maxKnownBlocks is the maximum count of block hashes a peer
+	// tracks (prevent DOS).
+	maxKnownBlocks = 1024
 )
 
+// peer is the per-connection protocol-level wrapper around a
+// [p2p.Peer]. Tracks the negotiated protocol version, the peer's
+// claimed head momentum (height + hash), and LRU sets of
+// recently-relayed transaction and block hashes (used to suppress
+// re-broadcasts so the same announcement does not bounce back and
+// forth — this is the protection against the network flooding
+// that motivates [maxKnownTxs] / [maxKnownBlocks]).
 type peer struct {
 	*p2p.Peer
 
 	rw p2p.MsgReadWriter
 
-	version int // Protocol version negotiated
-	network int // Network ID being on
+	// version is the protocol version negotiated.
+	version int
+	// network is the network ID being on.
+	network int
 
 	id string
 
@@ -54,8 +71,12 @@ type peer struct {
 	td   uint64
 	lock sync.RWMutex
 
-	knownTxs    *lru.Cache // Set of transaction hashes known to be known by this peer
-	knownBlocks *lru.Cache // Set of block hashes known to be known by this peer
+	// knownTxs is the set of transaction hashes known to be known
+	// by this peer (recent relay history).
+	knownTxs *lru.Cache
+	// knownBlocks is the set of block hashes known to be known by
+	// this peer (recent relay history).
+	knownBlocks *lru.Cache
 }
 
 func newPeer(version, network int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {

@@ -42,24 +42,45 @@ var (
 	errNotRegistered     = errors.New("peer is not registered")
 )
 
-// peer represents an active peer from which hashes and blocks are retrieved.
+// peer represents an active peer from which hashes and blocks are
+// retrieved. Tracks the peer's claimed head, an idle/active flag
+// (so the scheduler does not double-fetch), a simple reputation
+// score, and a per-peer capacity that the scheduler ramps up or
+// down based on response speed (blockSoftTTL is the threshold).
 type peer struct {
-	id   string     // Unique identifier of the peer
-	head types.Hash // Hash of the peers latest known block
+	// id is the unique identifier of the peer.
+	id string
+	// head is the hash of the peer's latest known block.
+	head types.Hash
 
-	idle int32 // Current activity state of the peer (idle = 0, active = 1)
-	rep  int32 // Simple peer reputation
+	// idle is the current activity state of the peer
+	// (idle = 0, active = 1). Manipulated atomically.
+	idle int32
+	// rep is the simple peer reputation score.
+	rep int32
 
-	capacity int32     // Number of blocks allowed to fetch per request
-	started  time.Time // Time instance when the last fetch was started
+	// capacity is the number of blocks allowed to fetch per
+	// request — adjusts dynamically with response timing.
+	capacity int32
+	// started is the time instance when the last fetch was started.
+	started time.Time
 
-	ignored *set.Set // Set of hashes not to request (didn't have previously)
+	// ignored is the set of hashes not to request (didn't have
+	// previously, do not re-request).
+	ignored *set.Set
 
-	getRelHashes relativeHashFetcherFn // Method to retrieve a batch of hashes from an origin hash
-	getAbsHashes absoluteHashFetcherFn // Method to retrieve a batch of hashes from an absolute position
-	getBlocks    blockFetcherFn        // Method to retrieve a batch of blocks
+	// getRelHashes retrieves a batch of hashes from an origin hash.
+	getRelHashes relativeHashFetcherFn
+	// getAbsHashes retrieves a batch of hashes from an absolute
+	// position (used when the peer supports the
+	// GetBlockHashesFromNumber message).
+	getAbsHashes absoluteHashFetcherFn
+	// getBlocks retrieves a batch of blocks.
+	getBlocks blockFetcherFn
 
-	version int // Eth protocol version number to switch strategies
+	// version is the eth-derived protocol version, used to switch
+	// strategies between supported variants.
+	version int
 }
 
 // newPeer create a new downloader peer, with specific hash and block retrieval
