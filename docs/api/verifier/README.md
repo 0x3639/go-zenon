@@ -6,13 +6,54 @@
 import "github.com/zenon-network/go-zenon/verifier"
 ```
 
-Package verifier validates account blocks and momentums against consensus rules before [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) inserts them.
+Package verifier validates account blocks and momentums against the consensus rules before [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) inserts them.
 
 ### Overview
 
-verifier provides two orthogonal layers: stateless checks \(signature, hash, height linkage, plasma sufficiency\) and stateful checks \(account\-chain continuity, send/receive matching, contract preconditions, pillar eligibility for a momentum's tick\). Both must pass before insertion.
+Verification runs in two phases per block kind so that the cheap, stateless checks can fail fast before the verifier reaches into the stores. The same split applies to both account blocks and momentums:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- Block\-as\-payload pass — version, type, amounts, previous\-block linkage, momentum\-acknowledged consistency, send/receive matching, plasma PoW. Implemented by \[accountBlockVerifier\] / \[rawMomentumVerifier\]; entry points are \[AccountBlockVerifier.AccountBlock\] and \[MomentumVerifier.Momentum\].
+- Transactional pass — canonical hash, signature, producer\-address consistency, descendants \(account blocks\) or changes\-hash \+ producer eligibility \(momentums\). Implemented by \[accountBlockTransactionVerifier\] / \[momentumTransactionVerifier\]; entry points are \[AccountBlockVerifier.AccountBlockTransaction\] and \[MomentumVerifier.MomentumTransaction\].
+
+### Key Concepts
+
+- Stateless checks — those that depend only on the block payload \(e.g., hash, signature, version\). Cheap; run first.
+- Stateful checks — those that depend on the surrounding ledger state \(e.g., previous\-block linkage, send/receive matching, the embedded\-contract sequencer\). Resolved through stores returned by [chain.Chain.GetMomentumStore](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Chain.GetMomentumStore>) / [chain.Chain.GetAccountStore](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Chain.GetAccountStore>).
+- Sequencer — the rule that embedded\-contract receives must consume from the head of their address mailbox in order. User accounts are not subject to this — they may receive any pending send.
+- Receiver\-mismatch enforcement — historically tolerated, now a hard rejection above [ReceiverMismatchEnforcementHeight](<#ReceiverMismatchEnforcementHeight>).
+- Internal vs rule errors — rule violations return one of the \`ErrAB\*\` / \`ErrM\*\` sentinels; unexpected store/IO errors are wrapped in [ErrVerifierInternal](<#ErrVerifierInternal>) via [InternalError](<#InternalError>). Callers should branch on the sentinel, not on the error message.
+
+### Usage
+
+Construct once at boot, alongside the chain and consensus subsystems:
+
+```
+v := verifier.NewVerifier(chain, consensus)
+```
+
+Validate an inbound account block \(payload first, then transactional\):
+
+```
+if err := v.AccountBlock(block); err != nil { /* reject */ }
+if err := v.AccountBlockTransaction(tx);    err != nil { /* reject */ }
+```
+
+Validate an inbound momentum:
+
+```
+if err := v.Momentum(detailed);          err != nil { /* reject */ }
+if err := v.MomentumTransaction(tx);     err != nil { /* reject */ }
+```
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — the block model this package validates.
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — supplies the [chain.Chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Chain>) handle the verifier reads stores from.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — store interfaces consumed by the per\-check helpers.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) — supplies producer eligibility through [consensus.Consensus.VerifyMomentumProducer](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#Consensus.VerifyMomentumProducer>).
+- [github.com/zenon\\\-network/go\\\-zenon/pow](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pow/>) — PoW nonce verification.
+- [github.com/zenon\\\-network/go\\\-zenon/wallet](<https://pkg.go.dev/github.com/zenon-network/go-zenon/wallet/>) — Ed25519 signature verification.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — provides [db.PatchHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#PatchHash>) for the changes\-hash check.
 
 ## Index
 
@@ -71,10 +112,18 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="ErrVerifierInternal"></a>
+<a name="ErrVerifierInternal"></a>Sentinel errors returned by the verifier. Grouped by the field or invariant they police so callers can branch on the specific failure mode without parsing strings.
+
+Naming conventions:
+
+- \`ErrAB\*\` — account\-block rule violations.
+- \`ErrM\*\` — momentum rule violations.
+- \`ErrVerifierInternal\` — a wrapped internal/store error; [InternalError](<#InternalError>) is the constructor.
 
 ```go
 var (
+    // ErrVerifierInternal is the parent sentinel for unexpected
+    // (non-rule) errors; constructed via [InternalError].
     ErrVerifierInternal = errors.New("internal error while verifying")
 
     ErrABVersionMissing            = errors.New("account-block version is missing")
@@ -145,7 +194,9 @@ var (
 )
 ```
 
-<a name="ReceiverMismatchEnforcementHeight"></a>
+<a name="ReceiverMismatchEnforcementHeight"></a>ReceiverMismatchEnforcementHeight is the momentum height at which [ErrABFromBlockReceiverMismatch](<#ErrVerifierInternal>) becomes a hard verification failure. Before this height the receiver\-mismatch case was tolerated for backwards compatibility with previously\-relayed traffic; after it the verifier rejects any receive whose target address differs from the originating send's \`ToAddress\`.
+
+Targeting 2025\-04\-16 12:00:00 UTC.
 
 ```go
 var (
@@ -153,7 +204,7 @@ var (
 )
 ```
 
-<a name="log"></a>
+<a name="log"></a>log is the package\-level logger; alias of [common.VerifierLogger](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#VerifierLogger>).
 
 ```go
 var (
@@ -162,45 +213,48 @@ var (
 ```
 
 <a name="DescendantVerifyError"></a>
-## func [DescendantVerifyError](<https://github.com/zenon-network/go-zenon/blob/master/verifier/errors.go#L13>)
+## func [DescendantVerifyError](<https://github.com/zenon-network/go-zenon/blob/master/verifier/errors.go#L20>)
 
 ```go
 func DescendantVerifyError(err error) error
 ```
 
-
+DescendantVerifyError wraps err in [ErrABDescendantVerify](<#ErrVerifierInternal>) so callers can tell that the failure came from validating a descendant block rather than the outer parent block.
 
 <a name="InternalError"></a>
-## func [InternalError](<https://github.com/zenon-network/go-zenon/blob/master/verifier/errors.go#L9>)
+## func [InternalError](<https://github.com/zenon-network/go-zenon/blob/master/verifier/errors.go#L13>)
 
 ```go
 func InternalError(err error) error
 ```
 
-
+InternalError wraps err in [ErrVerifierInternal](<#ErrVerifierInternal>) so callers can branch on the sentinel while preserving the underlying detail through unwrap. Returned whenever the verifier hits an unexpected failure \(e.g., a store read error\) that is not a block\-level rule violation.
 
 <a name="isBatched"></a>
-## func [isBatched](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L21>)
+## func [isBatched](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L33>)
 
 ```go
 func isBatched(block *nom.AccountBlock) bool
 ```
 
-
+isBatched reports whether block is a contract\-emitted send \(one of the nested \`BlockTypeContractSend\` entries inside a parent receive's [nom.AccountBlock.DescendantBlocks](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.DescendantBlocks>)\). Such blocks must not appear stand\-alone; the parent receive carries them through verification.
 
 <a name="isContractReceive"></a>
-## func [isContractReceive](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L24>)
+## func [isContractReceive](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L40>)
 
 ```go
 func isContractReceive(block *nom.AccountBlock) bool
 ```
 
-
+isContractReceive reports whether block is a receive authored by an embedded contract \(i.e., a [nom.BlockTypeContractReceive](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractReceive>) block on a system address\).
 
 <a name="AccountBlockVerifier"></a>
-## type [AccountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L28-L31>)
+## type [AccountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L53-L56>)
 
+AccountBlockVerifier validates account blocks against consensus rules. Validation runs in two passes:
 
+- \[AccountBlockVerifier.AccountBlock\] — block\-as\-payload checks \(version, type, amounts, plasma PoW, previous\-block linkage, momentum\-acknowledged consistency, send/receive matching\).
+- \[AccountBlockVerifier.AccountBlockTransaction\] — transactional checks tied to the patch \(canonical hash, signature, producer address, descendant\-block validation\).
 
 ```go
 type AccountBlockVerifier interface {
@@ -210,18 +264,21 @@ type AccountBlockVerifier interface {
 ```
 
 <a name="NewAccountBlockVerifier"></a>
-### func [NewAccountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L117>)
+### func [NewAccountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L161>)
 
 ```go
 func NewAccountBlockVerifier(chain chain.Chain, consensus consensus.Consensus) AccountBlockVerifier
 ```
 
-
+NewAccountBlockVerifier constructs an [AccountBlockVerifier](<#AccountBlockVerifier>) backed by chain \(for store lookups\) and consensus \(for producer validation\).
 
 <a name="MomentumVerifier"></a>
-## type [MomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L20-L23>)
+## type [MomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L30-L33>)
 
+MomentumVerifier validates momentums against consensus rules. Like [AccountBlockVerifier](<#AccountBlockVerifier>), validation runs in two passes:
 
+- \[MomentumVerifier.Momentum\] — momentum\-as\-payload checks \(chain identifier, version, timestamp monotonicity, previous\-momentum linkage, content size, and account\-header continuity against the prefetched account blocks\).
+- \[MomentumVerifier.MomentumTransaction\] — transactional checks \([nom.Momentum.ChangesHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#Momentum.ChangesHash>), canonical hash, signature, and producer eligibility for the momentum's tick\).
 
 ```go
 type MomentumVerifier interface {
@@ -231,18 +288,18 @@ type MomentumVerifier interface {
 ```
 
 <a name="NewMomentumVerifier"></a>
-### func [NewMomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L64>)
+### func [NewMomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L89>)
 
 ```go
 func NewMomentumVerifier(chain chain.Chain, consensus consensus.Consensus) MomentumVerifier
 ```
 
-
+NewMomentumVerifier constructs a [MomentumVerifier](<#MomentumVerifier>) backed by chain \(for store lookups\) and consensus \(for producer validation\).
 
 <a name="Verifier"></a>
-## type [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L13-L16>)
+## type [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L19-L22>)
 
-
+Verifier is the combined interface every chain insertion goes through: account blocks \(and their transactions\) are validated by [AccountBlockVerifier](<#AccountBlockVerifier>), momentums \(and their transactions\) by [MomentumVerifier](<#MomentumVerifier>). Validation is split in two passes — see the per\-interface docs.
 
 ```go
 type Verifier interface {
@@ -252,18 +309,18 @@ type Verifier interface {
 ```
 
 <a name="NewVerifier"></a>
-### func [NewVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L22>)
+### func [NewVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L34>)
 
 ```go
 func NewVerifier(chain chain.Chain, consensus consensus.Consensus) Verifier
 ```
 
-
+NewVerifier constructs a [Verifier](<#Verifier>) backed by chain reads and the consensus producer\-validation surface.
 
 <a name="accountBlockTransactionVerifier"></a>
-## type [accountBlockTransactionVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L377-L381>)
+## type [accountBlockTransactionVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L470-L474>)
 
-
+accountBlockTransactionVerifier holds the in\-flight state for the transactional pass: validates the \(Hash, Signature, Producer\) authentication triplet plus every descendant block.
 
 ```go
 type accountBlockTransactionVerifier struct {
@@ -274,54 +331,54 @@ type accountBlockTransactionVerifier struct {
 ```
 
 <a name="accountBlockTransactionVerifier.all"></a>
-### func \(\*accountBlockTransactionVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L383>)
+### func \(\*accountBlockTransactionVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L478>)
 
 ```go
 func (abvt *accountBlockTransactionVerifier) all() error
 ```
 
-
+all runs every transactional check in dependency order and returns the first error encountered.
 
 <a name="accountBlockTransactionVerifier.descendantBlocks"></a>
-### func \(\*accountBlockTransactionVerifier\) [descendantBlocks](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L451>)
+### func \(\*accountBlockTransactionVerifier\) [descendantBlocks](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L562>)
 
 ```go
 func (abvt *accountBlockTransactionVerifier) descendantBlocks() error
 ```
 
-
+descendantBlocks recursively validates every nested [nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>). Non\-contract\-receive blocks must have an empty [nom.AccountBlock.DescendantBlocks](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.DescendantBlocks>); descendants are wrapped in [DescendantVerifyError](<#DescendantVerifyError>) so callers can tell which layer failed.
 
 <a name="accountBlockTransactionVerifier.hash"></a>
-### func \(\*accountBlockTransactionVerifier\) [hash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L426>)
+### func \(\*accountBlockTransactionVerifier\) [hash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L529>)
 
 ```go
 func (abvt *accountBlockTransactionVerifier) hash() error
 ```
 
-
+hash checks that the block carries a non\-zero hash and that the stored hash matches the canonical [nom.AccountBlock.ComputeHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.ComputeHash>) result.
 
 <a name="accountBlockTransactionVerifier.producer"></a>
-### func \(\*accountBlockTransactionVerifier\) [producer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L439>)
+### func \(\*accountBlockTransactionVerifier\) [producer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L545>)
 
 ```go
 func (abvt *accountBlockTransactionVerifier) producer() error
 ```
 
-
+producer checks the public key derives to the block's claimed address \(skipped for embedded contracts, which have no key\).
 
 <a name="accountBlockTransactionVerifier.signature"></a>
-### func \(\*accountBlockTransactionVerifier\) [signature](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L399>)
+### func \(\*accountBlockTransactionVerifier\) [signature](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L499>)
 
 ```go
 func (abvt *accountBlockTransactionVerifier) signature() error
 ```
 
-
+signature validates the Ed25519 signature. Embedded\-contract blocks must carry no PublicKey or Signature \(their authority is the contract dispatch path, not a key\); user blocks must carry both and the signature must verify against the block's hash.
 
 <a name="accountBlockVerifier"></a>
-## type [accountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L124-L129>)
+## type [accountBlockVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L172-L177>)
 
-
+accountBlockVerifier holds the in\-flight state for a single block\-as\-payload validation pass. The stores are resolved once by \[accountVerifier.getContext\]; per\-check methods then run in fixed order via \[accountBlockVerifier.all\].
 
 ```go
 type accountBlockVerifier struct {
@@ -333,99 +390,99 @@ type accountBlockVerifier struct {
 ```
 
 <a name="accountBlockVerifier.all"></a>
-### func \(\*accountBlockVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L131>)
+### func \(\*accountBlockVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L181>)
 
 ```go
 func (abv *accountBlockVerifier) all() error
 ```
 
-
+all runs every block\-as\-payload check in dependency order and returns the first error encountered.
 
 <a name="accountBlockVerifier.amounts"></a>
-### func \(\*accountBlockVerifier\) [amounts](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L204>)
+### func \(\*accountBlockVerifier\) [amounts](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L267>)
 
 ```go
 func (abv *accountBlockVerifier) amounts() error
 ```
 
-
+amounts checks the \(Amount, TokenStandard, ToAddress, FromBlockHash\) quartet is internally consistent for the block's send/receive role.
 
 <a name="accountBlockVerifier.blockType"></a>
-### func \(\*accountBlockVerifier\) [blockType](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L179>)
+### func \(\*accountBlockVerifier\) [blockType](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L239>)
 
 ```go
 func (abv *accountBlockVerifier) blockType() error
 ```
 
-
+blockType checks the BlockType is well\-formed and matches the address kind: embedded\-contract addresses must use the contract send/receive variants, and user addresses the user variants.
 
 <a name="accountBlockVerifier.chainIdentifier"></a>
-### func \(\*accountBlockVerifier\) [chainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L170>)
+### func \(\*accountBlockVerifier\) [chainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L226>)
 
 ```go
 func (abv *accountBlockVerifier) chainIdentifier() error
 ```
 
-
+chainIdentifier checks the block names this network's chain identifier \(replay protection across networks\).
 
 <a name="accountBlockVerifier.fromHash"></a>
-### func \(\*accountBlockVerifier\) [fromHash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L327>)
+### func \(\*accountBlockVerifier\) [fromHash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L412>)
 
 ```go
 func (abv *accountBlockVerifier) fromHash() error
 ```
 
-
+fromHash validates send/receive matching: the receive's [nom.AccountBlock.FromBlockHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.FromBlockHash>) must point to a real send, that send must not have been received already, and \(above [ReceiverMismatchEnforcementHeight](<#ReceiverMismatchEnforcementHeight>)\) the receiver must equal the send's ToAddress.
 
 <a name="accountBlockVerifier.momentumAcknowledged"></a>
-### func \(\*accountBlockVerifier\) [momentumAcknowledged](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L282>)
+### func \(\*accountBlockVerifier\) [momentumAcknowledged](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L361>)
 
 ```go
 func (abv *accountBlockVerifier) momentumAcknowledged() error
 ```
 
-
+momentumAcknowledged validates the block's MomentumAcknowledged field: it must point at an existing momentum, must equal the MomentumAcknowledged of every descendant for contract receives, must equal the confirmation height of the originating send for auto\-generated blocks, and must not regress relative to the previous block in the same account chain.
 
 <a name="accountBlockVerifier.pow"></a>
-### func \(\*accountBlockVerifier\) [pow](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L237>)
+### func \(\*accountBlockVerifier\) [pow](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L304>)
 
 ```go
 func (abv *accountBlockVerifier) pow() error
 ```
 
-
+pow validates the plasma PoW nonce when one is claimed. Embedded contracts cannot pay plasma via PoW; if Difficulty is non\-zero on an embedded address the block is rejected.
 
 <a name="accountBlockVerifier.previous"></a>
-### func \(\*accountBlockVerifier\) [previous](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L248>)
+### func \(\*accountBlockVerifier\) [previous](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L320>)
 
 ```go
 func (abv *accountBlockVerifier) previous() error
 ```
 
-
+previous checks the block's height/previous\-hash linkage against the account's frontier. Skipped for embedded\-contract receives: the chain layer assembles those out of order during a momentum's batch processing.
 
 <a name="accountBlockVerifier.sequencer"></a>
-### func \(\*accountBlockVerifier\) [sequencer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L355>)
+### func \(\*accountBlockVerifier\) [sequencer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L445>)
 
 ```go
 func (abv *accountBlockVerifier) sequencer() error
 ```
 
-
+sequencer ensures embedded\-contract receives consume from the head of their address mailbox in order — contracts cannot cherry\-pick which inbound send to receive. Only applies to embedded\-address receives; user accounts receive in any order.
 
 <a name="accountBlockVerifier.version"></a>
-### func \(\*accountBlockVerifier\) [version](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L161>)
+### func \(\*accountBlockVerifier\) [version](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L214>)
 
 ```go
 func (abv *accountBlockVerifier) version() error
 ```
 
-
+version checks the block's protocol version field. Currently only version 1 is accepted.
 
 <a name="accountVerifier"></a>
-## type [accountVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L33-L36>)
+## type [accountVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L61-L64>)
 
-
+accountVerifier is the [AccountBlockVerifier](<#AccountBlockVerifier>) implementation. Holds references to the chain \(for store lookups\) and consensus \(for producer validation\).
 
 ```go
 type accountVerifier struct {
@@ -435,36 +492,36 @@ type accountVerifier struct {
 ```
 
 <a name="accountVerifier.AccountBlock"></a>
-### func \(\*accountVerifier\) [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L83>)
+### func \(\*accountVerifier\) [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L121>)
 
 ```go
 func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error
 ```
 
-
+AccountBlock validates a stand\-alone account block. Rejects [nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) \(those are nested under a parent receive and must not be submitted directly\).
 
 <a name="accountVerifier.AccountBlockTransaction"></a>
-### func \(\*accountVerifier\) [AccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L100>)
+### func \(\*accountVerifier\) [AccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L142>)
 
 ```go
 func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlockTransaction) error
 ```
 
-
+AccountBlockTransaction validates the transactional layer of an account block: hash, signature, producer\-address consistency, and every nested descendant block.
 
 <a name="accountVerifier.getContext"></a>
-### func \(\*accountVerifier\) [getContext](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L38>)
+### func \(\*accountVerifier\) [getContext](<https://github.com/zenon-network/go-zenon/blob/master/verifier/account_block.go#L72>)
 
 ```go
 func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, error)
 ```
 
-
+getContext resolves the account\-store and momentum\-store views the per\-check helpers operate against. Returns one of [ErrABMHeightMissing](<#ErrVerifierInternal>), [ErrABPrevHashMustBeZero](<#ErrVerifierInternal>), [ErrABPrevHashMissing](<#ErrVerifierInternal>), [ErrABMAMustNotBeZero](<#ErrVerifierInternal>), [ErrABMAMissing](<#ErrVerifierInternal>), [ErrABPrevHasCementedOnTop](<#ErrVerifierInternal>), [ErrABPrevHeightExists](<#ErrVerifierInternal>), [ErrABPreviousMissing](<#ErrVerifierInternal>), or [ErrVerifierInternal](<#ErrVerifierInternal>) when the surrounding state required for verification is unavailable.
 
 <a name="momentumTransactionVerifier"></a>
-## type [momentumTransactionVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L212-L215>)
+## type [momentumTransactionVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L276-L279>)
 
-
+momentumTransactionVerifier holds the in\-flight state for the transactional pass on a momentum.
 
 ```go
 type momentumTransactionVerifier struct {
@@ -474,54 +531,54 @@ type momentumTransactionVerifier struct {
 ```
 
 <a name="momentumTransactionVerifier.all"></a>
-### func \(\*momentumTransactionVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L217>)
+### func \(\*momentumTransactionVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L283>)
 
 ```go
 func (mv *momentumTransactionVerifier) all() error
 ```
 
-
+all runs every transactional check in dependency order and returns the first error encountered.
 
 <a name="momentumTransactionVerifier.changesHash"></a>
-### func \(\*momentumTransactionVerifier\) [changesHash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L250>)
+### func \(\*momentumTransactionVerifier\) [changesHash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L325>)
 
 ```go
 func (mv *momentumTransactionVerifier) changesHash(transaction *nom.MomentumTransaction) error
 ```
 
-
+changesHash checks the momentum's [nom.Momentum.ChangesHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#Momentum.ChangesHash>) equals the hash of the transaction's patch. Binds state to consensus: the momentum can only be accepted if every node computes the same patch for the same set of account blocks.
 
 <a name="momentumTransactionVerifier.hash"></a>
-### func \(\*momentumTransactionVerifier\) [hash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L258>)
+### func \(\*momentumTransactionVerifier\) [hash](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L336>)
 
 ```go
 func (mv *momentumTransactionVerifier) hash(transaction *nom.MomentumTransaction) error
 ```
 
-
+hash checks the stored hash matches the canonical [nom.Momentum.ComputeHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#Momentum.ComputeHash>) result.
 
 <a name="momentumTransactionVerifier.producer"></a>
-### func \(\*momentumTransactionVerifier\) [producer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L266>)
+### func \(\*momentumTransactionVerifier\) [producer](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L349>)
 
 ```go
 func (mv *momentumTransactionVerifier) producer(transaction *nom.MomentumTransaction) error
 ```
 
-
+producer checks the consensus layer accepts the signing pillar as the elected producer for the momentum's tick. The actual eligibility logic \(election \+ points\) lives in [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>).
 
 <a name="momentumTransactionVerifier.signature"></a>
-### func \(\*momentumTransactionVerifier\) [signature](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L232>)
+### func \(\*momentumTransactionVerifier\) [signature](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L302>)
 
 ```go
 func (mv *momentumTransactionVerifier) signature(transaction *nom.MomentumTransaction) error
 ```
 
-
+signature validates the Ed25519 signature on the momentum hash. Returns [ErrMSignatureInvalid](<#ErrVerifierInternal>) on a mismatch and [ErrVerifierInternal](<#ErrVerifierInternal>) on key\-format errors.
 
 <a name="momentumVerifier"></a>
-## type [momentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L25-L29>)
+## type [momentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L36-L40>)
 
-
+momentumVerifier is the [MomentumVerifier](<#MomentumVerifier>) implementation.
 
 ```go
 type momentumVerifier struct {
@@ -532,36 +589,36 @@ type momentumVerifier struct {
 ```
 
 <a name="momentumVerifier.Momentum"></a>
-### func \(\*momentumVerifier\) [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L45>)
+### func \(\*momentumVerifier\) [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L65>)
 
 ```go
 func (mv *momentumVerifier) Momentum(detailed *nom.DetailedMomentum) error
 ```
 
-
+Momentum validates a momentum together with the \[nom.AccountBlock\]s prefetched for it \(the [nom.DetailedMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#DetailedMomentum>) form\). The prefetched list lets the verifier check that the account\-header continuity claimed by [nom.MomentumContent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumContent>) is reproducible from the block bodies.
 
 <a name="momentumVerifier.MomentumTransaction"></a>
-### func \(\*momentumVerifier\) [MomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L57>)
+### func \(\*momentumVerifier\) [MomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L80>)
 
 ```go
 func (mv *momentumVerifier) MomentumTransaction(transaction *nom.MomentumTransaction) error
 ```
 
-
+MomentumTransaction validates the transactional layer: changes\-hash, canonical hash, signature, and producer eligibility.
 
 <a name="momentumVerifier.getContext"></a>
-### func \(\*momentumVerifier\) [getContext](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L31>)
+### func \(\*momentumVerifier\) [getContext](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L46>)
 
 ```go
 func (mv *momentumVerifier) getContext(momentum *nom.Momentum) (store.Momentum, error)
 ```
 
-
+getContext resolves the previous\-momentum store the per\-check helpers run against. Returns one of [ErrMNotGenesis](<#ErrVerifierInternal>), [ErrMPrevHashMissing](<#ErrVerifierInternal>), or [ErrMPreviousMissing](<#ErrVerifierInternal>) when the surrounding state is missing or inconsistent.
 
 <a name="rawMomentumVerifier"></a>
-## type [rawMomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L72-L76>)
+## type [rawMomentumVerifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L99-L103>)
 
-
+rawMomentumVerifier holds the in\-flight state for the momentum\-as\-payload pass.
 
 ```go
 type rawMomentumVerifier struct {
@@ -572,72 +629,78 @@ type rawMomentumVerifier struct {
 ```
 
 <a name="rawMomentumVerifier.all"></a>
-### func \(\*rawMomentumVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L78>)
+### func \(\*rawMomentumVerifier\) [all](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L107>)
 
 ```go
 func (rmv *rawMomentumVerifier) all() error
 ```
 
-
+all runs every momentum\-as\-payload check in dependency order and returns the first error encountered.
 
 <a name="rawMomentumVerifier.chainIdentifier"></a>
-### func \(\*rawMomentumVerifier\) [chainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L99>)
+### func \(\*rawMomentumVerifier\) [chainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L131>)
 
 ```go
 func (rmv *rawMomentumVerifier) chainIdentifier() error
 ```
 
-
+chainIdentifier checks the momentum names this network's chain identifier \(replay protection across networks\).
 
 <a name="rawMomentumVerifier.content"></a>
-### func \(\*rawMomentumVerifier\) [content](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L158>)
+### func \(\*rawMomentumVerifier\) [content](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L220>)
 
 ```go
 func (rmv *rawMomentumVerifier) content() error
 ```
 
+content validates the account\-header list:
 
+- Total size is at most [chain.MaxAccountBlocksInMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#MaxAccountBlocksInMomentum>).
+- Each header in the content is present in the prefetched account\-block list \(sizes match exactly, except for batched contract sends which are skipped\).
+- For every \(address, header\) pair, the header's previous matches either the previous header for that address in this momentum or the address's frontier from before this momentum — i.e., the content is a contiguous extension of every touched account chain.
+
+The verifier does not validate the account blocks themselves here — that is [AccountBlockVerifier](<#AccountBlockVerifier>)'s job. content only checks that the momentum\-content shape is sane.
 
 <a name="rawMomentumVerifier.data"></a>
-### func \(\*rawMomentumVerifier\) [data](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L152>)
+### func \(\*rawMomentumVerifier\) [data](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L199>)
 
 ```go
 func (rmv *rawMomentumVerifier) data() error
 ```
 
-
+data checks the per\-momentum [nom.Momentum.Data](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#Momentum.Data>) field is empty. The field is reserved for future use; non\-empty data is currently a hard rejection.
 
 <a name="rawMomentumVerifier.previous"></a>
-### func \(\*rawMomentumVerifier\) [previous](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L134>)
+### func \(\*rawMomentumVerifier\) [previous](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L177>)
 
 ```go
 func (rmv *rawMomentumVerifier) previous() error
 ```
 
-
+previous checks the previous\-hash linkage against the previous\-momentum store's frontier. The genesis momentum \(Height == 1\) is rejected here; genesis is loaded via [github.com/zenon\\\-network/go\\\-zenon/chain/genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/>).
 
 <a name="rawMomentumVerifier.timestamp"></a>
-### func \(\*rawMomentumVerifier\) [timestamp](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L117>)
+### func \(\*rawMomentumVerifier\) [timestamp](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L156>)
 
 ```go
 func (rmv *rawMomentumVerifier) timestamp() error
 ```
 
-
+timestamp checks the momentum's timestamp is present, not more than 10 seconds in the future relative to wall time, and strictly increasing against the previous\-momentum frontier.
 
 <a name="rawMomentumVerifier.version"></a>
-### func \(\*rawMomentumVerifier\) [version](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L108>)
+### func \(\*rawMomentumVerifier\) [version](<https://github.com/zenon-network/go-zenon/blob/master/verifier/momentum.go#L143>)
 
 ```go
 func (rmv *rawMomentumVerifier) version() error
 ```
 
-
+version checks the momentum's protocol version field. Currently only version 1 is accepted.
 
 <a name="verifier"></a>
-## type [verifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L17-L20>)
+## type [verifier](<https://github.com/zenon-network/go-zenon/blob/master/verifier/verifier.go#L27-L30>)
 
-
+verifier is the canonical [Verifier](<#Verifier>) implementation, composed of an [AccountBlockVerifier](<#AccountBlockVerifier>) and a [MomentumVerifier](<#MomentumVerifier>) sharing the same chain and consensus handles.
 
 ```go
 type verifier struct {

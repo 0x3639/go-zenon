@@ -17,17 +17,32 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
+// MomentumVerifier validates momentums against consensus rules. Like
+// [AccountBlockVerifier], validation runs in two passes:
+//
+//   - [MomentumVerifier.Momentum] — momentum-as-payload checks (chain
+//     identifier, version, timestamp monotonicity, previous-momentum
+//     linkage, content size, and account-header continuity against the
+//     prefetched account blocks).
+//   - [MomentumVerifier.MomentumTransaction] — transactional checks
+//     ([nom.Momentum.ChangesHash], canonical hash, signature, and
+//     producer eligibility for the momentum's tick).
 type MomentumVerifier interface {
 	Momentum(momentum *nom.DetailedMomentum) error
 	MomentumTransaction(transaction *nom.MomentumTransaction) error
 }
 
+// momentumVerifier is the [MomentumVerifier] implementation.
 type momentumVerifier struct {
 	log       log15.Logger
 	chain     chain.Chain
 	consensus consensus.Consensus
 }
 
+// getContext resolves the previous-momentum store the per-check helpers
+// run against. Returns one of [ErrMNotGenesis], [ErrMPrevHashMissing], or
+// [ErrMPreviousMissing] when the surrounding state is missing or
+// inconsistent.
 func (mv *momentumVerifier) getContext(momentum *nom.Momentum) (store.Momentum, error) {
 	if momentum.Height == 1 {
 		return nil, ErrMNotGenesis
@@ -42,6 +57,11 @@ func (mv *momentumVerifier) getContext(momentum *nom.Momentum) (store.Momentum, 
 	}
 	return momentumStore, nil
 }
+
+// Momentum validates a momentum together with the [nom.AccountBlock]s
+// prefetched for it (the [nom.DetailedMomentum] form). The prefetched
+// list lets the verifier check that the account-header continuity claimed
+// by [nom.MomentumContent] is reproducible from the block bodies.
 func (mv *momentumVerifier) Momentum(detailed *nom.DetailedMomentum) error {
 	momentumStore, err := mv.getContext(detailed.Momentum)
 	if err != nil {
@@ -54,6 +74,9 @@ func (mv *momentumVerifier) Momentum(detailed *nom.DetailedMomentum) error {
 		momentumStore: momentumStore,
 	}).all()
 }
+
+// MomentumTransaction validates the transactional layer: changes-hash,
+// canonical hash, signature, and producer eligibility.
 func (mv *momentumVerifier) MomentumTransaction(transaction *nom.MomentumTransaction) error {
 	return (&momentumTransactionVerifier{
 		transaction: transaction,
@@ -61,6 +84,8 @@ func (mv *momentumVerifier) MomentumTransaction(transaction *nom.MomentumTransac
 	}).all()
 }
 
+// NewMomentumVerifier constructs a [MomentumVerifier] backed by chain
+// (for store lookups) and consensus (for producer validation).
 func NewMomentumVerifier(chain chain.Chain, consensus consensus.Consensus) MomentumVerifier {
 	return &momentumVerifier{
 		log:       common.VerifierLogger.New("type", "momentum"),
@@ -69,12 +94,16 @@ func NewMomentumVerifier(chain chain.Chain, consensus consensus.Consensus) Momen
 	}
 }
 
+// rawMomentumVerifier holds the in-flight state for the
+// momentum-as-payload pass.
 type rawMomentumVerifier struct {
 	momentum      *nom.Momentum
 	accountBlocks []*nom.AccountBlock
 	momentumStore store.Momentum
 }
 
+// all runs every momentum-as-payload check in dependency order and
+// returns the first error encountered.
 func (rmv *rawMomentumVerifier) all() error {
 	if err := rmv.chainIdentifier(); err != nil {
 		return err
@@ -96,6 +125,9 @@ func (rmv *rawMomentumVerifier) all() error {
 	}
 	return nil
 }
+
+// chainIdentifier checks the momentum names this network's chain
+// identifier (replay protection across networks).
 func (rmv *rawMomentumVerifier) chainIdentifier() error {
 	if rmv.momentum.ChainIdentifier == 0 {
 		return ErrABChainIdentifierMissing
@@ -105,6 +137,9 @@ func (rmv *rawMomentumVerifier) chainIdentifier() error {
 	}
 	return nil
 }
+
+// version checks the momentum's protocol version field. Currently only
+// version 1 is accepted.
 func (rmv *rawMomentumVerifier) version() error {
 	if rmv.momentum.Version == 0 {
 		return ErrMVersionMissing
@@ -114,6 +149,10 @@ func (rmv *rawMomentumVerifier) version() error {
 	}
 	return nil
 }
+
+// timestamp checks the momentum's timestamp is present, not more than
+// 10 seconds in the future relative to wall time, and strictly increasing
+// against the previous-momentum frontier.
 func (rmv *rawMomentumVerifier) timestamp() error {
 	if rmv.momentum.Timestamp.Unix() == 0 {
 		return ErrMTimestampMissing
@@ -131,6 +170,10 @@ func (rmv *rawMomentumVerifier) timestamp() error {
 	}
 	return nil
 }
+
+// previous checks the previous-hash linkage against the previous-momentum
+// store's frontier. The genesis momentum (Height == 1) is rejected here;
+// genesis is loaded via [github.com/zenon-network/go-zenon/chain/genesis].
 func (rmv *rawMomentumVerifier) previous() error {
 	// for consistency, check again
 	if rmv.momentum.Height == 1 {
@@ -149,12 +192,31 @@ func (rmv *rawMomentumVerifier) previous() error {
 	}
 	return nil
 }
+
+// data checks the per-momentum [nom.Momentum.Data] field is empty. The
+// field is reserved for future use; non-empty data is currently a hard
+// rejection.
 func (rmv *rawMomentumVerifier) data() error {
 	if len(rmv.momentum.Data) != 0 {
 		return ErrMDataMustBeZero
 	}
 	return nil
 }
+
+// content validates the account-header list:
+//
+//   - Total size is at most [chain.MaxAccountBlocksInMomentum].
+//   - Each header in the content is present in the prefetched
+//     account-block list (sizes match exactly, except for batched
+//     contract sends which are skipped).
+//   - For every (address, header) pair, the header's previous matches
+//     either the previous header for that address in this momentum or
+//     the address's frontier from before this momentum — i.e., the
+//     content is a contiguous extension of every touched account chain.
+//
+// The verifier does not validate the account blocks themselves here —
+// that is [AccountBlockVerifier]'s job. content only checks that the
+// momentum-content shape is sane.
 func (rmv *rawMomentumVerifier) content() error {
 	if len(rmv.momentum.Content) > chain.MaxAccountBlocksInMomentum {
 		return ErrMContentTooBig
@@ -209,11 +271,15 @@ func (rmv *rawMomentumVerifier) content() error {
 	return nil
 }
 
+// momentumTransactionVerifier holds the in-flight state for the
+// transactional pass on a momentum.
 type momentumTransactionVerifier struct {
 	transaction *nom.MomentumTransaction
 	consensus   consensus.Consensus
 }
 
+// all runs every transactional check in dependency order and returns the
+// first error encountered.
 func (mv *momentumTransactionVerifier) all() error {
 	if err := mv.changesHash(mv.transaction); err != nil {
 		return err
@@ -229,6 +295,10 @@ func (mv *momentumTransactionVerifier) all() error {
 	}
 	return nil
 }
+
+// signature validates the Ed25519 signature on the momentum hash.
+// Returns [ErrMSignatureInvalid] on a mismatch and [ErrVerifierInternal]
+// on key-format errors.
 func (mv *momentumTransactionVerifier) signature(transaction *nom.MomentumTransaction) error {
 	momentum := transaction.Momentum
 
@@ -247,6 +317,11 @@ func (mv *momentumTransactionVerifier) signature(transaction *nom.MomentumTransa
 	}
 	return nil
 }
+
+// changesHash checks the momentum's [nom.Momentum.ChangesHash] equals the
+// hash of the transaction's patch. Binds state to consensus: the
+// momentum can only be accepted if every node computes the same patch
+// for the same set of account blocks.
 func (mv *momentumTransactionVerifier) changesHash(transaction *nom.MomentumTransaction) error {
 	computedHash := db.PatchHash(transaction.Changes)
 	if computedHash != transaction.Momentum.ChangesHash {
@@ -255,6 +330,9 @@ func (mv *momentumTransactionVerifier) changesHash(transaction *nom.MomentumTran
 	}
 	return nil
 }
+
+// hash checks the stored hash matches the canonical
+// [nom.Momentum.ComputeHash] result.
 func (mv *momentumTransactionVerifier) hash(transaction *nom.MomentumTransaction) error {
 	momentum := transaction.Momentum
 	computedHash := momentum.ComputeHash()
@@ -263,6 +341,11 @@ func (mv *momentumTransactionVerifier) hash(transaction *nom.MomentumTransaction
 	}
 	return nil
 }
+
+// producer checks the consensus layer accepts the signing pillar as the
+// elected producer for the momentum's tick. The actual eligibility logic
+// (election + points) lives in
+// [github.com/zenon-network/go-zenon/consensus].
 func (mv *momentumTransactionVerifier) producer(transaction *nom.MomentumTransaction) error {
 	// MomentumTransaction producer
 	result, err := mv.consensus.VerifyMomentumProducer(transaction.Momentum)

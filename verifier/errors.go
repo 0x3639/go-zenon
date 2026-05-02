@@ -6,15 +6,33 @@ import (
 	"github.com/pkg/errors"
 )
 
+// InternalError wraps err in [ErrVerifierInternal] so callers can branch
+// on the sentinel while preserving the underlying detail through unwrap.
+// Returned whenever the verifier hits an unexpected failure (e.g., a
+// store read error) that is not a block-level rule violation.
 func InternalError(err error) error {
 	return fmt.Errorf("%w - %v", ErrVerifierInternal, err)
 }
 
+// DescendantVerifyError wraps err in [ErrABDescendantVerify] so callers
+// can tell that the failure came from validating a descendant block
+// rather than the outer parent block.
 func DescendantVerifyError(err error) error {
 	return fmt.Errorf("%w - %v", ErrABDescendantVerify, err)
 }
 
+// Sentinel errors returned by the verifier. Grouped by the field or
+// invariant they police so callers can branch on the specific failure
+// mode without parsing strings.
+//
+// Naming conventions:
+//   - `ErrAB*` — account-block rule violations.
+//   - `ErrM*`  — momentum rule violations.
+//   - `ErrVerifierInternal` — a wrapped internal/store error;
+//     [InternalError] is the constructor.
 var (
+	// ErrVerifierInternal is the parent sentinel for unexpected
+	// (non-rule) errors; constructed via [InternalError].
 	ErrVerifierInternal = errors.New("internal error while verifying")
 
 	ErrABVersionMissing            = errors.New("account-block version is missing")

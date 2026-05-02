@@ -14,27 +14,61 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
+// ReceiverMismatchEnforcementHeight is the momentum height at which
+// [ErrABFromBlockReceiverMismatch] becomes a hard verification failure.
+// Before this height the receiver-mismatch case was tolerated for
+// backwards compatibility with previously-relayed traffic; after it the
+// verifier rejects any receive whose target address differs from the
+// originating send's `ToAddress`.
+//
+// Targeting 2025-04-16 12:00:00 UTC.
 var (
 	ReceiverMismatchEnforcementHeight uint64 = 10109240 // Targeting 2025-04-16 12:00:00 UTC
 )
 
+// isBatched reports whether block is a contract-emitted send (one of the
+// nested `BlockTypeContractSend` entries inside a parent receive's
+// [nom.AccountBlock.DescendantBlocks]). Such blocks must not appear
+// stand-alone; the parent receive carries them through verification.
 func isBatched(block *nom.AccountBlock) bool {
 	return block.IsSendBlock() && types.IsEmbeddedAddress(block.Address)
 }
+
+// isContractReceive reports whether block is a receive authored by an
+// embedded contract (i.e., a [nom.BlockTypeContractReceive] block on a
+// system address).
 func isContractReceive(block *nom.AccountBlock) bool {
 	return block.IsReceiveBlock() && types.IsEmbeddedAddress(block.Address)
 }
 
+// AccountBlockVerifier validates account blocks against consensus rules.
+// Validation runs in two passes:
+//
+//   - [AccountBlockVerifier.AccountBlock] — block-as-payload checks
+//     (version, type, amounts, plasma PoW, previous-block linkage,
+//     momentum-acknowledged consistency, send/receive matching).
+//   - [AccountBlockVerifier.AccountBlockTransaction] — transactional
+//     checks tied to the patch (canonical hash, signature, producer
+//     address, descendant-block validation).
 type AccountBlockVerifier interface {
 	AccountBlock(block *nom.AccountBlock) error
 	AccountBlockTransaction(transaction *nom.AccountBlockTransaction) error
 }
 
+// accountVerifier is the [AccountBlockVerifier] implementation. Holds
+// references to the chain (for store lookups) and consensus (for
+// producer validation).
 type accountVerifier struct {
 	chain     chain.Chain
 	consensus consensus.Consensus
 }
 
+// getContext resolves the account-store and momentum-store views the
+// per-check helpers operate against. Returns one of [ErrABMHeightMissing],
+// [ErrABPrevHashMustBeZero], [ErrABPrevHashMissing], [ErrABMAMustNotBeZero],
+// [ErrABMAMissing], [ErrABPrevHasCementedOnTop], [ErrABPrevHeightExists],
+// [ErrABPreviousMissing], or [ErrVerifierInternal] when the surrounding
+// state required for verification is unavailable.
 func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, error) {
 	if block.Height == 0 {
 		return nil, nil, ErrABMHeightMissing
@@ -80,6 +114,10 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 
 	return accountStore, momentumStore, nil
 }
+
+// AccountBlock validates a stand-alone account block. Rejects
+// [nom.BlockTypeContractSend] (those are nested under a parent receive
+// and must not be submitted directly).
 func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 	if block.BlockType == nom.BlockTypeContractSend {
 		return ErrABTypeInvalidExternal
@@ -97,6 +135,10 @@ func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 		frontierStore: av.chain.GetFrontierMomentumStore(),
 	}).all()
 }
+
+// AccountBlockTransaction validates the transactional layer of an
+// account block: hash, signature, producer-address consistency, and
+// every nested descendant block.
 func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlockTransaction) error {
 	if transaction.Block.BlockType == nom.BlockTypeContractSend {
 		return ErrABTypeInvalidExternal
@@ -114,6 +156,8 @@ func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlock
 	}).all()
 }
 
+// NewAccountBlockVerifier constructs an [AccountBlockVerifier] backed by
+// chain (for store lookups) and consensus (for producer validation).
 func NewAccountBlockVerifier(chain chain.Chain, consensus consensus.Consensus) AccountBlockVerifier {
 	return &accountVerifier{
 		chain:     chain,
@@ -121,6 +165,10 @@ func NewAccountBlockVerifier(chain chain.Chain, consensus consensus.Consensus) A
 	}
 }
 
+// accountBlockVerifier holds the in-flight state for a single
+// block-as-payload validation pass. The stores are resolved once by
+// [accountVerifier.getContext]; per-check methods then run in fixed
+// order via [accountBlockVerifier.all].
 type accountBlockVerifier struct {
 	block         *nom.AccountBlock
 	accountStore  store.Account
@@ -128,6 +176,8 @@ type accountBlockVerifier struct {
 	frontierStore store.Momentum
 }
 
+// all runs every block-as-payload check in dependency order and returns
+// the first error encountered.
 func (abv *accountBlockVerifier) all() error {
 	if err := abv.version(); err != nil {
 		return err
@@ -158,6 +208,9 @@ func (abv *accountBlockVerifier) all() error {
 	}
 	return nil
 }
+
+// version checks the block's protocol version field. Currently only
+// version 1 is accepted.
 func (abv *accountBlockVerifier) version() error {
 	if abv.block.Version == 0 {
 		return ErrABVersionMissing
@@ -167,6 +220,9 @@ func (abv *accountBlockVerifier) version() error {
 	}
 	return nil
 }
+
+// chainIdentifier checks the block names this network's chain identifier
+// (replay protection across networks).
 func (abv *accountBlockVerifier) chainIdentifier() error {
 	if abv.block.ChainIdentifier == 0 {
 		return ErrMChainIdentifierMissing
@@ -176,6 +232,10 @@ func (abv *accountBlockVerifier) chainIdentifier() error {
 	}
 	return nil
 }
+
+// blockType checks the BlockType is well-formed and matches the address
+// kind: embedded-contract addresses must use the contract send/receive
+// variants, and user addresses the user variants.
 func (abv *accountBlockVerifier) blockType() error {
 	if abv.block.BlockType == 0 {
 		return ErrABTypeMissing
@@ -201,6 +261,9 @@ func (abv *accountBlockVerifier) blockType() error {
 	}
 	return nil
 }
+
+// amounts checks the (Amount, TokenStandard, ToAddress, FromBlockHash)
+// quartet is internally consistent for the block's send/receive role.
 func (abv *accountBlockVerifier) amounts() error {
 	if abv.block.IsSendBlock() {
 		if abv.block.Amount.Sign() == -1 {
@@ -234,6 +297,10 @@ func (abv *accountBlockVerifier) amounts() error {
 	}
 	return nil
 }
+
+// pow validates the plasma PoW nonce when one is claimed. Embedded
+// contracts cannot pay plasma via PoW; if Difficulty is non-zero on an
+// embedded address the block is rejected.
 func (abv *accountBlockVerifier) pow() error {
 	if abv.block.Difficulty != 0 {
 		if types.IsEmbeddedAddress(abv.block.Address) {
@@ -245,6 +312,11 @@ func (abv *accountBlockVerifier) pow() error {
 	}
 	return nil
 }
+
+// previous checks the block's height/previous-hash linkage against the
+// account's frontier. Skipped for embedded-contract receives: the chain
+// layer assembles those out of order during a momentum's batch
+// processing.
 func (abv *accountBlockVerifier) previous() error {
 	// for consistency, check again
 	if abv.block.Height == 0 {
@@ -279,6 +351,13 @@ func (abv *accountBlockVerifier) previous() error {
 	}
 	return nil
 }
+
+// momentumAcknowledged validates the block's MomentumAcknowledged field:
+// it must point at an existing momentum, must equal the
+// MomentumAcknowledged of every descendant for contract receives, must
+// equal the confirmation height of the originating send for
+// auto-generated blocks, and must not regress relative to the previous
+// block in the same account chain.
 func (abv *accountBlockVerifier) momentumAcknowledged() error {
 	momentum, err := abv.momentumStore.GetFrontierMomentum()
 	if err != nil {
@@ -324,6 +403,12 @@ func (abv *accountBlockVerifier) momentumAcknowledged() error {
 
 	return nil
 }
+
+// fromHash validates send/receive matching: the receive's
+// [nom.AccountBlock.FromBlockHash] must point to a real send, that send
+// must not have been received already, and (above
+// [ReceiverMismatchEnforcementHeight]) the receiver must equal the
+// send's ToAddress.
 func (abv *accountBlockVerifier) fromHash() error {
 	if abv.block.IsSendBlock() {
 		return nil
@@ -352,6 +437,11 @@ func (abv *accountBlockVerifier) fromHash() error {
 
 	return nil
 }
+
+// sequencer ensures embedded-contract receives consume from the head of
+// their address mailbox in order — contracts cannot cherry-pick which
+// inbound send to receive. Only applies to embedded-address receives;
+// user accounts receive in any order.
 func (abv *accountBlockVerifier) sequencer() error {
 	if types.IsEmbeddedAddress(abv.block.Address) && abv.block.IsReceiveBlock() {
 	} else {
@@ -374,12 +464,17 @@ func (abv *accountBlockVerifier) sequencer() error {
 	return nil
 }
 
+// accountBlockTransactionVerifier holds the in-flight state for the
+// transactional pass: validates the (Hash, Signature, Producer)
+// authentication triplet plus every descendant block.
 type accountBlockTransactionVerifier struct {
 	transaction   *nom.AccountBlockTransaction
 	accountStore  store.Account
 	momentumStore store.Momentum
 }
 
+// all runs every transactional check in dependency order and returns the
+// first error encountered.
 func (abvt *accountBlockTransactionVerifier) all() error {
 	if err := abvt.hash(); err != nil {
 		return err
@@ -396,6 +491,11 @@ func (abvt *accountBlockTransactionVerifier) all() error {
 
 	return nil
 }
+
+// signature validates the Ed25519 signature. Embedded-contract blocks
+// must carry no PublicKey or Signature (their authority is the contract
+// dispatch path, not a key); user blocks must carry both and the signature
+// must verify against the block's hash.
 func (abvt *accountBlockTransactionVerifier) signature() error {
 	block := abvt.transaction.Block
 	if types.IsEmbeddedAddress(block.Address) {
@@ -423,6 +523,9 @@ func (abvt *accountBlockTransactionVerifier) signature() error {
 	}
 	return nil
 }
+
+// hash checks that the block carries a non-zero hash and that the stored
+// hash matches the canonical [nom.AccountBlock.ComputeHash] result.
 func (abvt *accountBlockTransactionVerifier) hash() error {
 	block := abvt.transaction.Block
 
@@ -436,6 +539,9 @@ func (abvt *accountBlockTransactionVerifier) hash() error {
 	}
 	return nil
 }
+
+// producer checks the public key derives to the block's claimed address
+// (skipped for embedded contracts, which have no key).
 func (abvt *accountBlockTransactionVerifier) producer() error {
 	block := abvt.transaction.Block
 
@@ -448,6 +554,11 @@ func (abvt *accountBlockTransactionVerifier) producer() error {
 
 	return nil
 }
+
+// descendantBlocks recursively validates every nested
+// [nom.BlockTypeContractSend]. Non-contract-receive blocks must have an
+// empty [nom.AccountBlock.DescendantBlocks]; descendants are wrapped in
+// [DescendantVerifyError] so callers can tell which layer failed.
 func (abvt *accountBlockTransactionVerifier) descendantBlocks() error {
 	block := abvt.transaction.Block
 	if !isContractReceive(block) && len(block.DescendantBlocks) > 0 {
