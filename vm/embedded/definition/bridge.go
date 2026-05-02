@@ -19,6 +19,35 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// jsonBridge is the canonical Solidity-shaped ABI for the Bridge
+// contract. The bridge spans many flows:
+//
+//   - Wrap (outbound): user wrap requests turn ZTS tokens into
+//     redeemable claims on a remote network.
+//     [WrapTokenMethodName] / [UpdateWrapRequestMethodName].
+//   - Unwrap (inbound): TSS-signed unwrap claims credit ZTS
+//     tokens to the destination address; users claim them via
+//     redeem after the configured delay.
+//     [UnwrapTokenMethodName] / [RedeemUnwrapMethodName] /
+//     [RevokeUnwrapRequestMethodName].
+//   - Network configuration: [SetNetworkMethodName],
+//     [RemoveNetworkMethodName], [SetTokenPairMethod],
+//     [RemoveTokenPairMethodName], plus metadata setters.
+//   - Halt / unhalt and emergency: incident-response hooks
+//     ([HaltMethodName], [UnhaltMethodName],
+//     [EmergencyMethodName]).
+//   - Governance: administrator rotation
+//     ([ChangeAdministratorMethodName],
+//     [ProposeAdministratorMethodName]), guardian nomination
+//     ([NominateGuardiansMethodName]), TSS key rotation
+//     ([ChangeTssECDSAPubKeyMethodName]), allow-keygen toggle
+//     ([SetAllowKeygenMethodName]), orchestrator info, and
+//     metadata.
+//
+// Storage records: bridgeInfo (singleton), networkInfo (per
+// remote network), tokenPair (per network × token), wrapRequest /
+// unwrapRequest (per outbound / inbound), securityInfo (guardians /
+// delays), orchestratorInfo, redeemHistory.
 const (
 	jsonBridge = `
 	[
@@ -213,23 +242,52 @@ const (
 		]}
 	]`
 
-	WrapTokenMethodName            = "WrapToken"
-	UpdateWrapRequestMethodName    = "UpdateWrapRequest"
-	UnwrapTokenMethodName          = "UnwrapToken"
-	RevokeUnwrapRequestMethodName  = "RevokeUnwrapRequest"
-	RedeemUnwrapMethodName         = "Redeem"
-	SetNetworkMethodName           = "SetNetwork"
-	RemoveNetworkMethodName        = "RemoveNetwork"
-	SetTokenPairMethod             = "SetTokenPair"
-	RemoveTokenPairMethodName      = "RemoveTokenPair"
-	HaltMethodName                 = "Halt"
-	UnhaltMethodName               = "Unhalt"
-	SetAllowKeygenMethodName       = "SetAllowKeyGen"
+	// WrapTokenMethodName initiates a wrap (outbound) request.
+	WrapTokenMethodName = "WrapToken"
+	// UpdateWrapRequestMethodName attaches a TSS signature to a
+	// queued wrap request so the orchestrator can execute it on the
+	// remote chain.
+	UpdateWrapRequestMethodName = "UpdateWrapRequest"
+	// UnwrapTokenMethodName admits an inbound unwrap (a TSS-signed
+	// claim of a remote-chain transaction) into the contract.
+	UnwrapTokenMethodName = "UnwrapToken"
+	// RevokeUnwrapRequestMethodName cancels a queued inbound
+	// unwrap (administrator-only).
+	RevokeUnwrapRequestMethodName = "RevokeUnwrapRequest"
+	// RedeemUnwrapMethodName claims tokens for a confirmed inbound
+	// unwrap once the redeem-delay window has elapsed.
+	RedeemUnwrapMethodName = "Redeem"
+	// SetNetworkMethodName registers a remote network.
+	SetNetworkMethodName = "SetNetwork"
+	// RemoveNetworkMethodName de-registers a remote network.
+	RemoveNetworkMethodName = "RemoveNetwork"
+	// SetTokenPairMethod registers / configures a (network, token)
+	// pair (bridgeability flags, fees, redeem delay).
+	SetTokenPairMethod = "SetTokenPair"
+	// RemoveTokenPairMethodName removes a (network, token) pair.
+	RemoveTokenPairMethodName = "RemoveTokenPair"
+	// HaltMethodName halts the bridge (suspends new wraps and
+	// redeems).
+	HaltMethodName = "Halt"
+	// UnhaltMethodName unblocks the bridge after the configured
+	// UnhaltDurationInMomentums grace window.
+	UnhaltMethodName = "Unhalt"
+	// SetAllowKeygenMethodName toggles whether the orchestrator
+	// may run a TSS key-generation ceremony.
+	SetAllowKeygenMethodName = "SetAllowKeyGen"
+	// ChangeTssECDSAPubKeyMethodName rotates the TSS ECDSA key
+	// (requires signatures with both the old and new keys).
 	ChangeTssECDSAPubKeyMethodName = "ChangeTssECDSAPubKey"
-	SetOrchestratorInfoMethodName  = "SetOrchestratorInfo"
+	// SetOrchestratorInfoMethodName updates orchestrator-level
+	// configuration (window thresholds, etc.).
+	SetOrchestratorInfoMethodName = "SetOrchestratorInfo"
 
+	// SetNetworkMetadataMethodName updates a network's free-form
+	// metadata blob.
 	SetNetworkMetadataMethodName = "SetNetworkMetadata"
-	SetBridgeMetadataMethodName  = "SetBridgeMetadata"
+	// SetBridgeMetadataMethodName updates the bridge-level
+	// metadata blob.
+	SetBridgeMetadataMethodName = "SetBridgeMetadata"
 
 	requestPairVariableName   = "requestPair"
 	wrapRequestVariableName   = "wrapRequest"
@@ -242,6 +300,20 @@ const (
 	tokenPairVariableName        = "tokenPair"
 )
 
+// ABIBridge is the parsed [abi.ABIContract] for the Bridge
+// contract. Per-prefix key namespaces:
+// 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo
+// (singleton), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair
+// (per network × token), 7=feeTokenPair (per token fee
+// accumulator).
+//
+// Network class discriminators distinguish remote-network families:
+// [NoMClass] for sister NoM networks, [EvmClass] for
+// Ethereum-compatible chains.
+//
+// The Uint256Ty / AddressTy / StringTy handles are
+// go-ethereum ABI types used to encode unwrap-payload digests for
+// signature verification.
 var (
 	ABIBridge = abi.JSONToABIContract(strings.NewReader(jsonBridge))
 
@@ -253,7 +325,10 @@ var (
 	RequestPairKeyPrefix        = []byte{6}
 	FeeTokenPairKeyPrefix       = []byte{7}
 
+	// NoMClass is the network-class discriminator for sister Network-of-Momentum networks.
 	NoMClass = uint32(1)
+	// EvmClass is the network-class discriminator for
+	// Ethereum-compatible (EVM) remote networks.
 	EvmClass = uint32(2)
 
 	Uint256Ty, _ = eabi.NewType("uint256", "uint256", nil)
@@ -261,10 +336,16 @@ var (
 	StringTy, _  = eabi.NewType("string", "string", nil)
 )
 
+// BridgeInfoVariable is the singleton bridge configuration record:
+// administrator authority, the active TSS public key (compressed
+// and decompressed forms cached together), the allow-keygen
+// toggle, halt state with its grace window, the TSS message
+// nonce, and a free-form metadata blob.
 type BridgeInfoVariable struct {
-	// Administrator address
+	// Administrator address.
 	Administrator types.Address `json:"administrator"`
-	// ECDSA pub key generated by the orchestrator from key gen ceremony
+	// ECDSA pub key generated by the orchestrator from key gen
+	// ceremony.
 	CompressedTssECDSAPubKey   string `json:"compressedTssECDSAPubKey"`
 	DecompressedTssECDSAPubKey string `json:"decompressedTssECDSAPubKey"`
 	// This specifies whether the orchestrator should key gen or not
@@ -331,7 +412,11 @@ func GetBridgeInfoVariable(context db.DB) (*BridgeInfoVariable, error) {
 	}
 }
 
-// NetworkInfoVariable One network will always be znn, so we just need the other one
+// NetworkInfoVariable is the per-remote-network record. One
+// network will always be znn, so we just need the other one — the
+// (NetworkClass, Id) pair identifies the remote chain;
+// ContractAddress points at the bridge endpoint there;
+// TokenPairs is the byte-encoded list of [TokenPair] records.
 type NetworkInfoVariable struct {
 	NetworkClass    uint32   `json:"networkClass"`
 	Id              uint32   `json:"chainId"`
@@ -341,6 +426,12 @@ type NetworkInfoVariable struct {
 	TokenPairs      [][]byte `json:"tokenPairs"`
 }
 
+// TokenPair is one (network, token) configuration: bridge / redeem
+// flags, fee percentage (basis points; denominator
+// [constants.MaximumFee]), per-pair redeem delay in momentums,
+// minimum amount, and a free-form metadata blob. Owned indicates
+// whether the bridge contract owns the token (mintable on
+// inbound) or whether tokens are escrowed on outbound.
 type TokenPair struct {
 	TokenStandard types.ZenonTokenStandard `json:"tokenStandard"`
 	TokenAddress  string                   `json:"tokenAddress"`
@@ -353,6 +444,8 @@ type TokenPair struct {
 	Metadata      string                   `json:"metadata"`
 }
 
+// TokenPairMarshall is the JSON-friendly twin of [TokenPair]
+// (MinAmount as a string for clients without big-integer support).
 type TokenPairMarshall struct {
 	TokenStandard types.ZenonTokenStandard `json:"tokenStandard"`
 	TokenAddress  string                   `json:"tokenAddress"`

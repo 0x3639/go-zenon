@@ -462,7 +462,15 @@ const (
 )
 ```
 
-<a name="jsonBridge"></a>
+<a name="jsonBridge"></a>jsonBridge is the canonical Solidity\-shaped ABI for the Bridge contract. The bridge spans many flows:
+
+- Wrap \(outbound\): user wrap requests turn ZTS tokens into redeemable claims on a remote network. [WrapTokenMethodName](<#jsonBridge>) / [UpdateWrapRequestMethodName](<#jsonBridge>).
+- Unwrap \(inbound\): TSS\-signed unwrap claims credit ZTS tokens to the destination address; users claim them via redeem after the configured delay. [UnwrapTokenMethodName](<#jsonBridge>) / [RedeemUnwrapMethodName](<#jsonBridge>) / [RevokeUnwrapRequestMethodName](<#jsonBridge>).
+- Network configuration: [SetNetworkMethodName](<#jsonBridge>), [RemoveNetworkMethodName](<#jsonBridge>), [SetTokenPairMethod](<#jsonBridge>), [RemoveTokenPairMethodName](<#jsonBridge>), plus metadata setters.
+- Halt / unhalt and emergency: incident\-response hooks \([HaltMethodName](<#jsonBridge>), [UnhaltMethodName](<#jsonBridge>), [EmergencyMethodName](<#VoteYes>)\).
+- Governance: administrator rotation \([ChangeAdministratorMethodName](<#VoteYes>), [ProposeAdministratorMethodName](<#VoteYes>)\), guardian nomination \([NominateGuardiansMethodName](<#VoteYes>)\), TSS key rotation \([ChangeTssECDSAPubKeyMethodName](<#jsonBridge>)\), allow\-keygen toggle \([SetAllowKeygenMethodName](<#jsonBridge>)\), orchestrator info, and metadata.
+
+Storage records: bridgeInfo \(singleton\), networkInfo \(per remote network\), tokenPair \(per network × token\), wrapRequest / unwrapRequest \(per outbound / inbound\), securityInfo \(guardians / delays\), orchestratorInfo, redeemHistory.
 
 ```go
 const (
@@ -659,23 +667,52 @@ const (
 		]}
 	]`
 
-    WrapTokenMethodName            = "WrapToken"
-    UpdateWrapRequestMethodName    = "UpdateWrapRequest"
-    UnwrapTokenMethodName          = "UnwrapToken"
-    RevokeUnwrapRequestMethodName  = "RevokeUnwrapRequest"
-    RedeemUnwrapMethodName         = "Redeem"
-    SetNetworkMethodName           = "SetNetwork"
-    RemoveNetworkMethodName        = "RemoveNetwork"
-    SetTokenPairMethod             = "SetTokenPair"
-    RemoveTokenPairMethodName      = "RemoveTokenPair"
-    HaltMethodName                 = "Halt"
-    UnhaltMethodName               = "Unhalt"
-    SetAllowKeygenMethodName       = "SetAllowKeyGen"
+    // WrapTokenMethodName initiates a wrap (outbound) request.
+    WrapTokenMethodName = "WrapToken"
+    // UpdateWrapRequestMethodName attaches a TSS signature to a
+    // queued wrap request so the orchestrator can execute it on the
+    // remote chain.
+    UpdateWrapRequestMethodName = "UpdateWrapRequest"
+    // UnwrapTokenMethodName admits an inbound unwrap (a TSS-signed
+    // claim of a remote-chain transaction) into the contract.
+    UnwrapTokenMethodName = "UnwrapToken"
+    // RevokeUnwrapRequestMethodName cancels a queued inbound
+    // unwrap (administrator-only).
+    RevokeUnwrapRequestMethodName = "RevokeUnwrapRequest"
+    // RedeemUnwrapMethodName claims tokens for a confirmed inbound
+    // unwrap once the redeem-delay window has elapsed.
+    RedeemUnwrapMethodName = "Redeem"
+    // SetNetworkMethodName registers a remote network.
+    SetNetworkMethodName = "SetNetwork"
+    // RemoveNetworkMethodName de-registers a remote network.
+    RemoveNetworkMethodName = "RemoveNetwork"
+    // SetTokenPairMethod registers / configures a (network, token)
+    // pair (bridgeability flags, fees, redeem delay).
+    SetTokenPairMethod = "SetTokenPair"
+    // RemoveTokenPairMethodName removes a (network, token) pair.
+    RemoveTokenPairMethodName = "RemoveTokenPair"
+    // HaltMethodName halts the bridge (suspends new wraps and
+    // redeems).
+    HaltMethodName = "Halt"
+    // UnhaltMethodName unblocks the bridge after the configured
+    // UnhaltDurationInMomentums grace window.
+    UnhaltMethodName = "Unhalt"
+    // SetAllowKeygenMethodName toggles whether the orchestrator
+    // may run a TSS key-generation ceremony.
+    SetAllowKeygenMethodName = "SetAllowKeyGen"
+    // ChangeTssECDSAPubKeyMethodName rotates the TSS ECDSA key
+    // (requires signatures with both the old and new keys).
     ChangeTssECDSAPubKeyMethodName = "ChangeTssECDSAPubKey"
-    SetOrchestratorInfoMethodName  = "SetOrchestratorInfo"
+    // SetOrchestratorInfoMethodName updates orchestrator-level
+    // configuration (window thresholds, etc.).
+    SetOrchestratorInfoMethodName = "SetOrchestratorInfo"
 
+    // SetNetworkMetadataMethodName updates a network's free-form
+    // metadata blob.
     SetNetworkMetadataMethodName = "SetNetworkMetadata"
-    SetBridgeMetadataMethodName  = "SetBridgeMetadata"
+    // SetBridgeMetadataMethodName updates the bridge-level
+    // metadata blob.
+    SetBridgeMetadataMethodName = "SetBridgeMetadata"
 
     requestPairVariableName   = "requestPair"
     wrapRequestVariableName   = "wrapRequest"
@@ -1255,7 +1292,11 @@ const (
 
 ## Variables
 
-<a name="ABIBridge"></a>
+<a name="ABIBridge"></a>ABIBridge is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Bridge contract. Per\-prefix key namespaces: 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo \(singleton\), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair \(per network × token\), 7=feeTokenPair \(per token fee accumulator\).
+
+Network class discriminators distinguish remote\-network families: [NoMClass](<#ABIBridge>) for sister NoM networks, [EvmClass](<#ABIBridge>) for Ethereum\-compatible chains.
+
+The Uint256Ty / AddressTy / StringTy handles are go\-ethereum ABI types used to encode unwrap\-payload digests for signature verification.
 
 ```go
 var (
@@ -1269,7 +1310,10 @@ var (
     RequestPairKeyPrefix        = []byte{6}
     FeeTokenPairKeyPrefix       = []byte{7}
 
+    // NoMClass is the network-class discriminator for sister Network-of-Momentum networks.
     NoMClass = uint32(1)
+    // EvmClass is the network-class discriminator for
+    // Ethereum-compatible (EVM) remote networks.
     EvmClass = uint32(2)
 
     Uint256Ty, _ = eabi.NewType("uint256", "uint256", nil)
@@ -1437,7 +1481,7 @@ var HashTypeDigestSizes = map[uint8]uint8{
 ```
 
 <a name="GetNetworkInfoKey"></a>
-## func [GetNetworkInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L502>)
+## func [GetNetworkInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L595>)
 
 ```go
 func GetNetworkInfoKey(networkClass uint32, chainId uint32) []byte
@@ -1581,7 +1625,7 @@ func getQsrDepositKey(address *types.Address) []byte
 
 
 <a name="getRequestPairKey"></a>
-## func [getRequestPairKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L650>)
+## func [getRequestPairKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L743>)
 
 ```go
 func getRequestPairKey(id types.Hash) []byte
@@ -1644,7 +1688,7 @@ func getTokenInfoKey(ts types.ZenonTokenStandard) []byte
 getTokenInfoKey composes the storage key for one token record.
 
 <a name="getUnwrapTokenRequestKey"></a>
-## func [getUnwrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L862>)
+## func [getUnwrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L955>)
 
 ```go
 func getUnwrapTokenRequestKey(transactionHash types.Hash, logIndex uint32) []byte
@@ -1653,7 +1697,7 @@ func getUnwrapTokenRequestKey(transactionHash types.Hash, logIndex uint32) []byt
 
 
 <a name="getWrapTokenRequestKey"></a>
-## func [getWrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L717>)
+## func [getWrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L810>)
 
 ```go
 func getWrapTokenRequestKey(creationMomentumHeight uint64, id types.Hash) []byte
@@ -1948,15 +1992,16 @@ type AcceleratorParam struct {
 ```
 
 <a name="BridgeInfoVariable"></a>
-## type [BridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L264-L282>)
+## type [BridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L344-L363>)
 
-
+BridgeInfoVariable is the singleton bridge configuration record: administrator authority, the active TSS public key \(compressed and decompressed forms cached together\), the allow\-keygen toggle, halt state with its grace window, the TSS message nonce, and a free\-form metadata blob.
 
 ```go
 type BridgeInfoVariable struct {
-    // Administrator address
+    // Administrator address.
     Administrator types.Address `json:"administrator"`
-    // ECDSA pub key generated by the orchestrator from key gen ceremony
+    // ECDSA pub key generated by the orchestrator from key gen
+    // ceremony.
     CompressedTssECDSAPubKey   string `json:"compressedTssECDSAPubKey"`
     DecompressedTssECDSAPubKey string `json:"decompressedTssECDSAPubKey"`
     // This specifies whether the orchestrator should key gen or not
@@ -1975,7 +2020,7 @@ type BridgeInfoVariable struct {
 ```
 
 <a name="GetBridgeInfoVariable"></a>
-### func [GetBridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L325>)
+### func [GetBridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L406>)
 
 ```go
 func GetBridgeInfoVariable(context db.DB) (*BridgeInfoVariable, error)
@@ -1984,7 +2029,7 @@ func GetBridgeInfoVariable(context db.DB) (*BridgeInfoVariable, error)
 
 
 <a name="parseBridgeInfoVariable"></a>
-### func [parseBridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L305>)
+### func [parseBridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L386>)
 
 ```go
 func parseBridgeInfoVariable(data []byte) (*BridgeInfoVariable, error)
@@ -1993,7 +2038,7 @@ func parseBridgeInfoVariable(data []byte) (*BridgeInfoVariable, error)
 
 
 <a name="BridgeInfoVariable.Save"></a>
-### func \(\*BridgeInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L284>)
+### func \(\*BridgeInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L365>)
 
 ```go
 func (b *BridgeInfoVariable) Save(context db.DB) error
@@ -2013,7 +2058,7 @@ type BurnParam struct {
 ```
 
 <a name="ChangeECDSAPubKeyParam"></a>
-## type [ChangeECDSAPubKeyParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1145-L1149>)
+## type [ChangeECDSAPubKeyParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1238-L1242>)
 
 
 
@@ -2806,7 +2851,7 @@ type MintParam struct {
 ```
 
 <a name="NetworkInfo"></a>
-## type [NetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L405-L412>)
+## type [NetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L498-L505>)
 
 
 
@@ -2822,7 +2867,7 @@ type NetworkInfo struct {
 ```
 
 <a name="GetNetworkInfoVariable"></a>
-### func [GetNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L589>)
+### func [GetNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L682>)
 
 ```go
 func GetNetworkInfoVariable(context db.DB, networkClass uint32, chainId uint32) (*NetworkInfo, error)
@@ -2831,7 +2876,7 @@ func GetNetworkInfoVariable(context db.DB, networkClass uint32, chainId uint32) 
 
 
 <a name="GetNetworkList"></a>
-### func [GetNetworkList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L600>)
+### func [GetNetworkList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L693>)
 
 ```go
 func GetNetworkList(context db.DB) ([]*NetworkInfo, error)
@@ -2840,7 +2885,7 @@ func GetNetworkList(context db.DB) ([]*NetworkInfo, error)
 
 
 <a name="parseNetworkInfoVariable"></a>
-### func [parseNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L542>)
+### func [parseNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L635>)
 
 ```go
 func parseNetworkInfoVariable(data []byte) (*NetworkInfo, error)
@@ -2849,7 +2894,7 @@ func parseNetworkInfoVariable(data []byte) (*NetworkInfo, error)
 
 
 <a name="NetworkInfoParam"></a>
-## type [NetworkInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1131-L1137>)
+## type [NetworkInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1224-L1230>)
 
 
 
@@ -2864,9 +2909,9 @@ type NetworkInfoParam struct {
 ```
 
 <a name="NetworkInfoVariable"></a>
-## type [NetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L335-L342>)
+## type [NetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L420-L427>)
 
-NetworkInfoVariable One network will always be znn, so we just need the other one
+NetworkInfoVariable is the per\-remote\-network record. One network will always be znn, so we just need the other one — the \(NetworkClass, Id\) pair identifies the remote chain; ContractAddress points at the bridge endpoint there; TokenPairs is the byte\-encoded list of [TokenPair](<#TokenPair>) records.
 
 ```go
 type NetworkInfoVariable struct {
@@ -2880,7 +2925,7 @@ type NetworkInfoVariable struct {
 ```
 
 <a name="EncodeNetworkInfo"></a>
-### func [EncodeNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L570>)
+### func [EncodeNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L663>)
 
 ```go
 func EncodeNetworkInfo(networkInfo *NetworkInfo) (*NetworkInfoVariable, error)
@@ -2889,7 +2934,7 @@ func EncodeNetworkInfo(networkInfo *NetworkInfo) (*NetworkInfoVariable, error)
 
 
 <a name="NetworkInfoVariable.Delete"></a>
-### func \(\*NetworkInfoVariable\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L538>)
+### func \(\*NetworkInfoVariable\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L631>)
 
 ```go
 func (nI *NetworkInfoVariable) Delete(context db.DB) error
@@ -2898,7 +2943,7 @@ func (nI *NetworkInfoVariable) Delete(context db.DB) error
 
 
 <a name="NetworkInfoVariable.Key"></a>
-### func \(\*NetworkInfoVariable\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L529>)
+### func \(\*NetworkInfoVariable\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L622>)
 
 ```go
 func (nI *NetworkInfoVariable) Key() []byte
@@ -2907,7 +2952,7 @@ func (nI *NetworkInfoVariable) Key() []byte
 
 
 <a name="NetworkInfoVariable.Save"></a>
-### func \(\*NetworkInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L511>)
+### func \(\*NetworkInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L604>)
 
 ```go
 func (nI *NetworkInfoVariable) Save(context db.DB) error
@@ -2916,7 +2961,7 @@ func (nI *NetworkInfoVariable) Save(context db.DB) error
 
 
 <a name="OrchestratorInfo"></a>
-## type [OrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L980-L991>)
+## type [OrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1073-L1084>)
 
 
 
@@ -2936,7 +2981,7 @@ type OrchestratorInfo struct {
 ```
 
 <a name="GetOrchestratorInfoVariable"></a>
-### func [GetOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1021>)
+### func [GetOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1114>)
 
 ```go
 func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error)
@@ -2945,7 +2990,7 @@ func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error)
 
 
 <a name="parseOrchestratorInfoVariable"></a>
-### func [parseOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1010>)
+### func [parseOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1103>)
 
 ```go
 func parseOrchestratorInfoVariable(data []byte) (*OrchestratorInfo, error)
@@ -2954,7 +2999,7 @@ func parseOrchestratorInfoVariable(data []byte) (*OrchestratorInfo, error)
 
 
 <a name="OrchestratorInfo.Delete"></a>
-### func \(\*OrchestratorInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1041>)
+### func \(\*OrchestratorInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1134>)
 
 ```go
 func (oI *OrchestratorInfo) Delete(context db.DB) error
@@ -2963,7 +3008,7 @@ func (oI *OrchestratorInfo) Delete(context db.DB) error
 
 
 <a name="OrchestratorInfo.Key"></a>
-### func \(\*OrchestratorInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1038>)
+### func \(\*OrchestratorInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1131>)
 
 ```go
 func (oI *OrchestratorInfo) Key() []byte
@@ -2972,7 +3017,7 @@ func (oI *OrchestratorInfo) Key() []byte
 
 
 <a name="OrchestratorInfo.Save"></a>
-### func \(\*OrchestratorInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L993>)
+### func \(\*OrchestratorInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1086>)
 
 ```go
 func (oI *OrchestratorInfo) Save(context db.DB) error
@@ -2981,7 +3026,7 @@ func (oI *OrchestratorInfo) Save(context db.DB) error
 
 
 <a name="OrchestratorInfoParam"></a>
-## type [OrchestratorInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L973-L978>)
+## type [OrchestratorInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1066-L1071>)
 
 
 
@@ -3546,7 +3591,7 @@ func (deposit *QsrDeposit) Save(context db.DB) error
 
 
 <a name="RedeemParam"></a>
-## type [RedeemParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1072-L1075>)
+## type [RedeemParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1165-L1168>)
 
 
 
@@ -3573,7 +3618,7 @@ type RegisterParam struct {
 ```
 
 <a name="RequestPair"></a>
-## type [RequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L633-L636>)
+## type [RequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L726-L729>)
 
 
 
@@ -3585,7 +3630,7 @@ type RequestPair struct {
 ```
 
 <a name="GetRequestPairById"></a>
-### func [GetRequestPairById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L667>)
+### func [GetRequestPairById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L760>)
 
 ```go
 func GetRequestPairById(context db.DB, Id types.Hash) (*RequestPair, error)
@@ -3594,7 +3639,7 @@ func GetRequestPairById(context db.DB, Id types.Hash) (*RequestPair, error)
 
 
 <a name="parseRequestPair"></a>
-### func [parseRequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L653>)
+### func [parseRequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L746>)
 
 ```go
 func parseRequestPair(data, key []byte) (*RequestPair, error)
@@ -3603,7 +3648,7 @@ func parseRequestPair(data, key []byte) (*RequestPair, error)
 
 
 <a name="RequestPair.Key"></a>
-### func \(\*RequestPair\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L647>)
+### func \(\*RequestPair\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L740>)
 
 ```go
 func (pair *RequestPair) Key() []byte
@@ -3612,7 +3657,7 @@ func (pair *RequestPair) Key() []byte
 
 
 <a name="RequestPair.Save"></a>
-### func \(\*RequestPair\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L638>)
+### func \(\*RequestPair\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L731>)
 
 ```go
 func (pair *RequestPair) Save(context db.DB) error
@@ -3621,7 +3666,7 @@ func (pair *RequestPair) Save(context db.DB) error
 
 
 <a name="RevokeUnwrapParam"></a>
-## type [RevokeUnwrapParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1067-L1070>)
+## type [RevokeUnwrapParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1160-L1163>)
 
 
 
@@ -3918,7 +3963,7 @@ type SetAdditionalRewardParam struct {
 ```
 
 <a name="SetNetworkMetadataParam"></a>
-## type [SetNetworkMetadataParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1139-L1143>)
+## type [SetNetworkMetadataParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1232-L1236>)
 
 
 
@@ -3931,7 +3976,7 @@ type SetNetworkMetadataParam struct {
 ```
 
 <a name="SetTokenPairParam"></a>
-## type [SetTokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1120-L1129>)
+## type [SetTokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1213-L1222>)
 
 
 
@@ -4286,9 +4331,9 @@ func (token *TokenInfo) Save(context db.DB) error
 Save writes token into context's storage.
 
 <a name="TokenPair"></a>
-## type [TokenPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L344-L354>)
+## type [TokenPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L435-L445>)
 
-
+TokenPair is one \(network, token\) configuration: bridge / redeem flags, fee percentage \(basis points; denominator [constants.MaximumFee](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaximumFee>)\), per\-pair redeem delay in momentums, minimum amount, and a free\-form metadata blob. Owned indicates whether the bridge contract owns the token \(mintable on inbound\) or whether tokens are escrowed on outbound.
 
 ```go
 type TokenPair struct {
@@ -4305,7 +4350,7 @@ type TokenPair struct {
 ```
 
 <a name="GetTokenPairVariable"></a>
-### func [GetTokenPairVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L620>)
+### func [GetTokenPairVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L713>)
 
 ```go
 func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zts types.ZenonTokenStandard) (*TokenPair, error)
@@ -4314,7 +4359,7 @@ func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zt
 
 
 <a name="TokenPair.MarshalJSON"></a>
-### func \(\*TokenPair\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L383>)
+### func \(\*TokenPair\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L476>)
 
 ```go
 func (t *TokenPair) MarshalJSON() ([]byte, error)
@@ -4323,7 +4368,7 @@ func (t *TokenPair) MarshalJSON() ([]byte, error)
 
 
 <a name="TokenPair.ToMarshalJson"></a>
-### func \(\*TokenPair\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L368>)
+### func \(\*TokenPair\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L461>)
 
 ```go
 func (t *TokenPair) ToMarshalJson() *TokenPairMarshall
@@ -4332,7 +4377,7 @@ func (t *TokenPair) ToMarshalJson() *TokenPairMarshall
 
 
 <a name="TokenPair.UnmarshalJSON"></a>
-### func \(\*TokenPair\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L387>)
+### func \(\*TokenPair\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L480>)
 
 ```go
 func (t *TokenPair) UnmarshalJSON(data []byte) error
@@ -4341,9 +4386,9 @@ func (t *TokenPair) UnmarshalJSON(data []byte) error
 
 
 <a name="TokenPairMarshall"></a>
-## type [TokenPairMarshall](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L356-L366>)
+## type [TokenPairMarshall](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L449-L459>)
 
-
+TokenPairMarshall is the JSON\-friendly twin of [TokenPair](<#TokenPair>) \(MinAmount as a string for clients without big\-integer support\).
 
 ```go
 type TokenPairMarshall struct {
@@ -4360,7 +4405,7 @@ type TokenPairMarshall struct {
 ```
 
 <a name="TokenPairParam"></a>
-## type [TokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1077-L1089>)
+## type [TokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1170-L1182>)
 
 
 
@@ -4381,7 +4426,7 @@ type TokenPairParam struct {
 ```
 
 <a name="TokenPairParam.Hash"></a>
-### func \(\*TokenPairParam\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1091>)
+### func \(\*TokenPairParam\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1184>)
 
 ```go
 func (p *TokenPairParam) Hash() []byte
@@ -4471,7 +4516,7 @@ type UnlockHtlcParam struct {
 ```
 
 <a name="UnwrapTokenParam"></a>
-## type [UnwrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1056-L1065>)
+## type [UnwrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1149-L1158>)
 
 
 
@@ -4489,7 +4534,7 @@ type UnwrapTokenParam struct {
 ```
 
 <a name="UnwrapTokenRequest"></a>
-## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L822-L835>)
+## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L915-L928>)
 
 
 
@@ -4511,7 +4556,7 @@ type UnwrapTokenRequest struct {
 ```
 
 <a name="GetUnwrapTokenRequestByTxHashAndLog"></a>
-### func [GetUnwrapTokenRequestByTxHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L884>)
+### func [GetUnwrapTokenRequestByTxHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L977>)
 
 ```go
 func GetUnwrapTokenRequestByTxHashAndLog(context db.DB, txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error)
@@ -4520,7 +4565,7 @@ func GetUnwrapTokenRequestByTxHashAndLog(context db.DB, txHash types.Hash, logIn
 
 
 <a name="GetUnwrapTokenRequests"></a>
-### func [GetUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L893>)
+### func [GetUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L986>)
 
 ```go
 func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error)
@@ -4529,7 +4574,7 @@ func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error)
 
 
 <a name="parseUnwrapTokenRequest"></a>
-### func [parseUnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L868>)
+### func [parseUnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L961>)
 
 ```go
 func parseUnwrapTokenRequest(data, key []byte) (*UnwrapTokenRequest, error)
@@ -4538,7 +4583,7 @@ func parseUnwrapTokenRequest(data, key []byte) (*UnwrapTokenRequest, error)
 
 
 <a name="UnwrapTokenRequest.Delete"></a>
-### func \(\*UnwrapTokenRequest\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L858>)
+### func \(\*UnwrapTokenRequest\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L951>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Delete(context db.DB) error
@@ -4547,7 +4592,7 @@ func (unwrapRequest *UnwrapTokenRequest) Delete(context db.DB) error
 
 
 <a name="UnwrapTokenRequest.Key"></a>
-### func \(\*UnwrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L855>)
+### func \(\*UnwrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L948>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Key() []byte
@@ -4556,7 +4601,7 @@ func (unwrapRequest *UnwrapTokenRequest) Key() []byte
 
 
 <a name="UnwrapTokenRequest.MarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L948>)
+### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1041>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) MarshalJSON() ([]byte, error)
@@ -4565,7 +4610,7 @@ func (unwrapRequest *UnwrapTokenRequest) MarshalJSON() ([]byte, error)
 
 
 <a name="UnwrapTokenRequest.Save"></a>
-### func \(\*UnwrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L837>)
+### func \(\*UnwrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L930>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Save(context db.DB) error
@@ -4574,7 +4619,7 @@ func (unwrapRequest *UnwrapTokenRequest) Save(context db.DB) error
 
 
 <a name="UnwrapTokenRequest.ToMarshalJson"></a>
-### func \(\*UnwrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L930>)
+### func \(\*UnwrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1023>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) ToMarshalJson() *UnwrapTokenRequestMarshal
@@ -4583,7 +4628,7 @@ func (unwrapRequest *UnwrapTokenRequest) ToMarshalJson() *UnwrapTokenRequestMars
 
 
 <a name="UnwrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L952>)
+### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1045>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) UnmarshalJSON(data []byte) error
@@ -4592,7 +4637,7 @@ func (unwrapRequest *UnwrapTokenRequest) UnmarshalJSON(data []byte) error
 
 
 <a name="UnwrapTokenRequestMarshal"></a>
-## type [UnwrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L915-L928>)
+## type [UnwrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1008-L1021>)
 
 
 
@@ -4628,7 +4673,7 @@ type UpdateTokenParam struct {
 ```
 
 <a name="UpdateWrapRequestParam"></a>
-## type [UpdateWrapRequestParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1051-L1054>)
+## type [UpdateWrapRequestParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1144-L1147>)
 
 
 
@@ -4729,7 +4774,7 @@ func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown
 
 
 <a name="WrapTokenParam"></a>
-## type [WrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1045-L1049>)
+## type [WrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1138-L1142>)
 
 
 
@@ -4742,7 +4787,7 @@ type WrapTokenParam struct {
 ```
 
 <a name="WrapTokenRequest"></a>
-## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L676-L687>)
+## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L769-L780>)
 
 
 
@@ -4762,7 +4807,7 @@ type WrapTokenRequest struct {
 ```
 
 <a name="GetWrapTokenRequestById"></a>
-### func [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L736>)
+### func [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L829>)
 
 ```go
 func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, error)
@@ -4771,7 +4816,7 @@ func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, e
 
 
 <a name="GetWrapTokenRequests"></a>
-### func [GetWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L749>)
+### func [GetWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L842>)
 
 ```go
 func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error)
@@ -4780,7 +4825,7 @@ func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error)
 
 
 <a name="parseWrapTokenRequest"></a>
-### func [parseWrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L721>)
+### func [parseWrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L814>)
 
 ```go
 func parseWrapTokenRequest(data, key []byte) (*WrapTokenRequest, error)
@@ -4789,7 +4834,7 @@ func parseWrapTokenRequest(data, key []byte) (*WrapTokenRequest, error)
 
 
 <a name="WrapTokenRequest.Key"></a>
-### func \(\*WrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L714>)
+### func \(\*WrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L807>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) Key() []byte
@@ -4798,7 +4843,7 @@ func (wrapRequest *WrapTokenRequest) Key() []byte
 
 
 <a name="WrapTokenRequest.MarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L799>)
+### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L892>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) MarshalJSON() ([]byte, error)
@@ -4807,7 +4852,7 @@ func (wrapRequest *WrapTokenRequest) MarshalJSON() ([]byte, error)
 
 
 <a name="WrapTokenRequest.Save"></a>
-### func \(\*WrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L689>)
+### func \(\*WrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L782>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) Save(context db.DB) error
@@ -4816,7 +4861,7 @@ func (wrapRequest *WrapTokenRequest) Save(context db.DB) error
 
 
 <a name="WrapTokenRequest.ToMarshalJson"></a>
-### func \(\*WrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L784>)
+### func \(\*WrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L877>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) ToMarshalJson() *WrapTokenRequestMarshal
@@ -4825,7 +4870,7 @@ func (wrapRequest *WrapTokenRequest) ToMarshalJson() *WrapTokenRequestMarshal
 
 
 <a name="WrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L803>)
+### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L896>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) UnmarshalJSON(data []byte) error
@@ -4834,7 +4879,7 @@ func (wrapRequest *WrapTokenRequest) UnmarshalJSON(data []byte) error
 
 
 <a name="WrapTokenRequestMarshal"></a>
-## type [WrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L771-L782>)
+## type [WrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L864-L875>)
 
 
 
@@ -4854,7 +4899,7 @@ type WrapTokenRequestMarshal struct {
 ```
 
 <a name="ZtsFeesInfo"></a>
-## type [ZtsFeesInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L414-L417>)
+## type [ZtsFeesInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L507-L510>)
 
 
 
@@ -4866,7 +4911,7 @@ type ZtsFeesInfo struct {
 ```
 
 <a name="GetZtsFeesInfoVariable"></a>
-### func [GetZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L482>)
+### func [GetZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L575>)
 
 ```go
 func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandard) (*ZtsFeesInfo, error)
@@ -4875,7 +4920,7 @@ func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandar
 
 
 <a name="parseZtsFeesInfoVariable"></a>
-### func [parseZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L467>)
+### func [parseZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L560>)
 
 ```go
 func parseZtsFeesInfoVariable(key []byte, data []byte) (*ZtsFeesInfo, error)
@@ -4884,7 +4929,7 @@ func parseZtsFeesInfoVariable(key []byte, data []byte) (*ZtsFeesInfo, error)
 
 
 <a name="ZtsFeesInfo.Delete"></a>
-### func \(\*ZtsFeesInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L460>)
+### func \(\*ZtsFeesInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L553>)
 
 ```go
 func (zfi *ZtsFeesInfo) Delete(context db.DB) error
@@ -4893,7 +4938,7 @@ func (zfi *ZtsFeesInfo) Delete(context db.DB) error
 
 
 <a name="ZtsFeesInfo.Key"></a>
-### func \(\*ZtsFeesInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L457>)
+### func \(\*ZtsFeesInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L550>)
 
 ```go
 func (zfi *ZtsFeesInfo) Key() ([]byte, error)
@@ -4902,7 +4947,7 @@ func (zfi *ZtsFeesInfo) Key() ([]byte, error)
 
 
 <a name="ZtsFeesInfo.MarshalJSON"></a>
-### func \(\*ZtsFeesInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L432>)
+### func \(\*ZtsFeesInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L525>)
 
 ```go
 func (zfi *ZtsFeesInfo) MarshalJSON() ([]byte, error)
@@ -4911,7 +4956,7 @@ func (zfi *ZtsFeesInfo) MarshalJSON() ([]byte, error)
 
 
 <a name="ZtsFeesInfo.Save"></a>
-### func \(\*ZtsFeesInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L446>)
+### func \(\*ZtsFeesInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L539>)
 
 ```go
 func (zfi *ZtsFeesInfo) Save(context db.DB) error
@@ -4920,7 +4965,7 @@ func (zfi *ZtsFeesInfo) Save(context db.DB) error
 
 
 <a name="ZtsFeesInfo.ToZtsFeesInfoMarshal"></a>
-### func \(\*ZtsFeesInfo\) [ToZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L424>)
+### func \(\*ZtsFeesInfo\) [ToZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L517>)
 
 ```go
 func (zfi *ZtsFeesInfo) ToZtsFeesInfoMarshal() *ZtsFeesInfoMarshal
@@ -4929,7 +4974,7 @@ func (zfi *ZtsFeesInfo) ToZtsFeesInfoMarshal() *ZtsFeesInfoMarshal
 
 
 <a name="ZtsFeesInfo.UnmarshalJSON"></a>
-### func \(\*ZtsFeesInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L436>)
+### func \(\*ZtsFeesInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L529>)
 
 ```go
 func (zfi *ZtsFeesInfo) UnmarshalJSON(data []byte) error
@@ -4938,7 +4983,7 @@ func (zfi *ZtsFeesInfo) UnmarshalJSON(data []byte) error
 
 
 <a name="ZtsFeesInfoMarshal"></a>
-## type [ZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L419-L422>)
+## type [ZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L512-L515>)
 
 
 
