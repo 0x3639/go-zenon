@@ -6,6 +6,8 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// licenseCommand registers the `znnd license` sub-command, which
+// prints the GPL-v3 license summary.
 var (
 	licenseCommand = &cli.Command{
 		Action:    licenseAction,
@@ -16,6 +18,8 @@ var (
 	}
 )
 
+// licenseAction is the handler for `znnd license` — prints the
+// GPL-v3 summary block to stdout.
 func licenseAction(*cli.Context) error {
 	fmt.Println(`znnd is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

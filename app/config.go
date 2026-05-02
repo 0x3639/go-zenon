@@ -12,8 +12,14 @@ import (
 	"github.com/zenon-network/go-zenon/node"
 )
 
+// defaultNodeConfigFileName is the filename searched for under
+// DataPath when --config is not given.
 var defaultNodeConfigFileName = "config.json"
 
+// MakeConfig assembles the final [node.Config] used by the running
+// process. Layered: [node.DefaultNodeConfig] → optional config.json
+// → CLI flag overrides → path resolution → logging init. Returns
+// the fully populated config.
 func MakeConfig(ctx *cli.Context) (*node.Config, error) {
 	cfg := node.DefaultNodeConfig
 
@@ -43,6 +49,9 @@ func MakeConfig(ctx *cli.Context) (*node.Config, error) {
 	return &cfg, nil
 }
 
+// applyFlagsToConfig overlays each CLI flag (when set) onto cfg.
+// Only ctx.IsSet flags overwrite — defaults from
+// [node.DefaultNodeConfig] / config.json survive otherwise.
 func applyFlagsToConfig(ctx *cli.Context, cfg *node.Config) {
 	if dataDir := ctx.String(DataPathFlag.Name); ctx.IsSet(DataPathFlag.Name) && len(dataDir) > 0 {
 		cfg.DataPath = dataDir
@@ -109,6 +118,11 @@ func applyFlagsToConfig(ctx *cli.Context, cfg *node.Config) {
 		cfg.LogLevel = logLevel
 	}
 }
+
+// readConfigFromFile loads a JSON config into cfg. Tries --config
+// (explicit path) first; falls back to <DataPath>/config.json.
+// Missing files are tolerated (warning only); malformed files are
+// fatal.
 func readConfigFromFile(ctx *cli.Context, cfg *node.Config) error {
 	if file := ctx.String(ConfigFileFlag.Name); file != "" {
 		if jsonConf, err := os.ReadFile(file); err == nil {

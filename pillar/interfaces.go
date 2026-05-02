@@ -7,6 +7,11 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
+// Manager is the production-side surface of a pillar. Subscribes to
+// consensus ProducerEvents (via the embedded
+// [consensus.EventListener]) and produces momentums when its
+// coinbase wins the slot. SetCoinBase / GetCoinBase wire the
+// keypair from [zenon.Config].
 type Manager interface {
 	Init() error
 	Start() error

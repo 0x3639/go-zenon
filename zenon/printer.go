@@ -9,6 +9,9 @@ import (
 	"github.com/zenon-network/go-zenon/protocol"
 )
 
+// EventPrinter is the chain-listener that emits human-readable
+// momentum inserts to stdout. Composed in [Zenon] so operators
+// have a default chain-progress view without needing the RPC layer.
 type EventPrinter interface {
 	chain.MomentumEventListener
 
@@ -17,11 +20,15 @@ type EventPrinter interface {
 	Stop() error
 }
 
+// eventPrinter is the production EventPrinter — registers as a
+// chain listener and prints every 50th momentum during sync, every
+// momentum once the node is in SyncDone state.
 type eventPrinter struct {
 	chain       chain.Chain
 	broadcaster protocol.Broadcaster
 }
 
+// NewEventPrinter constructs the default chain-progress printer.
 func NewEventPrinter(chain chain.Chain, broadcaster protocol.Broadcaster) EventPrinter {
 	return &eventPrinter{
 		chain:       chain,

@@ -9,10 +9,16 @@ import (
 	"github.com/zenon-network/go-zenon/p2p"
 )
 
+// DefaultWalletDir is the wallet sub-directory under DataPath when
+// WalletPath is left unset.
 const (
 	DefaultWalletDir = "wallet"
 )
 
+// DefaultNodeConfig is the baseline node configuration used by the
+// CLI when the operator does not provide a config.json. Defaults to
+// a non-producing node listening on Alphanet ports with HTTP / WS
+// RPC enabled and CORS / WSOrigins fully open ("*").
 var DefaultNodeConfig = Config{
 	DataPath: DefaultDataDir(),
 
@@ -68,6 +74,8 @@ func DefaultDataDir() string {
 	return ""
 }
 
+// windowsAppData returns %LOCALAPPDATA%. Panics if the variable is
+// unset — Windows XP and below are unsupported.
 func windowsAppData() string {
 	v := os.Getenv("LOCALAPPDATA")
 	if v == "" {
@@ -79,6 +87,8 @@ func windowsAppData() string {
 	return v
 }
 
+// isNonEmptyDir reports whether dir exists and contains at least
+// one entry — used by the Windows fallback path resolver.
 func isNonEmptyDir(dir string) bool {
 	f, err := os.Open(dir)
 	if err != nil {
@@ -89,6 +99,8 @@ func isNonEmptyDir(dir string) bool {
 	return len(names) > 0
 }
 
+// homeDir returns the user's home directory: $HOME if set, otherwise
+// the OS-reported user record's HomeDir, otherwise an empty string.
 func homeDir() string {
 	if home := os.Getenv("HOME"); home != "" {
 		return home
@@ -99,6 +111,8 @@ func homeDir() string {
 	return ""
 }
 
+// ReplaceHomeVariable expands a leading `~` in path to the user's
+// home directory. Returns "" for empty input.
 func ReplaceHomeVariable(path string) string {
 	if len(path) == 0 {
 		return ""

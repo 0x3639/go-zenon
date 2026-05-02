@@ -5,6 +5,11 @@ import (
 	"github.com/zenon-network/go-zenon/consensus"
 )
 
+// generateMomentum acquires the chain insert lock, snapshots the
+// pending-block content, and asks the supervisor to produce and
+// sign a momentum at the current frontier+1 with timestamp =
+// slot StartTime. Holds the insert lock for the full call to
+// avoid racing with concurrent inserts.
 func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTransaction, error) {
 	insert := w.chain.AcquireInsert("momentum-generator")
 	defer insert.Unlock()

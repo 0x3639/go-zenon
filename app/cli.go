@@ -17,11 +17,19 @@ import (
 )
 
 var (
-	log         = common.ZenonLogger.New()
-	app         = cli.NewApp()
+	log = common.ZenonLogger.New()
+	// app is the urfave/cli App configured in init() with flags,
+	// commands, and the boot/teardown action callbacks.
+	app = cli.NewApp()
+	// nodeManager holds the running node so the libznn-exported
+	// [Stop] can reach it. Always set during the [action] callback
+	// when [Manager.Start] is reached.
 	nodeManager *Manager
 )
 
+// Run is the CLI entry point. Dispatches the urfave/cli App against
+// os.Args and exits non-zero on error. Called by both znnd's main
+// and the libznn-exported RunNode shim.
 func Run() {
 	err := app.Run(os.Args)
 	if err != nil {
@@ -30,6 +38,10 @@ func Run() {
 	}
 }
 
+// Stop tears down the running node. Exported for the libznn build —
+// CLI builds reach the same code path through SIGINT/SIGTERM
+// handlers in [Manager.Start]. Panics via [common.DealWithErr] on
+// teardown failure.
 func Stop() {
 	err := nodeManager.Stop()
 	common.DealWithErr(err)
@@ -63,6 +75,10 @@ func init() {
 	app.Action = action
 	app.After = afterAction
 }
+
+// beforeAction is the urfave/cli pre-action hook: print the version
+// banner, pin GOMAXPROCS to all cores, and (if `--pprof` is set)
+// start the pprof HTTP server in a background goroutine.
 func beforeAction(ctx *cli.Context) error {
 
 	max := runtime.NumCPU()
@@ -92,6 +108,9 @@ func beforeAction(ctx *cli.Context) error {
 	return nil
 }
 
+// action is the default urfave/cli action — invoked when no
+// sub-command is given. Rejects positional args, builds a [Manager]
+// from the parsed flags, and starts it.
 func action(ctx *cli.Context) error {
 	//Make sure No subCommands were entered,Only the flags
 	if args := ctx.Args(); args.Len() > 0 {
@@ -106,6 +125,9 @@ func action(ctx *cli.Context) error {
 	return nodeManager.Start()
 }
 
+// afterAction is the urfave/cli post-action hook. Currently a
+// no-op; exists so future cleanup logic has a stable insertion
+// point.
 func afterAction(*cli.Context) error {
 	return nil
 }

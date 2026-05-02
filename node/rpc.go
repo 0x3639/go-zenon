@@ -1,8 +1,9 @@
 package node
 
-// configureRPC is a helper method to configure all the various RPC endpoints during node
-// startup. It's not meant to be called at any time afterwards as it makes certain
-// assumptions about the state of the node.
+// startRPC configures and launches the HTTP and WebSocket RPC
+// transports. Called once during [Node.Start]; not safe to call
+// after the node is running because it assumes the listener and
+// handler atomic.Values are uninitialised.
 func (node *Node) startRPC() error {
 	// Configure HTTP.
 	if node.config.RPC.HTTPHost != "" {
@@ -42,6 +43,10 @@ func (node *Node) startRPC() error {
 	return node.ws.start()
 }
 
+// wsServerForPort returns the [httpServer] that should host the
+// WebSocket transport for the given port — the same server as HTTP
+// when the ports collide (or HTTP is disabled), otherwise the
+// dedicated ws instance.
 func (node *Node) wsServerForPort(port int) *httpServer {
 	if node.config.RPC.HTTPHost == "" || node.http.port == port {
 		return node.http
@@ -49,6 +54,8 @@ func (node *Node) wsServerForPort(port int) *httpServer {
 	return node.ws
 }
 
+// stopRPC shuts down both transports. Safe to call against
+// already-stopped servers.
 func (node *Node) stopRPC() {
 	node.http.stop()
 	node.ws.stop()

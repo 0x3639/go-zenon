@@ -10,9 +10,39 @@ Package app holds the process\-level lifecycle for the znnd binary.
 
 ### Overview
 
-app is the glue between command\-line configuration, the on\-disk data directory, and the [github.com/zenon\\\-network/go\\\-zenon/zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/>) core. It owns the boot sequence \(load config, open data dir, construct node, start services\) and the inverse on shutdown.
+app is the glue between command\-line configuration, the on\-disk data directory, and the [github.com/zenon\\\-network/go\\\-zenon/node](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/>) container. It is consumed by two entry points:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- [github.com/zenon\\\-network/go\\\-zenon/cmd/znnd](<https://pkg.go.dev/github.com/zenon-network/go-zenon/cmd/znnd/>) — the standard CLI binary.
+- [github.com/zenon\\\-network/go\\\-zenon/cmd/libznn](<https://pkg.go.dev/github.com/zenon-network/go-zenon/cmd/libznn/>) — the C\-shared library variant, which exports [Run](<#Run>) / [Stop](<#Stop>) for embedding into other languages.
+
+The CLI surface is built on \`urfave/cli/v2\` \([cli.App](<https://pkg.go.dev/github.com/urfave/cli/v2/#App>) is initialised in init\(\)\): flags from [AllFlags](<#PprofFlag>), the version / license sub\-commands, and the default action that boots the node.
+
+### Boot Sequence
+
+[Run](<#Run>) hands control to cli, which calls:
+
+1. \[beforeAction\] — print version banner, set GOMAXPROCS, optionally start the pprof HTTP server.
+2. \[action\] — build the node config via [MakeConfig](<#MakeConfig>), instantiate a [Manager](<#Manager>), and call [Manager.Start](<#Manager.Start>).
+
+[MakeConfig](<#MakeConfig>) starts from [node.DefaultNodeConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#DefaultNodeConfig>), merges \`config.json\` \(if present\), then overlays per\-flag overrides; it also resolves all paths to absolute and initialises logging.
+
+### Shared Library vs. CLI
+
+Two build tags select between manager\_libznn.go and manager.go:
+
+- default \(\`\!libznn\`\) — installs SIGINT/SIGTERM handlers and blocks on [node.Node.Wait](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#Node.Wait>) inside [Manager.Start](<#Manager.Start>).
+- \`libznn\` — Start returns immediately after node startup; embedders call the exported [Stop](<#Stop>) when they want to tear down.
+
+### Generated Files
+
+None. Files are Zenon\-specific \(no upstream header\).
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/node](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/>) — the actual process container.
+- [github.com/zenon\\\-network/go\\\-zenon/metadata](<https://pkg.go.dev/github.com/zenon-network/go-zenon/metadata/>) — version / git\-commit constants printed by the version command.
+- [github.com/zenon\\\-network/go\\\-zenon/cmd/znnd](<https://pkg.go.dev/github.com/zenon-network/go-zenon/cmd/znnd/>) — main binary that calls [Run](<#Run>).
+- [github.com/zenon\\\-network/go\\\-zenon/cmd/libznn](<https://pkg.go.dev/github.com/zenon-network/go-zenon/cmd/libznn/>) — C\-shared library variant.
 
 ## Index
 
@@ -40,16 +70,24 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ```go
 var (
-    log         = common.ZenonLogger.New()
-    app         = cli.NewApp()
+    log = common.ZenonLogger.New()
+    // app is the urfave/cli App configured in init() with flags,
+    // commands, and the boot/teardown action callbacks.
+    app = cli.NewApp()
+    // nodeManager holds the running node so the libznn-exported
+    // [Stop] can reach it. Always set during the [action] callback
+    // when [Manager.Start] is reached.
     nodeManager *Manager
 )
 ```
 
-<a name="PprofFlag"></a>
+<a name="PprofFlag"></a>CLI flags consumed by [MakeConfig](<#MakeConfig>) / \[applyFlagsToConfig\]. Each flag's Usage string is what \`znnd \-\-help\` prints.
 
 ```go
 var (
+
+    // PprofFlag — enable the Go pprof HTTP server on
+    // `--pprof.addr:--pprof.port`.
     PprofFlag = &cli.BoolFlag{
         Name:  "pprof",
         Usage: "Enable the pprof HTTP server",
@@ -145,6 +183,9 @@ var (
         Usage: "log level (info,error,warn,debug)",
     }
 
+    // AllFlags is the full ordered list registered on the urfave/cli
+    // App at init() — categorised in the help template. New flags
+    // must be appended here to be visible.
     AllFlags = []cli.Flag{
 
         ConfigFileFlag,
@@ -176,13 +217,13 @@ var (
 )
 ```
 
-<a name="defaultNodeConfigFileName"></a>
+<a name="defaultNodeConfigFileName"></a>defaultNodeConfigFileName is the filename searched for under DataPath when \-\-config is not given.
 
 ```go
 var defaultNodeConfigFileName = "config.json"
 ```
 
-<a name="licenseCommand"></a>
+<a name="licenseCommand"></a>licenseCommand registers the \`znnd license\` sub\-command, which prints the GPL\-v3 license summary.
 
 ```go
 var (
@@ -196,7 +237,7 @@ var (
 )
 ```
 
-<a name="versionCommand"></a>
+<a name="versionCommand"></a>versionCommand registers the \`znnd version\` sub\-command, which prints build / runtime metadata for diagnostics.
 
 ```go
 var (
@@ -211,70 +252,70 @@ var (
 ```
 
 <a name="MakeConfig"></a>
-## func [MakeConfig](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L17>)
+## func [MakeConfig](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L23>)
 
 ```go
 func MakeConfig(ctx *cli.Context) (*node.Config, error)
 ```
 
-
+MakeConfig assembles the final [node.Config](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#Config>) used by the running process. Layered: [node.DefaultNodeConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#DefaultNodeConfig>) → optional config.json → CLI flag overrides → path resolution → logging init. Returns the fully populated config.
 
 <a name="Run"></a>
-## func [Run](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L25>)
+## func [Run](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L33>)
 
 ```go
 func Run()
 ```
 
-
+Run is the CLI entry point. Dispatches the urfave/cli App against os.Args and exits non\-zero on error. Called by both znnd's main and the libznn\-exported RunNode shim.
 
 <a name="Stop"></a>
-## func [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L33>)
+## func [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L45>)
 
 ```go
 func Stop()
 ```
 
-
+Stop tears down the running node. Exported for the libznn build — CLI builds reach the same code path through SIGINT/SIGTERM handlers in [Manager.Start](<#Manager.Start>). Panics via [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on teardown failure.
 
 <a name="action"></a>
-## func [action](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L95>)
+## func [action](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L114>)
 
 ```go
 func action(ctx *cli.Context) error
 ```
 
-
+action is the default urfave/cli action — invoked when no sub\-command is given. Rejects positional args, builds a [Manager](<#Manager>) from the parsed flags, and starts it.
 
 <a name="afterAction"></a>
-## func [afterAction](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L109>)
+## func [afterAction](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L131>)
 
 ```go
 func afterAction(*cli.Context) error
 ```
 
-
+afterAction is the urfave/cli post\-action hook. Currently a no\-op; exists so future cleanup logic has a stable insertion point.
 
 <a name="applyFlagsToConfig"></a>
-## func [applyFlagsToConfig](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L46>)
+## func [applyFlagsToConfig](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L55>)
 
 ```go
 func applyFlagsToConfig(ctx *cli.Context, cfg *node.Config)
 ```
 
-
+applyFlagsToConfig overlays each CLI flag \(when set\) onto cfg. Only ctx.IsSet flags overwrite — defaults from [node.DefaultNodeConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#DefaultNodeConfig>) / config.json survive otherwise.
 
 <a name="beforeAction"></a>
-## func [beforeAction](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L66>)
+## func [beforeAction](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L82>)
 
 ```go
 func beforeAction(ctx *cli.Context) error
 ```
 
-
+beforeAction is the urfave/cli pre\-action hook: print the version banner, pin GOMAXPROCS to all cores, and \(if \`\-\-pprof\` is set\) start the pprof HTTP server in a background goroutine.
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L39>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L51>)
 
 ```go
 func init()
@@ -283,36 +324,36 @@ func init()
 
 
 <a name="licenseAction"></a>
-## func [licenseAction](<https://github.com/zenon-network/go-zenon/blob/master/app/action_license.go#L19>)
+## func [licenseAction](<https://github.com/zenon-network/go-zenon/blob/master/app/action_license.go#L23>)
 
 ```go
 func licenseAction(*cli.Context) error
 ```
 
-
+licenseAction is the handler for \`znnd license\` — prints the GPL\-v3 summary block to stdout.
 
 <a name="readConfigFromFile"></a>
-## func [readConfigFromFile](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L112>)
+## func [readConfigFromFile](<https://github.com/zenon-network/go-zenon/blob/master/app/config.go#L126>)
 
 ```go
 func readConfigFromFile(ctx *cli.Context, cfg *node.Config) error
 ```
 
-
+readConfigFromFile loads a JSON config into cfg. Tries \-\-config \(explicit path\) first; falls back to \<DataPath\>/config.json. Missing files are tolerated \(warning only\); malformed files are fatal.
 
 <a name="versionAction"></a>
-## func [versionAction](<https://github.com/zenon-network/go-zenon/blob/master/app/action_version.go#L23>)
+## func [versionAction](<https://github.com/zenon-network/go-zenon/blob/master/app/action_version.go#L28>)
 
 ```go
 func versionAction(*cli.Context) error
 ```
 
-
+versionAction is the handler for \`znnd version\` — prints the binary version, git commit, Go version, GOOS/GOARCH, and GOPATH/GOROOT.
 
 <a name="Manager"></a>
-## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L16-L19>)
+## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L20-L23>)
 
-
+Manager is the CLI\-build process supervisor: holds the cli context \(for late flag access\) plus the node, exposes Start and Stop. The libznn build provides a parallel implementation in manager\_libznn.go that omits the SIGINT handler and Wait.
 
 ```go
 type Manager struct {
@@ -322,30 +363,30 @@ type Manager struct {
 ```
 
 <a name="NewNodeManager"></a>
-### func [NewNodeManager](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L21>)
+### func [NewNodeManager](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L28>)
 
 ```go
 func NewNodeManager(ctx *cli.Context) (*Manager, error)
 ```
 
-
+NewNodeManager builds the node config, instantiates a [node.Node](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#Node>) \(which acquires the data\-dir lock\), and wraps it in a Manager ready for [Manager.Start](<#Manager.Start>).
 
 <a name="Manager.Start"></a>
-### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L42>)
+### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L53>)
 
 ```go
 func (nodeManager *Manager) Start() error
 ```
 
-
+Start launches the node, prints producer\-status detection, installs SIGINT/SIGTERM handlers \(a second signal still does not quit; up to 10 are required to escape a graceful shutdown\), and blocks on [node.Node.Wait](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#Node.Wait>) until the node stops.
 
 <a name="Manager.Stop"></a>
-### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L85>)
+### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L99>)
 
 ```go
 func (nodeManager *Manager) Stop() error
 ```
 
-
+Stop forwards to [node.Node.Stop](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/#Node.Stop>). Logs \(does not surface\) teardown errors — the process is exiting anyway.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

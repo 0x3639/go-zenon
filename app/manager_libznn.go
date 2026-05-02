@@ -11,11 +11,17 @@ import (
 	"github.com/zenon-network/go-zenon/node"
 )
 
+// Manager is the libznn-build counterpart of the CLI Manager.
+// Identical fields; lifecycle behaviour differs ([Manager.Start]
+// returns immediately rather than blocking on Wait, since the
+// embedder owns the process loop).
 type Manager struct {
 	ctx  *cli.Context
 	node *node.Node
 }
 
+// NewNodeManager builds a node from cli flags and wraps it in a
+// libznn-build Manager. Mirrors the CLI build's constructor.
 func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	// make config
 	nodeConfig, err := MakeConfig(ctx)
@@ -37,6 +43,9 @@ func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	}, nil
 }
 
+// Start launches the node and returns immediately. The libznn
+// embedder is expected to retain control of the process and call
+// [app.Stop] to tear down — there is no SIGINT handler installed.
 func (nodeManager *Manager) Start() error {
 	// Start up the node
 	log.Info("starting znnd")
@@ -57,6 +66,10 @@ func (nodeManager *Manager) Start() error {
 
 	return nil
 }
+
+// Stop forwards to [node.Node.Stop] and then blocks on
+// [node.Node.Wait] so the embedder's call returns only after
+// teardown is complete.
 func (nodeManager *Manager) Stop() error {
 	log.Warn("Stopping znnd ...")
 

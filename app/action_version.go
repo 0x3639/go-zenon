@@ -10,6 +10,8 @@ import (
 	"github.com/zenon-network/go-zenon/metadata"
 )
 
+// versionCommand registers the `znnd version` sub-command, which
+// prints build / runtime metadata for diagnostics.
 var (
 	versionCommand = &cli.Command{
 		Action:    versionAction,
@@ -20,6 +22,9 @@ var (
 	}
 )
 
+// versionAction is the handler for `znnd version` — prints the
+// binary version, git commit, Go version, GOOS/GOARCH, and
+// GOPATH/GOROOT.
 func versionAction(*cli.Context) error {
 	fmt.Printf(`znnd
 Version:%v

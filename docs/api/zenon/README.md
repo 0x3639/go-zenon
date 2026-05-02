@@ -10,9 +10,33 @@ Package zenon is the top\-level orchestrator of the Network of Momentum core.
 
 ### Overview
 
-zenon constructs and sequences the major subsystems — [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>), [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>), [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>), [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>), and [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>) — and exposes them as a single [Zenon](<#Zenon>) facade. Initialization order is fixed: chain → consensus → event printer → subscription → pillar → protocol.
+zenon constructs and sequences the major subsystems — [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>), [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>), [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>), [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>), [github.com/zenon\\\-network/go\\\-zenon/protocol](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/>), and the [github.com/zenon\\\-network/go\\\-zenon/rpc/api/subscribe](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/api/subscribe/>) dispatcher — and exposes them as a single [Zenon](<#Zenon>) facade. Every higher\-level component \(RPC handlers, the node lifecycle, embedded\-contract tests\) takes a [Zenon](<#Zenon>) handle rather than reaching for individual subsystems.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Initialization Order
+
+\[Zenon.Init\] runs each subsystem's Init in order:
+
+1. chain — open stores, validate genesis compatibility
+2. consensus — election manager, points system
+3. event printer — chain listener that logs momentum inserts
+4. subscription server — RPC pub/sub dispatcher
+5. pillar — block producer \(no\-op until coinbase is configured\)
+
+\[Zenon.Start\] then calls each Start in the same order, with protocol started last \(it would otherwise begin requesting blocks before the verifier is wired\). \[Zenon.Stop\] unwinds in reverse: protocol → pillar → subscribe → printer → consensus → chain → leveldb close.
+
+### Coinbase
+
+If \[Config.ProducingKeyPair\] is non\-nil at construction time, the embedded pillar manager is initialised in producer mode and will attempt to mint momentums when elected. A nil keypair runs the node as a non\-producing validator.
+
+### Generated Files
+
+None. Files are Zenon\-specific \(no upstream header\).
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>) — drop\-in test harness with the same [Zenon](<#Zenon>) surface backed by mocked stores.
+- [github.com/zenon\\\-network/go\\\-zenon/node](<https://pkg.go.dev/github.com/zenon-network/go-zenon/node/>) — owns the [Zenon](<#Zenon>) instance plus the p2p server, RPC stack, and process lifecycle.
+- [github.com/zenon\\\-network/go\\\-zenon/app](<https://pkg.go.dev/github.com/zenon-network/go-zenon/app/>) — CLI driver that constructs [Config](<#Config>) from flags and instantiates the node.
 
 ## Index
 
@@ -43,9 +67,9 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="Config"></a>
-## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L13-L19>)
+## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L18-L24>)
 
-
+Config bundles the non\-default knobs needed to construct a [Zenon](<#Zenon>). DataDir is the on\-disk root for chain and consensus stores; ProducingKeyPair is non\-nil only on pillar nodes; GenesisConfig is loaded by the caller \(typically \[app\] reads genesis.json or falls back to the embedded Alphanet genesis\).
 
 ```go
 type Config struct {
@@ -58,27 +82,27 @@ type Config struct {
 ```
 
 <a name="Config.NewDBManager"></a>
-### func \(\*Config\) [NewDBManager](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L21>)
+### func \(\*Config\) [NewDBManager](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L29>)
 
 ```go
 func (c *Config) NewDBManager(inside string) db.Manager
 ```
 
-
+NewDBManager opens a versioned [db.Manager](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Manager>) rooted at DataDir/inside — the canonical chain\-store layout consumed by the chain subsystem.
 
 <a name="Config.NewLevelDB"></a>
-### func \(\*Config\) [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L24>)
+### func \(\*Config\) [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/zenon/config.go#L36>)
 
 ```go
 func (c *Config) NewLevelDB(inside string) (db.DB, *leveldb.DB)
 ```
 
-
+NewLevelDB opens a raw leveldb at DataDir/inside, returning both the abstracted [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) handle and the underlying leveldb.DB so zenon.Stop can Close it explicitly.
 
 <a name="EventPrinter"></a>
-## type [EventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L12-L18>)
+## type [EventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L15-L21>)
 
-
+EventPrinter is the chain\-listener that emits human\-readable momentum inserts to stdout. Composed in [Zenon](<#Zenon>) so operators have a default chain\-progress view without needing the RPC layer.
 
 ```go
 type EventPrinter interface {
@@ -91,18 +115,18 @@ type EventPrinter interface {
 ```
 
 <a name="NewEventPrinter"></a>
-### func [NewEventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L25>)
+### func [NewEventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L32>)
 
 ```go
 func NewEventPrinter(chain chain.Chain, broadcaster protocol.Broadcaster) EventPrinter
 ```
 
-
+NewEventPrinter constructs the default chain\-progress printer.
 
 <a name="Zenon"></a>
-## type [Zenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/interfaces.go#L11-L23>)
+## type [Zenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/interfaces.go#L16-L28>)
 
-
+Zenon is the facade exposed by the orchestrator. The production implementation is zenon; tests use the mock in [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>). Methods returning subsystems give callers direct access to the underlying interfaces — no wrapping or reduced view.
 
 ```go
 type Zenon interface {
@@ -121,18 +145,18 @@ type Zenon interface {
 ```
 
 <a name="NewZenon"></a>
-### func [NewZenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L29>)
+### func [NewZenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L35>)
 
 ```go
 func NewZenon(cfg *Config) (Zenon, error)
 ```
 
-
+NewZenon constructs a fully\-wired Zenon facade ready for \[Init\] / \[Start\]. Sets the pillar coinbase if cfg.ProducingKeyPair is non\-nil; nil leaves the node in non\-producing mode.
 
 <a name="eventPrinter"></a>
-## type [eventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L20-L23>)
+## type [eventPrinter](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L26-L29>)
 
-
+eventPrinter is the production EventPrinter — registers as a chain listener and prints every 50th momentum during sync, every momentum once the node is in SyncDone state.
 
 ```go
 type eventPrinter struct {
@@ -142,7 +166,7 @@ type eventPrinter struct {
 ```
 
 <a name="eventPrinter.DeleteMomentum"></a>
-### func \(\*eventPrinter\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L54>)
+### func \(\*eventPrinter\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L61>)
 
 ```go
 func (ep *eventPrinter) DeleteMomentum(detailed *nom.DetailedMomentum)
@@ -151,7 +175,7 @@ func (ep *eventPrinter) DeleteMomentum(detailed *nom.DetailedMomentum)
 
 
 <a name="eventPrinter.Init"></a>
-### func \(\*eventPrinter\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L32>)
+### func \(\*eventPrinter\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L39>)
 
 ```go
 func (ep *eventPrinter) Init() error
@@ -160,7 +184,7 @@ func (ep *eventPrinter) Init() error
 
 
 <a name="eventPrinter.InsertMomentum"></a>
-### func \(\*eventPrinter\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L44>)
+### func \(\*eventPrinter\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L51>)
 
 ```go
 func (ep *eventPrinter) InsertMomentum(detailed *nom.DetailedMomentum)
@@ -169,7 +193,7 @@ func (ep *eventPrinter) InsertMomentum(detailed *nom.DetailedMomentum)
 
 
 <a name="eventPrinter.Start"></a>
-### func \(\*eventPrinter\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L35>)
+### func \(\*eventPrinter\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L42>)
 
 ```go
 func (ep *eventPrinter) Start() error
@@ -178,7 +202,7 @@ func (ep *eventPrinter) Start() error
 
 
 <a name="eventPrinter.Stop"></a>
-### func \(\*eventPrinter\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L39>)
+### func \(\*eventPrinter\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L46>)
 
 ```go
 func (ep *eventPrinter) Stop() error
@@ -187,9 +211,9 @@ func (ep *eventPrinter) Stop() error
 
 
 <a name="zenon"></a>
-## type [zenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L15-L27>)
+## type [zenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L18-L30>)
 
-
+zenon is the production [Zenon](<#Zenon>) implementation. Holds one handle per managed subsystem plus the consensus leveldb so zenon.Stop can close it. Field order mirrors construction order in [NewZenon](<#NewZenon>).
 
 ```go
 type zenon struct {
@@ -208,93 +232,93 @@ type zenon struct {
 ```
 
 <a name="zenon.Broadcaster"></a>
-### func \(\*zenon\) [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L137>)
+### func \(\*zenon\) [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L171>)
 
 ```go
 func (z *zenon) Broadcaster() protocol.Broadcaster
 ```
 
-
+Broadcaster returns the local\-block broadcaster used by the RPC publish path.
 
 <a name="zenon.Chain"></a>
-### func \(\*zenon\) [Chain](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L119>)
+### func \(\*zenon\) [Chain](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L138>)
 
 ```go
 func (z *zenon) Chain() chain.Chain
 ```
 
-
+Chain returns the chain subsystem.
 
 <a name="zenon.Config"></a>
-### func \(\*zenon\) [Config](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L134>)
+### func \(\*zenon\) [Config](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L165>)
 
 ```go
 func (z *zenon) Config() *Config
 ```
 
-
+Config returns the original Config used to construct this Zenon. Treat as read\-only — mutating it after construction has no effect.
 
 <a name="zenon.Consensus"></a>
-### func \(\*zenon\) [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L125>)
+### func \(\*zenon\) [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L148>)
 
 ```go
 func (z *zenon) Consensus() consensus.Consensus
 ```
 
-
+Consensus returns the consensus subsystem.
 
 <a name="zenon.Init"></a>
-### func \(\*zenon\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L55>)
+### func \(\*zenon\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L65>)
 
 ```go
 func (z *zenon) Init() error
 ```
 
-
+Init walks every subsystem's Init in fixed order: chain → consensus → event printer → subscription → pillar. Returns the first error encountered. Protocol Init is intentionally skipped — protocol has no Init step.
 
 <a name="zenon.Producer"></a>
-### func \(\*zenon\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L122>)
+### func \(\*zenon\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L143>)
 
 ```go
 func (z *zenon) Producer() pillar.Manager
 ```
 
-
+Producer returns the pillar \(block\-producer\) manager.
 
 <a name="zenon.Protocol"></a>
-### func \(\*zenon\) [Protocol](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L131>)
+### func \(\*zenon\) [Protocol](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L158>)
 
 ```go
 func (z *zenon) Protocol() *protocol.ProtocolManager
 ```
 
-
+Protocol returns the wire\-protocol manager.
 
 <a name="zenon.Start"></a>
-### func \(\*zenon\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L75>)
+### func \(\*zenon\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L89>)
 
 ```go
 func (z *zenon) Start() error
 ```
 
-
+Start launches each subsystem in the same fixed order as Init, with protocol started last so it cannot request blocks before the verifier and chain are live.
 
 <a name="zenon.Stop"></a>
-### func \(\*zenon\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L95>)
+### func \(\*zenon\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L113>)
 
 ```go
 func (z *zenon) Stop() error
 ```
 
-
+Stop unwinds the subsystems in reverse\-dependency order: protocol → pillar → subscribe → printer → consensus → chain → leveldb. Returns the first error encountered.
 
 <a name="zenon.Verifier"></a>
-### func \(\*zenon\) [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L128>)
+### func \(\*zenon\) [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L153>)
 
 ```go
 func (z *zenon) Verifier() verifier.Verifier
 ```
 
-
+Verifier returns the block\-verifier.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

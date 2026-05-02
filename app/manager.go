@@ -13,11 +13,18 @@ import (
 	"github.com/zenon-network/go-zenon/node"
 )
 
+// Manager is the CLI-build process supervisor: holds the cli
+// context (for late flag access) plus the node, exposes Start and
+// Stop. The libznn build provides a parallel implementation in
+// manager_libznn.go that omits the SIGINT handler and Wait.
 type Manager struct {
 	ctx  *cli.Context
 	node *node.Node
 }
 
+// NewNodeManager builds the node config, instantiates a [node.Node]
+// (which acquires the data-dir lock), and wraps it in a Manager
+// ready for [Manager.Start].
 func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	// make config
 	nodeConfig, err := MakeConfig(ctx)
@@ -39,6 +46,10 @@ func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	}, nil
 }
 
+// Start launches the node, prints producer-status detection,
+// installs SIGINT/SIGTERM handlers (a second signal still does not
+// quit; up to 10 are required to escape a graceful shutdown), and
+// blocks on [node.Node.Wait] until the node stops.
 func (nodeManager *Manager) Start() error {
 	// Start up the node
 	log.Info("starting znnd")
@@ -82,6 +93,9 @@ func (nodeManager *Manager) Start() error {
 
 	return nil
 }
+
+// Stop forwards to [node.Node.Stop]. Logs (does not surface)
+// teardown errors — the process is exiting anyway.
 func (nodeManager *Manager) Stop() error {
 	log.Warn("Stopping znnd ...")
 

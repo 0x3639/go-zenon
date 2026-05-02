@@ -15,6 +15,9 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
+// manager is the production [Manager] implementation. Wraps a
+// single [worker] that handles the actual momentum / contract
+// receive / contract update pipeline.
 type manager struct {
 	log      log15.Logger
 	coinbase *wallet.KeyPair
@@ -25,6 +28,9 @@ type manager struct {
 	broadcaster protocol.Broadcaster
 }
 
+// NewPillar constructs a pillar manager wired to the given chain,
+// consensus, and broadcaster. The returned Manager is non-producing
+// until [Manager.SetCoinBase] is called.
 func NewPillar(chain chain.Chain, consensus consensus.Consensus, broadcaster protocol.Broadcaster) Manager {
 	supervisor := vm.NewSupervisor(chain, consensus)
 	return &manager{
@@ -68,11 +74,17 @@ func (m *manager) Stop() error {
 	return nil
 }
 
-// NewProducerEvent subscribes to consensus events which trigger
+// NewProducerEvent is the [consensus.EventListener] callback —
+// dispatches each event to a goroutine so the consensus loop
+// continues without blocking on the producer pipeline.
 func (m *manager) NewProducerEvent(e consensus.ProducerEvent) {
 	go m.processSupervised(e)
 }
 
+// shouldProcess gates whether this pillar should act on event e.
+// Returns one of the [errors.go] sentinels when the event is not
+// actionable; nil means "produce now". Each rule is checked
+// before any work begins so we never half-commit a momentum.
 func (m *manager) shouldProcess(e consensus.ProducerEvent) error {
 	if m.broadcaster.SyncInfo().State != protocol.SyncDone {
 		return ErrSyncNotDone
@@ -91,6 +103,11 @@ func (m *manager) shouldProcess(e consensus.ProducerEvent) error {
 	}
 	return nil
 }
+
+// processSupervised drives one slot end-to-end: applies the
+// admission rules, then waits for the worker task to finish, force-
+// stopping it 250ms before slot EndTime so a late finish does not
+// produce a momentum that other pillars will reject as expired.
 func (m *manager) processSupervised(e consensus.ProducerEvent) {
 	if err := m.shouldProcess(e); err != nil {
 		m.log.Info("do not process current event", "event", e, "reason", err)
@@ -118,6 +135,10 @@ func (m *manager) processSupervised(e consensus.ProducerEvent) {
 		}
 	}
 }
+
+// Process bypasses the admission rules and synchronously hands
+// the event to the worker. Used by tests (and by [zenon/mock]) to
+// drive the pipeline at virtual-clock speed.
 func (m *manager) Process(e consensus.ProducerEvent) common.Task {
 	// keep this section commented since it's used by the testing environment
 	// when we find a nice way to move the clock in the future consider de-commenting this
@@ -129,10 +150,17 @@ func (m *manager) Process(e consensus.ProducerEvent) common.Task {
 	return m.worker.Process(e)
 }
 
+// SetCoinBase configures the keypair this pillar produces under.
+// Must be called before [Manager.Start] for the pillar to act on
+// any ProducerEvent. Updates both the manager (used in admission
+// checks) and the worker (used to sign produced blocks).
 func (m *manager) SetCoinBase(coinbase *wallet.KeyPair) {
 	m.coinbase = coinbase
 	m.worker.coinbase = coinbase
 }
+
+// GetCoinBase returns the configured coinbase address, or nil for
+// a non-producing pillar.
 func (m *manager) GetCoinBase() *types.Address {
 	if m.coinbase == nil {
 		return nil

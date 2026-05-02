@@ -21,7 +21,9 @@ var (
 	log = common.NodeLogger
 )
 
-// Node is chain container that manages p2p、rpc、zenon modules
+// Node is the long-running process container. Owns the wallet,
+// p2p server, RPC stack, and a [zenon.Zenon] core; coordinates
+// their start / stop order and holds the data-dir lock.
 type Node struct {
 	config *Config
 
@@ -40,6 +42,10 @@ type Node struct {
 	dataDirLock fileutil.Releaser // prevents concurrent use of instance directory
 }
 
+// NewNode performs setup-only work: open + lock the data dir, start
+// the wallet, build a [zenon.Config] from conf, instantiate the
+// [zenon.Zenon] core, and assemble the [p2p.Server] descriptor. The
+// returned Node is not yet started; call [Node.Start].
 func NewNode(conf *Config) (*Node, error) {
 	var err error
 
@@ -98,6 +104,10 @@ func NewNode(conf *Config) (*Node, error) {
 	return node, nil
 }
 
+// Start runs the boot sequence: zenon Init+Start, p2p server, then
+// the RPC stack. Returns the first error encountered. Holds the
+// node lock for the duration so concurrent Stop calls block until
+// startup completes (or fails).
 func (node *Node) Start() error {
 	node.lock.Lock()
 	defer node.lock.Unlock()
@@ -116,6 +126,11 @@ func (node *Node) Start() error {
 
 	return nil
 }
+
+// Stop unwinds the subsystems in reverse-dependency order: p2p →
+// wallet → zenon → RPC stack → release the data-dir lock. Closes
+// the stop channel so [Node.Wait] returns. Returns the first
+// non-nil teardown error.
 func (node *Node) Stop() error {
 	node.lock.Lock()
 	defer node.lock.Unlock()
@@ -139,26 +154,42 @@ func (node *Node) Stop() error {
 
 	return nil
 }
+
+// Wait blocks until [Node.Stop] is called. The CLI driver uses this
+// to keep the process alive after a successful Start.
 func (node *Node) Wait() {
 	<-node.stop
 }
 
+// Zenon returns the running [zenon.Zenon] core.
 func (node *Node) Zenon() zenon.Zenon {
 	return node.z
 }
+
+// Config returns the original Config used to construct this Node.
+// Treat as read-only.
 func (node *Node) Config() *Config {
 	return node.config
 }
+
+// WalletManager returns the started wallet manager — used by the
+// producer keypair lookup and by tests / utilities that need wallet
+// access without a full restart.
 func (node *Node) WalletManager() *wallet.Manager {
 	return node.walletManager
 }
 
+// startWallet begins the wallet manager so producer keypairs can be
+// unlocked while building the zenon config.
 func (node *Node) startWallet() error {
 	if err := node.walletManager.Start(); err != nil {
 		return err
 	}
 	return nil
 }
+
+// startZenon runs zenon Init and Start in sequence, returning the
+// first error encountered.
 func (node *Node) startZenon() error {
 	if err := node.z.Init(); err != nil {
 		log.Error("failed to init zenon", "reason", err)
@@ -171,6 +202,9 @@ func (node *Node) startZenon() error {
 	return nil
 }
 
+// stopWallet shuts down the wallet manager. Returns ErrNodeStopped
+// if the manager was never started — callers should treat that as
+// a no-op rather than fatal.
 func (node *Node) stopWallet() error {
 	if node.walletManager == nil {
 		return ErrNodeStopped
@@ -178,6 +212,9 @@ func (node *Node) stopWallet() error {
 	node.walletManager.Stop()
 	return nil
 }
+
+// stopZenon shuts down the zenon core. Returns ErrNodeStopped if
+// the core was never started.
 func (node *Node) stopZenon() error {
 	if node.z == nil {
 		return ErrNodeStopped
@@ -185,6 +222,9 @@ func (node *Node) stopZenon() error {
 	return node.z.Stop()
 }
 
+// openDataDir mkdir's DataPath and acquires the exclusive `.lock`
+// flock that guarantees single-process ownership of the chain
+// database. Returns [ErrDataDirUsed] if another znnd holds the lock.
 func (node *Node) openDataDir() error {
 	if node.config.DataPath == "" {
 		return nil
@@ -207,6 +247,9 @@ func (node *Node) openDataDir() error {
 	log.Info("successfully locked dataDir")
 	return nil
 }
+
+// closeDataDir releases the `.lock` flock acquired by openDataDir.
+// Best-effort: a release failure is logged but not surfaced.
 func (node *Node) closeDataDir() {
 	log.Info("releasing dataDir lock ... ")
 	// Release instance directory lock.

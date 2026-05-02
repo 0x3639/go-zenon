@@ -12,6 +12,9 @@ import (
 	"github.com/zenon-network/go-zenon/vm"
 )
 
+// zenon is the production [Zenon] implementation. Holds one handle
+// per managed subsystem plus the consensus leveldb so [zenon.Stop]
+// can close it. Field order mirrors construction order in [NewZenon].
 type zenon struct {
 	config *Config
 
@@ -26,6 +29,9 @@ type zenon struct {
 	levelDb     *leveldb.DB
 }
 
+// NewZenon constructs a fully-wired Zenon facade ready for [Init] /
+// [Start]. Sets the pillar coinbase if cfg.ProducingKeyPair is
+// non-nil; nil leaves the node in non-producing mode.
 func NewZenon(cfg *Config) (Zenon, error) {
 	z := &zenon{
 		config: cfg,
@@ -52,6 +58,10 @@ func NewZenon(cfg *Config) (Zenon, error) {
 	return z, nil
 }
 
+// Init walks every subsystem's Init in fixed order: chain →
+// consensus → event printer → subscription → pillar. Returns the
+// first error encountered. Protocol Init is intentionally skipped
+// — protocol has no Init step.
 func (z *zenon) Init() error {
 	if err := z.chain.Init(); err != nil {
 		return err
@@ -72,6 +82,10 @@ func (z *zenon) Init() error {
 
 	return nil
 }
+
+// Start launches each subsystem in the same fixed order as Init,
+// with protocol started last so it cannot request blocks before
+// the verifier and chain are live.
 func (z *zenon) Start() error {
 	if err := z.chain.Start(); err != nil {
 		return err
@@ -92,6 +106,10 @@ func (z *zenon) Start() error {
 
 	return nil
 }
+
+// Stop unwinds the subsystems in reverse-dependency order:
+// protocol → pillar → subscribe → printer → consensus → chain →
+// leveldb. Returns the first error encountered.
 func (z *zenon) Stop() error {
 	z.protocol.Stop()
 	if err := z.pillar.Stop(); err != nil {
@@ -116,24 +134,40 @@ func (z *zenon) Stop() error {
 	return nil
 }
 
+// Chain returns the chain subsystem.
 func (z *zenon) Chain() chain.Chain {
 	return z.chain
 }
+
+// Producer returns the pillar (block-producer) manager.
 func (z *zenon) Producer() pillar.Manager {
 	return z.pillar
 }
+
+// Consensus returns the consensus subsystem.
 func (z *zenon) Consensus() consensus.Consensus {
 	return z.consensus
 }
+
+// Verifier returns the block-verifier.
 func (z *zenon) Verifier() verifier.Verifier {
 	return z.verifier
 }
+
+// Protocol returns the wire-protocol manager.
 func (z *zenon) Protocol() *protocol.ProtocolManager {
 	return z.protocol
 }
+
+// Config returns the original Config used to construct this Zenon.
+// Treat as read-only — mutating it after construction has no
+// effect.
 func (z *zenon) Config() *Config {
 	return z.config
 }
+
+// Broadcaster returns the local-block broadcaster used by the RPC
+// publish path.
 func (z *zenon) Broadcaster() protocol.Broadcaster {
 	return z.broadcaster
 }

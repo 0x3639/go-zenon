@@ -14,9 +14,15 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
-// worker takes care of generating receive blocks for contracts.
-// Init Start Stop endpoints are used to control the worker.
-// The worker needs to be started for every event and it automatically stops when the event ends.
+// worker is the per-pillar production engine. One Process call
+// drives a complete slot's work (momentum + auto-receives + embedded
+// updates). Init / Start / Stop control its lifetime: Start opens
+// the closed channel; Stop closes it and waits for in-flight Process
+// calls to drain via the children WaitGroup.
+//
+// The worker can run only one Process at a time — the working mutex
+// serializes them and the embedded contracts list defines which
+// addresses participate in the auto-receive sweep.
 type worker struct {
 	log      common.Logger
 	closed   chan struct{}
@@ -61,6 +67,9 @@ func (w *worker) Stop() error {
 
 	return nil
 }
+
+// shouldStop reports whether Stop has been called. Polled at every
+// stage boundary in [worker.work] so a late Stop bails out promptly.
 func (w *worker) shouldStop() bool {
 	select {
 	case <-w.closed:
@@ -70,6 +79,9 @@ func (w *worker) shouldStop() bool {
 	return false
 }
 
+// Process schedules one slot of producer work for event e and
+// returns a Task the caller can wait on (or force-stop). Returns
+// nil if the worker has already been Stop'd.
 func (w *worker) Process(e consensus.ProducerEvent) common.Task {
 	w.children.Add(1)
 	w.working.Lock()
@@ -90,6 +102,12 @@ func (w *worker) Process(e consensus.ProducerEvent) common.Task {
 	return task
 }
 
+// work is the actual slot pipeline: generate-momentum → broadcast
+// → auto-receive embedded contracts → periodic-update embedded
+// contracts. Bails out at every stage on task.ShouldStop or
+// worker.shouldStop. Skips the broadcast step if the momentum took
+// more than 3 seconds to generate (peers would reject it as
+// stale).
 func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	var momentumStore store.Momentum
 

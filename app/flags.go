@@ -7,10 +7,14 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// CLI flags consumed by [MakeConfig] / [applyFlagsToConfig]. Each
+// flag's Usage string is what `znnd --help` prints.
 var (
 
 	// pprof
 
+	// PprofFlag — enable the Go pprof HTTP server on
+	// `--pprof.addr:--pprof.port`.
 	PprofFlag = &cli.BoolFlag{
 		Name:  "pprof",
 		Usage: "Enable the pprof HTTP server",
@@ -116,6 +120,9 @@ var (
 		Usage: "log level (info,error,warn,debug)",
 	}
 
+	// AllFlags is the full ordered list registered on the urfave/cli
+	// App at init() — categorised in the help template. New flags
+	// must be appended here to be visible.
 	AllFlags = []cli.Flag{
 
 		// config

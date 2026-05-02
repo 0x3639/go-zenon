@@ -6,7 +6,9 @@ import (
 	"github.com/zenon-network/go-zenon/app"
 )
 
-// znnd is the official command-line client
+// main is the official command-line entry point. Hands off to
+// [github.com/zenon-network/go-zenon/app.Run] which owns flag
+// parsing and the boot sequence.
 func main() {
 	app.Run()
 }

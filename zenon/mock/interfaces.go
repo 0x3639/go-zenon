@@ -7,6 +7,10 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// MockZenon is the test-harness facade. Extends [zenon.Zenon] with
+// time-stepping (Insert* momentum helpers), block-insertion helpers
+// with expected-error / expected-VM-changes assertions, contract
+// call helpers, and per-test cleanup (StopPanic).
 type MockZenon interface {
 	zenon.Zenon
 	StopPanic()

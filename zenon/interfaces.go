@@ -8,6 +8,11 @@ import (
 	"github.com/zenon-network/go-zenon/verifier"
 )
 
+// Zenon is the facade exposed by the orchestrator. The production
+// implementation is [zenon]; tests use the mock in
+// [github.com/zenon-network/go-zenon/zenon/mock]. Methods returning
+// subsystems give callers direct access to the underlying interfaces
+// — no wrapping or reduced view.
 type Zenon interface {
 	Init() error
 	Start() error

@@ -11,10 +11,17 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// ErrNothingToGenerate is the soft sentinel returned when the
+// contract's sequencer queue is empty — the auto-receive sweep
+// uses it to skip the contract without aborting the sweep.
 var (
 	ErrNothingToGenerate = errors.Errorf("nothing to generate. sequencer-queue is empty")
 )
 
+// generateNext produces one auto-receive block for the next pending
+// send addressed to embedded. Returns ErrNothingToGenerate when
+// the contract's mailbox is empty; any other error is fatal to the
+// sweep.
 func (w *worker) generateNext(momentumStore store.Momentum, embedded types.Address) (*nom.AccountBlockTransaction, error) {
 	insert := w.chain.AcquireInsert("contract-generator")
 	defer insert.Unlock()

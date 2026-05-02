@@ -16,12 +16,19 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// ProducerConfig identifies the keypair this node should use to
+// produce momentums when elected. Address must match the keypair
+// derived from KeyFilePath at Index.
 type ProducerConfig struct {
 	Address     string
 	Index       uint32
 	KeyFilePath string
 	Password    string
 }
+
+// RPCConfig controls the JSON-RPC HTTP and WebSocket transports.
+// Endpoints names which API modules to expose (e.g. "ledger",
+// "embedded", "stats"); empty means default-public.
 type RPCConfig struct {
 	EnableHTTP bool
 	EnableWS   bool
@@ -37,6 +44,9 @@ type RPCConfig struct {
 	HTTPCors         []string
 	WSOrigins        []string
 }
+
+// NetConfig controls the p2p subsystem — listen address, peer caps,
+// and seeder list.
 type NetConfig struct {
 	ListenHost string
 	ListenPort int
@@ -49,6 +59,10 @@ type NetConfig struct {
 	Seeders []string
 }
 
+// Config is the per-process node configuration. Constructed by the
+// CLI from flags and an optional config.json. [DefaultNodeConfig]
+// supplies sensible defaults; only the fields the operator
+// overrides need to be set.
 type Config struct {
 	DataPath    string // default ~/.zenon
 	WalletPath  string // default DataPath/wallet
@@ -63,6 +77,10 @@ type Config struct {
 	Net      NetConfig
 }
 
+// MakePathsAbsolute resolves DataPath, WalletPath, and GenesisFile
+// to absolute paths and expands a leading `~` into the user's home.
+// Mutates c in place; returns the first filesystem error
+// encountered.
 func (c *Config) MakePathsAbsolute() error {
 	if c.DataPath == "" {
 		c.DataPath = DefaultDataDir()
@@ -97,6 +115,9 @@ func (c *Config) MakePathsAbsolute() error {
 	return nil
 }
 
+// makeZenonConfig translates the node config into a
+// [zenon.Config], resolving the producer keypair (if any) and the
+// genesis source.
 func (c *Config) makeZenonConfig(walletManager *wallet.Manager) (*zenon.Config, error) {
 	pillarCoinbase, err := c.parseProducer(walletManager)
 	if err != nil {
@@ -111,6 +132,11 @@ func (c *Config) makeZenonConfig(walletManager *wallet.Manager) (*zenon.Config, 
 		DataDir:           c.DataPath,
 	}, nil
 }
+
+// makeGenesisConfig loads the genesis state. Prefers GenesisFile
+// when set; otherwise falls back to the embedded Alphanet genesis.
+// Calls os.Exit(1) on failure since a node without genesis cannot
+// proceed.
 func (c *Config) makeGenesisConfig() (genesisConfig store.Genesis) {
 	var err error
 	var path string
@@ -140,6 +166,12 @@ func (c *Config) makeGenesisConfig() (genesisConfig store.Genesis) {
 		return
 	}
 }
+
+// parseProducer resolves the producer keypair: unlocks the
+// keystore, derives the keypair at Producer.Index, and verifies
+// that the derived address matches Producer.Address. Returns nil
+// keypair (no error) when no producer is configured — that's a
+// non-producing node.
 func (c *Config) parseProducer(walletManager *wallet.Manager) (*wallet.KeyPair, error) {
 	if c.Producer == nil {
 		return nil, nil
@@ -184,9 +216,13 @@ func (c *Config) parseProducer(walletManager *wallet.Manager) (*wallet.KeyPair, 
 	return keyPair, nil
 }
 
+// makeWalletConfig projects c into a [wallet.Config].
 func (c *Config) makeWalletConfig() *wallet.Config {
 	return &wallet.Config{WalletDir: c.WalletPath}
 }
+
+// makeNetConfig projects c.Net into a [p2p.Net], resolving the
+// per-data-dir node-database and private-key file paths.
 func (c *Config) makeNetConfig() *p2p.Net {
 	networkDataDir := filepath.Join(c.DataPath, p2p.DefaultNetDirName)
 	privateKeyFile := filepath.Join(c.DataPath, p2p.DefaultNetPrivateKeyFile)
@@ -203,12 +239,18 @@ func (c *Config) makeNetConfig() *p2p.Net {
 		ListenPort:        c.Net.ListenPort,
 	}
 }
+
+// HTTPEndpoint formats the HTTP-RPC listen address as host:port,
+// or "" when no HTTPHost is configured.
 func (c *Config) HTTPEndpoint() string {
 	if c.RPC.HTTPHost == "" {
 		return ""
 	}
 	return fmt.Sprintf("%s:%d", c.RPC.HTTPHost, c.RPC.HTTPPort)
 }
+
+// WSEndpoint formats the WebSocket-RPC listen address as host:port,
+// or "" when no WSHost is configured.
 func (c *Config) WSEndpoint() string {
 	if c.RPC.WSHost == "" {
 		return ""

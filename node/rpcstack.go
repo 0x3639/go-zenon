@@ -34,11 +34,18 @@ type wsConfig struct {
 	prefix  string // path prefix on which to mount ws handler
 }
 
+// rpcHandler is a (handler, server) pair stored atomically inside
+// [httpServer] so the handler can be swapped (or disabled) without
+// holding the server mutex during a request.
 type rpcHandler struct {
 	http.Handler
 	server *rpc.Server
 }
 
+// httpServer hosts both HTTP-JSON-RPC and WebSocket on a single TCP
+// listener. Per-transport handlers are stored as atomic.Values so
+// enableRPC / disableRPC / enableWS / disableWS can run while the
+// server is serving live requests.
 type httpServer struct {
 	log      common.Logger
 	timeouts rpc.HTTPTimeouts
@@ -65,6 +72,9 @@ type httpServer struct {
 	handlerNames map[string]string
 }
 
+// newHTTPServer constructs an idle httpServer with no handlers
+// installed. Caller must call setListenAddr + enableRPC / enableWS
+// + start to bring it online.
 func newHTTPServer(timeouts rpc.HTTPTimeouts) *httpServer {
 	h := &httpServer{
 		log:          common.NodeLogger.New("submodule", "http-server"),
