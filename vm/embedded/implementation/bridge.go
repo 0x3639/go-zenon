@@ -132,6 +132,10 @@ func CheckNetworkAndPairExist(context vm_context.AccountVmContext, networkClass 
 	return nil, constants.ErrTokenNotFound
 }
 
+// WrapTokenMethod implements outbound wrap requests: locks the
+// caller's tokens (Owned pairs escrow them; non-Owned pairs burn
+// them) and queues a [definition.WrapTokenRequest] for the
+// orchestrator to sign and execute on the remote chain.
 type WrapTokenMethod struct {
 	MethodName string
 }
@@ -267,6 +271,10 @@ func GetWrapTokenRequestMessage(request *definition.WrapTokenRequest, contractAd
 	return HashByNetworkClass(messageBytes, request.NetworkClass)
 }
 
+// UpdateWrapRequestMethod attaches a TSS signature to a queued
+// wrap request — the orchestrator calls this once threshold-signing
+// produces the signature so the request can be relayed to the
+// remote chain.
 type UpdateWrapRequestMethod struct {
 	MethodName string
 }
@@ -378,6 +386,11 @@ func checkUnwrapMetadataStatic(param *definition.UnwrapTokenParam) error {
 	return nil
 }
 
+// UnwrapTokenMethod admits an inbound unwrap claim: the caller
+// supplies the remote-chain transaction reference and a TSS-signed
+// payload proving the remote burn / lock. Persists a
+// [definition.UnwrapTokenRequest] entry; tokens become claimable
+// via [RedeemMethod] after the redeem-delay window.
 type UnwrapTokenMethod struct {
 	MethodName string
 }
@@ -480,6 +493,9 @@ func (p *UnwrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 	return nil, nil
 }
 
+// SetNetworkMethod registers (or updates) a remote network's
+// (NetworkClass, ChainId, Name, ContractAddress, metadata).
+// Administrator-only.
 type SetNetworkMethod struct {
 	MethodName string
 }
@@ -558,6 +574,8 @@ func (p *SetNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	return nil, nil
 }
 
+// RemoveNetworkMethod de-registers a remote network and all its
+// configured token pairs. Administrator-only.
 type RemoveNetworkMethod struct {
 	MethodName string
 }
@@ -615,6 +633,8 @@ func (p *RemoveNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	return nil, nil
 }
 
+// SetNetworkMetadataMethod updates a network's free-form metadata
+// blob (administrator-only).
 type SetNetworkMetadataMethod struct {
 	MethodName string
 }
@@ -682,6 +702,9 @@ func IsJSON(s string) bool {
 	return json.Unmarshal([]byte(s), &js) == nil
 }
 
+// SetTokenPairMethod registers or updates a (network, token)
+// pair's bridgeability flags, fee percentage, redeem delay, and
+// per-pair metadata. Administrator-only.
 type SetTokenPairMethod struct {
 	MethodName string
 }
@@ -805,6 +828,8 @@ func (p *SetTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, s
 	return nil, nil
 }
 
+// RemoveTokenPairMethod removes a (network, token) pair.
+// Administrator-only.
 type RemoveTokenPairMethod struct {
 	MethodName string
 }
@@ -899,6 +924,10 @@ func GetBasicMethodMessage(methodName string, tssNonce uint64, networkClass uint
 	return HashByNetworkClass(messageBytes, networkClass)
 }
 
+// HaltMethod halts the bridge: any guardian (or administrator
+// with the right TSS signature) may halt; halting suspends new
+// wraps and redeems until the configured grace window elapses
+// after [UnhaltMethod] is called.
 type HaltMethod struct {
 	MethodName string
 }
@@ -961,6 +990,9 @@ func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock
 	return nil, nil
 }
 
+// UnhaltMethod begins lifting the halt: starts a grace window of
+// [BridgeInfoVariable.UnhaltDurationInMomentums] before the
+// bridge becomes operational again. Administrator-only.
 type UnhaltMethod struct {
 	MethodName string
 }
@@ -1013,6 +1045,10 @@ func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 	return nil, nil
 }
 
+// EmergencyMethod is the panic button: halts the bridge,
+// nominates the caller as administrator, and zeroes guardian /
+// TSS configuration so an incident-response governance can
+// re-bootstrap the bridge.
 type EmergencyMethod struct {
 	MethodName string
 }
@@ -1098,6 +1134,10 @@ func GetChangePubKeyMessage(methodName string, networkClass uint32, chainId, tss
 	return crypto.Hash(messageBytes), nil
 }
 
+// ChangeTssECDSAPubKeyMethod rotates the TSS public key. Requires
+// signatures from both the old and new keys to prove that the
+// orchestrator key-generation ceremony has completed and produced
+// a usable key.
 type ChangeTssECDSAPubKeyMethod struct {
 	MethodName string
 }
@@ -1207,6 +1247,9 @@ func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmCo
 	return nil, nil
 }
 
+// ChangeAdministratorMethod rotates the administrator address
+// after a [ProposeAdministratorMethod] proposal has cleared the
+// time-locked challenge window. Administrator-only.
 type ChangeAdministratorMethod struct {
 	MethodName string
 }
@@ -1278,6 +1321,8 @@ func (p *ChangeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmCon
 	return nil, nil
 }
 
+// SetAllowKeygenMethod toggles whether the orchestrator may run
+// a TSS key-generation ceremony. Administrator-only.
 type SetAllowKeygenMethod struct {
 	MethodName string
 }
@@ -1345,6 +1390,8 @@ func (p *SetAllowKeygenMethod) ReceiveBlock(context vm_context.AccountVmContext,
 	return nil, nil
 }
 
+// SetOrchestratorInfoMethod updates orchestrator-level configuration
+// (window thresholds, signing-key info). Administrator-only.
 type SetOrchestratorInfoMethod struct {
 	MethodName string
 }
@@ -1405,6 +1452,8 @@ func (p *SetOrchestratorInfoMethod) ReceiveBlock(context vm_context.AccountVmCon
 	return nil, nil
 }
 
+// SetBridgeMetadataMethod updates the bridge-level metadata blob.
+// Administrator-only.
 type SetBridgeMetadataMethod struct {
 	MethodName string
 }
@@ -1456,6 +1505,9 @@ func (p *SetBridgeMetadataMethod) ReceiveBlock(context vm_context.AccountVmConte
 	return nil, nil
 }
 
+// RevokeUnwrapRequestMethod cancels a queued inbound unwrap
+// (administrator-only) — used when an unwrap should not be paid
+// out (e.g., orchestrator submitted a malformed claim).
 type RevokeUnwrapRequestMethod struct {
 	MethodName string
 }
@@ -1508,6 +1560,10 @@ func (p *RevokeUnwrapRequestMethod) ReceiveBlock(context vm_context.AccountVmCon
 	return nil, nil
 }
 
+// RedeemMethod claims tokens for a confirmed inbound unwrap once
+// the per-pair redeem-delay window has elapsed. Mints (Owned
+// pairs) or transfers from escrow (non-Owned pairs) the claimed
+// amount to the recipient.
 type RedeemMethod struct {
 	MethodName string
 }
@@ -1616,6 +1672,9 @@ func (p *RedeemMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 	return []*nom.AccountBlock{block}, nil
 }
 
+// NominateGuardiansMethod sets the bridge guardian set: addresses
+// that may halt the bridge. Administrator-only; takes effect
+// after the time-locked governance challenge window.
 type NominateGuardiansMethod struct {
 	MethodName string
 }
@@ -1706,6 +1765,10 @@ func (p *NominateGuardiansMethod) ReceiveBlock(context vm_context.AccountVmConte
 	return nil, nil
 }
 
+// ProposeAdministratorMethod queues an administrator-rotation
+// proposal that any guardian can subsequently confirm via
+// [ChangeAdministratorMethod] after the time-lock elapses.
+// Administrator-only.
 type ProposeAdministratorMethod struct {
 	MethodName string
 }
