@@ -6,13 +6,50 @@
 import "github.com/zenon-network/go-zenon/vm/abi"
 ```
 
-Package abi encodes and decodes embedded\-contract method calls in a format compatible with the Solidity ABI.
+Package abi encodes and decodes embedded\-contract method calls and storage records in a format compatible with the Solidity ABI.
 
 ### Overview
 
-abi mirrors the encoding rules used by EVM tooling so that contract clients can pack call data with familiar libraries. It supports the type set used by Zenon's embedded contracts \(uint variants, address, bytes, fixed arrays, strings\) and provides method\-selector and event\-signature hashing.
+abi mirrors the encoding rules used by EVM tooling so that contract clients can pack call data with familiar libraries. It supports the type set used by Zenon's embedded contracts: signed and unsigned integers in every Solidity\-supported size, address, tokenStandard, hash, bytes \(fixed and dynamic\), strings, booleans, and arbitrary nesting through fixed\-size arrays and dynamic slices.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- ABIContract — the parsed contract surface. Holds \[Method\]s \(function entries\) and \[Variable\]s \(storage shapes used by embedded contracts to encode their on\-chain records\). Loaded from JSON via [JSONToABIContract](<#JSONToABIContract>) / [ABIContract.UnmarshalJSON](<#ABIContract.UnmarshalJSON>).
+- Method — one ABI function entry. Tracks the canonical signature, the 4\-byte method id \(call selector\), and the argument tuple \([Arguments](<#Arguments>)\).
+- Variable — one storage record shape. Used by embedded contracts to \(de\)serialize records without ever calling a function.
+- Type — the parsed type descriptor. Supports the Solidity type set; \`tokenStandard\` and \`hash\` are Zenon\-specific additions.
+- IntPool — pool of [big.Int](<https://pkg.go.dev/math/big/#Int>) handles consumed by the unpacker's \[lengthPrefixPointsTo\] arithmetic to amortize allocations. Wrapped in \[intPoolPool\] for cross\-call reuse.
+
+### Encoding Layout
+
+Method calls: \`4\-byte id || head\_args || tail\_args\`. Head args occupy [WordSize](<#WordBits>) each \(32 bytes\); dynamic args \(string, bytes, dynamic slices\) place a 32\-byte offset in the head and append their \`\[length, padded\_value\]\` tail at the end.
+
+Static arrays of static elements are encoded inline in the head with no length prefix. Mixed/nested cases follow Solidity's "static elements inline; dynamic elements pointer\-then\-tail" rule.
+
+### Usage
+
+Build calls and decode replies:
+
+```
+contract := abi.JSONToABIContract(jsonReader)
+data, _ := contract.PackMethod("Transfer", to, amount)
+var args struct { To types.Address; Amount *big.Int }
+_ = contract.UnpackMethod(&args, "Transfer", inboundData)
+```
+
+Read/write embedded\-contract storage:
+
+```
+encoded, _ := contract.PackVariable("PillarInfo", info)
+var info definition.PillarInfo
+_ = contract.UnpackVariable(&info, "PillarInfo", encoded)
+```
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — primary consumer; every embedded contract owns an [ABIContract](<#ABIContract>) for dispatch and storage.
+- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — supplies [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>), [types.ZenonTokenStandard](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZenonTokenStandard>), [types.Hash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Hash>) handled as first\-class ABI types.
+- [github.com/zenon\\\-network/go\\\-zenon/common/crypto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/>) — supplies the hash function the codec uses to derive method ids.
 
 ## Index
 
@@ -120,22 +157,23 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="WordBits"></a>
+<a name="WordBits"></a>Word\-size constants used by the ABI codec. WordSize matches Solidity's 32\-byte word; WordBits and WordBytes describe the host machine's \`big.Word\` \(used by the [PaddedBigBytes](<#PaddedBigBytes>) fast path\).
 
 ```go
 const (
-    // number of bits in chain big.Word
+    // WordBits is the number of bits in a [big.Word] on the host
+    // architecture.
     WordBits = 32 << (uint64(^big.Word(0)) >> 63)
 
-    // number of bytes in chain big.Word
+    // WordBytes is the number of bytes in a [big.Word].
     WordBytes = WordBits / 8
 
-    // number of bytes in chain vm word
+    // WordSize is the number of bytes in one ABI word — always 32.
     WordSize = 32
 )
 ```
 
-<a name="IntTy"></a>Type enumerator
+<a name="IntTy"></a>Type discriminator constants — the .T field on [Type](<#Type>) uses these to distinguish the high\-level kind without re\-parsing the type string.
 
 ```go
 const (
@@ -153,13 +191,13 @@ const (
 )
 ```
 
-<a name="poolDefaultCap"></a>
+<a name="poolDefaultCap"></a>poolDefaultCap is the initial capacity of \[intPoolPool.pools\].
 
 ```go
 const poolDefaultCap = 25
 ```
 
-<a name="poolLimit"></a>
+<a name="poolLimit"></a>poolLimit caps the number of \[big.Int\]s a single [IntPool](<#IntPool>) may retain. Values returned via [IntPool.Put](<#IntPool.Put>) beyond this limit are dropped so the pool does not grow unbounded.
 
 ```go
 const poolLimit = 256
@@ -167,7 +205,7 @@ const poolLimit = 256
 
 ## Variables
 
-<a name="errBadBool"></a>
+<a name="errBadBool"></a>Sentinel errors returned by the ABI codec. Most carry static messages; the helpers below wrap dynamic context \(argument names, type info, lengths\) into formatted errors.
 
 ```go
 var (
@@ -187,7 +225,7 @@ var (
 )
 ```
 
-<a name="bigT"></a>
+<a name="bigT"></a>Cached reflection types for the supported Go\-side argument types. The codec compares against these to avoid repeated reflect.TypeOf allocations on hot paths.
 
 ```go
 var (
@@ -207,7 +245,7 @@ var (
 )
 ```
 
-<a name="PoolOfIntPools"></a>
+<a name="PoolOfIntPools"></a>PoolOfIntPools is the package\-level pool of \[IntPool\]s. The unpacker's \[lengthPrefixPointsTo\] borrows a pool here, performs its arithmetic, and returns it.
 
 ```go
 var PoolOfIntPools = &intPoolPool{
@@ -215,296 +253,295 @@ var PoolOfIntPools = &intPoolPool{
 }
 ```
 
-<a name="typeRegex"></a>
+<a name="typeRegex"></a>typeRegex parses the ABI sub\-types: a base type name and an optional size suffix \(e.g., \`uint256\`, \`bytes32\`\).
 
 ```go
 var (
-    // typeRegex parses the abi sub types
     typeRegex = regexp.MustCompile("([a-zA-Z]+)([0-9]+)?")
 )
 ```
 
 <a name="PaddedBigBytes"></a>
-## func [PaddedBigBytes](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/numbers.go#L43>)
+## func [PaddedBigBytes](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/numbers.go#L54>)
 
 ```go
 func PaddedBigBytes(bigint *big.Int, n int) []byte
 ```
 
-
+PaddedBigBytes returns the big\-endian byte representation of bigint padded to n bytes. Used to encode integer arguments at fixed 32\-byte word size.
 
 <a name="U256"></a>
-## func [U256](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/numbers.go#L39>)
+## func [U256](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/numbers.go#L47>)
 
 ```go
 func U256(n *big.Int) []byte
 ```
 
-U256 converts a big Int into a 256bit VM number.
+U256 converts a big Int into a 256bit VM number: takes n mod 2^256 and pads to a 32\-byte big\-endian slice.
 
 <a name="capitalise"></a>
-## func [capitalise](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L233>)
+## func [capitalise](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L258>)
 
 ```go
 func capitalise(input string) string
 ```
 
-capitalise makes the first character of a string upper case, also removing any prefixing underscores from the variable names.
+capitalise makes the first character of a string upper case, also removing any prefixing underscores from the variable names. Used when implicit\-mapping ABI argument names to Go struct field names.
 
 <a name="errArgLengthMismatch"></a>
-## func [errArgLengthMismatch](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L61>)
+## func [errArgLengthMismatch](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L86>)
 
 ```go
 func errArgLengthMismatch(args []interface{}, abiArgs Arguments) error
 ```
 
-
+errArgLengthMismatch is returned when the number of arguments the caller supplies does not match the ABI signature.
 
 <a name="errArgumentJsonErr"></a>
-## func [errArgumentJsonErr](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L28>)
+## func [errArgumentJsonErr](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L31>)
 
 ```go
 func errArgumentJsonErr(err error) error
 ```
 
-parse json errors
+errArgumentJsonErr formats a JSON\-decoding failure for an [Argument](<#Argument>).
 
 <a name="errArrayOffsetOverflow"></a>
-## func [errArrayOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L100>)
+## func [errArrayOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L159>)
 
 ```go
 func errArrayOffsetOverflow(output []byte, start, size int) error
 ```
 
-
+errArrayOffsetOverflow is returned when an offset \+ size would reach beyond the available output slice.
 
 <a name="errBigLengthOverflow"></a>
-## func [errBigLengthOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L112>)
+## func [errBigLengthOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L183>)
 
 ```go
 func errBigLengthOverflow(totalSize *big.Int) error
 ```
 
-
+errBigLengthOverflow is returned when the encoded length does not fit in an int64.
 
 <a name="errBigOffsetOverflow"></a>
-## func [errBigOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L109>)
+## func [errBigOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L177>)
 
 ```go
 func errBigOffsetOverflow(bigOffsetEnd *big.Int) error
 ```
 
-
+errBigOffsetOverflow is returned when the encoded offset does not fit in an int64.
 
 <a name="errBigSliceOffsetOverflow"></a>
-## func [errBigSliceOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L106>)
+## func [errBigSliceOffsetOverflow](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L171>)
 
 ```go
 func errBigSliceOffsetOverflow(bigOffsetEnd, outputLength *big.Int) error
 ```
 
-
+errBigSliceOffsetOverflow is returned by \[lengthPrefixPointsTo\] when the encoded offset exceeds the output length.
 
 <a name="errEmptyTagName"></a>
-## func [errEmptyTagName](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L82>)
+## func [errEmptyTagName](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L123>)
 
 ```go
 func errEmptyTagName(structFieldName string) error
 ```
 
-
+errEmptyTagName is returned when a struct field carries an empty \`abi:""\` tag.
 
 <a name="errInsufficientArgumentSize"></a>
-## func [errInsufficientArgumentSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L69>)
+## func [errInsufficientArgumentSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L98>)
 
 ```go
 func errInsufficientArgumentSize(arguments Arguments, value reflect.Value) error
 ```
 
-
+errInsufficientArgumentSize is returned when an unpack target slice/array is shorter than the number of ABI arguments.
 
 <a name="errInsufficientBigLength"></a>
-## func [errInsufficientBigLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L115>)
+## func [errInsufficientBigLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L189>)
 
 ```go
 func errInsufficientBigLength(outputLength, totalSize *big.Int) error
 ```
 
-
+errInsufficientBigLength is the [big.Int](<https://pkg.go.dev/math/big/#Int>) variant of \[errInsufficientLength\].
 
 <a name="errInsufficientElementSize"></a>
-## func [errInsufficientElementSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L72>)
+## func [errInsufficientElementSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L104>)
 
 ```go
 func errInsufficientElementSize(minLen int, v reflect.Value) error
 ```
 
-
+errInsufficientElementSize is the per\-array variant of \[errInsufficientArgumentSize\].
 
 <a name="errInsufficientLength"></a>
-## func [errInsufficientLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L103>)
+## func [errInsufficientLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L165>)
 
 ```go
 func errInsufficientLength(outputSize []byte, index int) error
 ```
 
-
+errInsufficientLength is returned when output is shorter than \`index \+ WordSize\`.
 
 <a name="errInvalidStruct"></a>
-## func [errInvalidStruct](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L66>)
+## func [errInvalidStruct](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L92>)
 
 ```go
 func errInvalidStruct(v interface{}) error
 ```
 
-unpack errors
+errInvalidStruct is returned when a non\-pointer destination is passed to [Arguments.Unpack](<#Arguments.Unpack>).
 
 <a name="errInvalidTuple"></a>
-## func [errInvalidTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L79>)
+## func [errInvalidTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L117>)
 
 ```go
 func errInvalidTuple(typ reflect.Type) error
 ```
 
-
+errInvalidTuple is returned when a tuple unpack target is neither struct nor slice nor array.
 
 <a name="errMethodNotFound"></a>
-## func [errMethodNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L33>)
+## func [errMethodNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L37>)
 
 ```go
 func errMethodNotFound(name string) error
 ```
 
-method not found errors
+errMethodNotFound is returned when [ABIContract.PackMethod](<#ABIContract.PackMethod>) / [ABIContract.UnpackMethod](<#ABIContract.UnpackMethod>) cannot locate name in the ABI.
 
 <a name="errMultipleOutput"></a>
-## func [errMultipleOutput](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L94>)
+## func [errMultipleOutput](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L147>)
 
 ```go
 func errMultipleOutput(structFieldName string) error
 ```
 
-
+errMultipleOutput is returned when two ABI fields would map to the same struct field.
 
 <a name="errMultipleVariable"></a>
-## func [errMultipleVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L91>)
+## func [errMultipleVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L141>)
 
 ```go
 func errMultipleVariable(abiFieldName string) error
 ```
 
-
+errMultipleVariable is returned when two struct fields would map to the same ABI variable \(one explicitly via tag, one implicitly\).
 
 <a name="errNegativeInputSize"></a>
-## func [errNegativeInputSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L97>)
+## func [errNegativeInputSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L153>)
 
 ```go
 func errNegativeInputSize(size int) error
 ```
 
-
+errNegativeInputSize is returned by the unpacker for a malformed length prefix.
 
 <a name="errNoMethodId"></a>
-## func [errNoMethodId](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L36>)
+## func [errNoMethodId](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L43>)
 
 ```go
 func errNoMethodId(sigdata []byte) error
 ```
 
-
+errNoMethodId is returned by [ABIContract.MethodById](<#ABIContract.MethodById>) when no method has the supplied 4\-byte id.
 
 <a name="errParsingVariableSize"></a>
-## func [errParsingVariableSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L47>)
+## func [errParsingVariableSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L62>)
 
 ```go
 func errParsingVariableSize(err error) error
 ```
 
-
+errParsingVariableSize wraps a strconv error encountered while parsing the size component of a \`uint\<N\>\` / \`int\<N\>\` / \`bytes\<N\>\` / \`\[\<N\>\]\` type.
 
 <a name="errTagAlreadyMapped"></a>
-## func [errTagAlreadyMapped](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L85>)
+## func [errTagAlreadyMapped](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L129>)
 
 ```go
 func errTagAlreadyMapped(structFieldName string) error
 ```
 
-
+errTagAlreadyMapped is returned when two struct fields claim the same ABI tag.
 
 <a name="errTagNotFound"></a>
-## func [errTagNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L88>)
+## func [errTagNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L135>)
 
 ```go
 func errTagNotFound(tagName string) error
 ```
 
-
+errTagNotFound is returned when an \`abi:""\` tag does not match any ABI argument.
 
 <a name="errType"></a>
-## func [errType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L44>)
+## func [errType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L55>)
 
 ```go
 func errType(expected, got interface{}) error
 ```
 
-type errors
+errType is returned when an argument's Go\-side type does not match the ABI declaration.
 
 <a name="errUnknownType"></a>
-## func [errUnknownType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L53>)
+## func [errUnknownType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L74>)
 
 ```go
 func errUnknownType(t Type) error
 ```
 
-
+errUnknownType is returned by the unpacker when a parsed [Type](<#Type>) has an unrecognized .T discriminator.
 
 <a name="errUnmarshalTypeFailed"></a>
-## func [errUnmarshalTypeFailed](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L76>)
+## func [errUnmarshalTypeFailed](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L111>)
 
 ```go
 func errUnmarshalTypeFailed(src, dst reflect.Value) error
 ```
 
-
+errUnmarshalTypeFailed is returned when the codec cannot assign src to dst — incompatible Go types.
 
 <a name="errUnsupportedArgType"></a>
-## func [errUnsupportedArgType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L50>)
+## func [errUnsupportedArgType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L68>)
 
 ```go
 func errUnsupportedArgType(t string) error
 ```
 
-
+errUnsupportedArgType is returned by [NewType](<#NewType>) for a base type the codec does not handle.
 
 <a name="errVariableNotFound"></a>
-## func [errVariableNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L39>)
+## func [errVariableNotFound](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L49>)
 
 ```go
 func errVariableNotFound(name string) error
 ```
 
-
+errVariableNotFound is returned when [ABIContract.PackVariable](<#ABIContract.PackVariable>) / [ABIContract.UnpackVariable](<#ABIContract.UnpackVariable>) cannot locate name.
 
 <a name="errWrongPackedLength"></a>
-## func [errWrongPackedLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L58>)
+## func [errWrongPackedLength](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L80>)
 
 ```go
 func errWrongPackedLength(marshalledValues []interface{}) error
 ```
 
-pack errors
+errWrongPackedLength is returned when an atomic\-argument unpack receives a multi\-element marshalled values slice.
 
 <a name="forEachUnpack"></a>
-## func [forEachUnpack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L78>)
+## func [forEachUnpack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L88>)
 
 ```go
 func forEachUnpack(t Type, output []byte, start, size int) (interface{}, error)
 ```
 
-iteratively unpack elements
+forEachUnpack iteratively unpacks elements. Builds either a slice or an array \(depending on t.T\), reads \`size\` elements of t.Elem starting at offset \`start\`, and returns the assembled value.
 
 <a name="formatSliceString"></a>
-## func [formatSliceString](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L121>)
+## func [formatSliceString](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L195>)
 
 ```go
 func formatSliceString(kind reflect.Kind, sliceSize int) string
@@ -513,182 +550,181 @@ func formatSliceString(kind reflect.Kind, sliceSize int) string
 formatSliceString formats the reflection kind with the given slice size and returns a formatted string representation.
 
 <a name="getArraySize"></a>
-## func [getArraySize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L137>)
+## func [getArraySize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L153>)
 
 ```go
 func getArraySize(arr *Type) int
 ```
 
-Computes the full size of an array; i.e. counting nested arrays, which count towards size for unpacking.
+getArraySize computes the full size of an array; counting nested arrays, which count towards size for unpacking. Used to advance the virtual\-argument cursor in [Arguments.UnpackValues](<#Arguments.UnpackValues>).
 
 <a name="getFullElemSize"></a>
-## func [getFullElemSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L66>)
+## func [getFullElemSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L74>)
 
 ```go
 func getFullElemSize(elem *Type) int
 ```
 
-
+getFullElemSize returns the in\-line size in bytes one element of elem occupies. Slices and dynamic types occupy [WordSize](<#WordBits>); arrays occupy \`size × elementSize\` \(recursive\).
 
 <a name="getTypeSize"></a>
-## func [getTypeSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L227>)
+## func [getTypeSize](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L250>)
 
 ```go
 func getTypeSize(t Type) int
 ```
 
-getTypeSize returns the size that this type needs to occupy. We distinguish static and dynamic types. Static types are encoded in\-place and dynamic types are encoded at a separately allocated location after the current block. So for a static variable, the size returned represents the size that the variable actually occupies. For a dynamic variable, the returned size is fixed 32 bytes, which is used to store the location reference for actual value storage.
+getTypeSize returns the size that this type needs to occupy.
+
+We distinguish static and dynamic types. Static types are encoded in\-place and dynamic types are encoded at a separately allocated location after the current block. So for a static variable, the size returned represents the size that the variable actually occupies. For a dynamic variable, the returned size is fixed 32 bytes, which is used to store the location reference for actual value storage.
 
 <a name="indirect"></a>
-## func [indirect](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L10>)
+## func [indirect](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L11>)
 
 ```go
 func indirect(v reflect.Value) reflect.Value
 ```
 
-indirect recursively dereferences the value until it either gets the value or finds a big.Int
+indirect recursively dereferences the value until it either gets the value or finds a [big.Int](<https://pkg.go.dev/math/big/#Int>) \(which is treated as a value type even when reached through a pointer\).
 
 <a name="lengthPrefixPointsTo"></a>
-## func [lengthPrefixPointsTo](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L173>)
+## func [lengthPrefixPointsTo](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L189>)
 
 ```go
 func lengthPrefixPointsTo(index int, output []byte) (start int, length int, err error)
 ```
 
-interprets a 32 byte slice as an offset and then determines which indice to look to decode the type.
+lengthPrefixPointsTo interprets a 32 byte slice as an offset and then determines which indice to look to decode the type.
+
+Returns the start \(the offset to the first byte of the value\) and length \(the number of bytes the value occupies\). All arithmetic runs through borrowed [IntPool](<#IntPool>) handles to avoid per\-call allocation.
 
 <a name="mapAbiToStructFields"></a>
-## func [mapAbiToStructFields](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L103>)
+## func [mapAbiToStructFields](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L117>)
 
 ```go
 func mapAbiToStructFields(args Arguments, value reflect.Value) (map[string]string, error)
 ```
 
-mapAbiToStringField maps abi to struct fields. first round: for each Exportable field that contains a \`abi:""\` tag
+mapAbiToStructFields maps abi to struct fields.
 
-```
-and this field name exists in the arguments, pair them together.
-```
+First round: for each Exportable field that contains an \`abi:""\` tag and this field name exists in the arguments, pair them together.
 
-second round: for each argument field that has not been already linked,
+Second round: for each argument field that has not been already linked, find what variable is expected to be mapped into. If it exists and has not been used, pair them.
 
-```
-find what variable is expected to be mapped into, if it exists and has not been
-used, pair them.
-```
+Returns one of \[errEmptyTagName\], \[errTagAlreadyMapped\], \[errTagNotFound\], \[errMultipleVariable\], \[errMultipleOutput\], or \[errPureUnderscoredOutput\] on a malformed mapping.
 
 <a name="mustArrayToByteSlice"></a>
-## func [mustArrayToByteSlice](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L47>)
+## func [mustArrayToByteSlice](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L51>)
 
 ```go
 func mustArrayToByteSlice(value reflect.Value) reflect.Value
 ```
 
-mustArrayToBytesSlice creates a new byte slice with the exact same size as value and copies the bytes in value to the new slice.
+mustArrayToByteSlice creates a new byte slice with the exact same size as value and copies the bytes in value to the new slice. Used to convert fixed\-size byte arrays to slices for downstream packing.
 
 <a name="packBytesSlice"></a>
-## func [packBytesSlice](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L14>)
+## func [packBytesSlice](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L15>)
 
 ```go
 func packBytesSlice(bytes []byte, l int) ([]byte, error)
 ```
 
-packBytesSlice packs the given bytes as \[L, V\] as the canonical representation bytes slice
+packBytesSlice packs the given bytes as \`\[length, value\]\`, the canonical representation for variable\-length byte payloads. Values are right\-padded to a multiple of [WordSize](<#WordBits>).
 
 <a name="packElement"></a>
-## func [packElement](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L24>)
+## func [packElement](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L29>)
 
 ```go
 func packElement(t Type, reflectValue reflect.Value) ([]byte, error)
 ```
 
-packElement packs the given reflect value according to the abi specification in t.
+packElement packs the given reflect value according to the abi specification in t. Returns \[errPackFailed\] for unsupported types.
+
+Address and TokenStandard are left\-padded to a 32\-byte word so they fit Solidity's 20\-byte\-address\-with\-zero\-prefix layout. FixedBytes are right\-padded.
 
 <a name="packNum"></a>
-## func [packNum](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L66>)
+## func [packNum](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/pack.go#L74>)
 
 ```go
 func packNum(value reflect.Value) ([]byte, error)
 ```
 
-packNum packs the given number \(using the reflect value\) and will cast it to appropriate number representation
+packNum packs the given number \(using the reflect value\) and will cast it to appropriate number representation. Pointer values are expected to be \`\*big.Int\`; signed/unsigned ints are routed through [U256](<#U256>) for 32\-byte big\-endian encoding.
 
 <a name="readBool"></a>
-## func [readBool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L37>)
+## func [readBool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L41>)
 
 ```go
 func readBool(word []byte) (bool, error)
 ```
 
-reads a bool
+readBool reads a bool from a 32\-byte word. Requires every byte except the last to be zero \(Solidity\-strict encoding\). Returns \[errBadBool\] otherwise.
 
 <a name="readFixedBytes"></a>
-## func [readFixedBytes](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L54>)
+## func [readFixedBytes](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L59>)
 
 ```go
 func readFixedBytes(t Type, word []byte) (interface{}, error)
 ```
 
-through reflection, creates a fixed array to be read from
+readFixedBytes uses reflection to create a fixed array to be read from word.
 
 <a name="readInteger"></a>
-## func [readInteger](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L13>)
+## func [readInteger](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L15>)
 
 ```go
 func readInteger(kind reflect.Kind, b []byte) interface{}
 ```
 
-reads the integer based on its kind
+readInteger reads the integer based on its kind. Smaller\-than\-word integers are interpreted from the trailing bytes of the 32\-byte word; everything beyond uint64/int64 is returned as a [\\\*big.Int](<https://pkg.go.dev/math/big/#Int>).
 
 <a name="reflectIntKindAndType"></a>
-## func [reflectIntKindAndType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L19>)
+## func [reflectIntKindAndType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L21>)
 
 ```go
 func reflectIntKindAndType(unsigned bool, size int) (reflect.Kind, reflect.Type)
 ```
 
-reflectIntKind returns the reflect using the given size and unsignedness.
+reflectIntKindAndType returns the reflect kind/type matching the supplied integer size and signedness. Falls back to \[bigT\] for sizes the host's native ints can't represent.
 
 <a name="requireAssignable"></a>
-## func [requireAssignable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L74>)
+## func [requireAssignable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L79>)
 
 ```go
 func requireAssignable(dst, src reflect.Value) error
 ```
 
-requireAssignable assures that \`dest\` is a pointer and it's not an interface.
+requireAssignable assures that dst is a pointer or interface — the only kinds the codec can write into through reflection. Returns \[errUnmarshalTypeFailed\] otherwise.
 
 <a name="requireUnpackKind"></a>
-## func [requireUnpackKind](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L82-L83>)
+## func [requireUnpackKind](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L89-L90>)
 
 ```go
 func requireUnpackKind(v reflect.Value, t reflect.Type, k reflect.Kind, args Arguments) error
 ```
 
-requireUnpackKind verifies preconditions for unpacking \`args\` into \`kind\`
+requireUnpackKind verifies preconditions for unpacking args into kind. Tuples must land in a struct, slice, or array; scalar kinds are rejected.
 
 <a name="set"></a>
-## func [set](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L57>)
+## func [set](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/reflect.go#L60>)
 
 ```go
 func set(dst, src reflect.Value, output Argument) error
 ```
 
-set attempts to assign src to dst by either setting, copying or otherwise.
-
-set is a bit more lenient when it comes to assignment and doesn't force an as strict ruleset as bare \`reflect\` does.
+set attempts to assign src to dst by either setting, copying or otherwise. set is a bit more lenient when it comes to assignment and doesn't force as strict a ruleset as bare reflect does.
 
 <a name="sliceTypeCheck"></a>
-## func [sliceTypeCheck](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L130>)
+## func [sliceTypeCheck](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L205>)
 
 ```go
 func sliceTypeCheck(t Type, val reflect.Value) error
 ```
 
-sliceTypeCheck checks that the given slice can by assigned to the reflection type in t.
+sliceTypeCheck checks that the given slice can be assigned to the reflection type in t. Recursive: validates element type, nested slice/array shapes, and per\-element kind compatibility.
 
 <a name="toGoType"></a>
-## func [toGoType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L123>)
+## func [toGoType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/unpack.go#L133>)
 
 ```go
 func toGoType(index int, t Type, output []byte) (interface{}, error)
@@ -697,18 +733,18 @@ func toGoType(index int, t Type, output []byte) (interface{}, error)
 toGoType parses the output bytes and recursively assigns the value of these bytes into a go type with accordance with the ABI spec.
 
 <a name="typeCheck"></a>
-## func [typeCheck](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L157>)
+## func [typeCheck](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/error.go#L234>)
 
 ```go
 func typeCheck(t Type, value reflect.Value) error
 ```
 
-typeCheck checks that the given reflection value can be assigned to the reflection type in t.
+typeCheck checks that the given reflection value can be assigned to the reflection type in t. For slice/array types it dispatches to \[sliceTypeCheck\]; for fixed\-byte types it confirms the length; for everything else it compares the [reflect.Kind](<https://pkg.go.dev/reflect/#Kind>).
 
 <a name="ABIContract"></a>
-## type [ABIContract](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L11-L14>)
+## type [ABIContract](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L14-L17>)
 
-
+ABIContract is a parsed contract ABI: the methods callers can pack into \[nom.AccountBlock.Data\], plus the storage\-record \`variable\` shapes the contracts use to \(de\)serialize on\-chain state.
 
 ```go
 type ABIContract struct {
@@ -718,155 +754,156 @@ type ABIContract struct {
 ```
 
 <a name="JSONToABIContract"></a>
-### func [JSONToABIContract](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L16>)
+### func [JSONToABIContract](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L22>)
 
 ```go
 func JSONToABIContract(reader io.Reader) ABIContract
 ```
 
-
+JSONToABIContract parses a JSON\-encoded ABI from reader. Panics through \[common.DealWithErr\] on any parse failure — ABIs are build\-time constants, so a parse failure is a programmer error.
 
 <a name="ABIContract.MethodById"></a>
-### func \(\*ABIContract\) [MethodById](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L98>)
+### func \(\*ABIContract\) [MethodById](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L132>)
 
 ```go
 func (abi *ABIContract) MethodById(sigdata []byte) (*Method, error)
 ```
 
-MethodById looks up a method by the 4\-byte id returns nil if none found
+MethodById looks up a method by the 4\-byte id. Returns nil if none found.
 
 <a name="ABIContract.PackMethod"></a>
-### func \(ABIContract\) [PackMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L28>)
+### func \(ABIContract\) [PackMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L38>)
 
 ```go
 func (abi ABIContract) PackMethod(name string, args ...interface{}) ([]byte, error)
 ```
 
-
+PackMethod encodes a method call: prefixes the resulting bytes with the 4\-byte method id and follows with the ABI\-encoded arguments. Returns an error when name is unknown or the arguments do not match the method signature.
 
 <a name="ABIContract.PackMethodPanic"></a>
-### func \(ABIContract\) [PackMethodPanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L40>)
+### func \(ABIContract\) [PackMethodPanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L54>)
 
 ```go
 func (abi ABIContract) PackMethodPanic(name string, args ...interface{}) []byte
 ```
 
-
+PackMethodPanic is the panicking variant of [ABIContract.PackMethod](<#ABIContract.PackMethod>); intended for build\-time\-known method calls where a packing failure is a programmer error.
 
 <a name="ABIContract.PackVariable"></a>
-### func \(ABIContract\) [PackVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L47>)
+### func \(ABIContract\) [PackVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L65>)
 
 ```go
 func (abi ABIContract) PackVariable(name string, args ...interface{}) ([]byte, error)
 ```
 
-
+PackVariable encodes args into the ABI shape of the named storage variable. Used by embedded contracts to write their on\-chain records.
 
 <a name="ABIContract.PackVariablePanic"></a>
-### func \(ABIContract\) [PackVariablePanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L55>)
+### func \(ABIContract\) [PackVariablePanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L76>)
 
 ```go
 func (abi ABIContract) PackVariablePanic(name string, args ...interface{}) []byte
 ```
 
-
+PackVariablePanic is the panicking variant of [ABIContract.PackVariable](<#ABIContract.PackVariable>).
 
 <a name="ABIContract.UnmarshalJSON"></a>
-### func \(\*ABIContract\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L111>)
+### func \(\*ABIContract\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L148>)
 
 ```go
 func (abi *ABIContract) UnmarshalJSON(data []byte) error
 ```
 
-UnmarshalJSON implements json.Unmarshaler interface
+UnmarshalJSON implements [json.Unmarshaler](<https://pkg.go.dev/encoding/json/#Unmarshaler>): parses the canonical Solidity\-shaped ABI JSON \(\[\{"type":"function","name":...,...\}\]\). \`function\` entries become \[Method\]s; \`variable\` entries become \[Variable\]s used for storage encoding.
 
 <a name="ABIContract.UnpackEmptyMethod"></a>
-### func \(ABIContract\) [UnpackEmptyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L72>)
+### func \(ABIContract\) [UnpackEmptyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L100>)
 
 ```go
 func (abi ABIContract) UnpackEmptyMethod(name string, input []byte) (err error)
 ```
 
-
+UnpackEmptyMethod decodes input as a no\-argument method call: requires exactly 4 bytes \(the method id\) and confirms the id maps to name. Used to validate calls to methods with no arguments.
 
 <a name="ABIContract.UnpackMethod"></a>
-### func \(ABIContract\) [UnpackMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L63>)
+### func \(ABIContract\) [UnpackMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L87>)
 
 ```go
 func (abi ABIContract) UnpackMethod(v interface{}, name string, input []byte) (err error)
 ```
 
-
+UnpackMethod decodes input \(method id \+ arguments\) into v. Returns an error if input is too short to carry a method id, if the id does not match name, or if the argument types do not match.
 
 <a name="ABIContract.UnpackVariable"></a>
-### func \(ABIContract\) [UnpackVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L83>)
+### func \(ABIContract\) [UnpackVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L114>)
 
 ```go
 func (abi ABIContract) UnpackVariable(v interface{}, name string, input []byte) (err error)
 ```
 
-
+UnpackVariable decodes input as the ABI shape of the named variable into v. Used by embedded contracts to read their on\-chain records.
 
 <a name="ABIContract.UnpackVariablePanic"></a>
-### func \(ABIContract\) [UnpackVariablePanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L92>)
+### func \(ABIContract\) [UnpackVariablePanic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/abi.go#L126>)
 
 ```go
 func (abi ABIContract) UnpackVariablePanic(v interface{}, name string, input []byte)
 ```
 
-
+UnpackVariablePanic is the panicking variant of [ABIContract.UnpackVariable](<#ABIContract.UnpackVariable>).
 
 <a name="Argument"></a>
-## type [Argument](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L11-L15>)
+## type [Argument](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L11-L16>)
 
 Argument holds the name of the argument and the corresponding type. Types are used when packing and testing arguments.
 
 ```go
 type Argument struct {
-    Name    string
-    Type    Type
-    Indexed bool // indexed is only used by events
+    Name string
+    Type Type
+    // Indexed is only used by events.
+    Indexed bool
 }
 ```
 
 <a name="Argument.UnmarshalJSON"></a>
-### func \(\*Argument\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L20>)
+### func \(\*Argument\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L25>)
 
 ```go
 func (argument *Argument) UnmarshalJSON(data []byte) error
 ```
 
-UnmarshalJSON implements json.Unmarshaler interface
+UnmarshalJSON implements [json.Unmarshaler](<https://pkg.go.dev/encoding/json/#Unmarshaler>): parses the \`\{name, type, indexed\}\` JSON form into an [Argument](<#Argument>), resolving the type string through [NewType](<#NewType>).
 
 <a name="Arguments"></a>
-## type [Arguments](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L17>)
+## type [Arguments](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L20>)
 
-
+Arguments is an ordered list of \[Argument\]s — the input shape of a [Method](<#Method>) or the storage shape of a [Variable](<#Variable>).
 
 ```go
 type Arguments []Argument
 ```
 
 <a name="Arguments.Pack"></a>
-### func \(Arguments\) [Pack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L180>)
+### func \(Arguments\) [Pack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L204>)
 
 ```go
 func (arguments Arguments) Pack(args ...interface{}) ([]byte, error)
 ```
 
-Pack performs the operation Go format \-\> Hexdata
+Pack performs the operation Go format \-\> Hexdata. Static arguments go directly into the head; dynamic arguments \(string, bytes, slices\) write a 32\-byte offset into the head and append their payload to the tail.
 
 <a name="Arguments.Unpack"></a>
-### func \(Arguments\) [Unpack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L47>)
+### func \(Arguments\) [Unpack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L55>)
 
 ```go
 func (arguments Arguments) Unpack(v interface{}, data []byte) error
 ```
 
-Unpack performs the operation hexdata \-\> Go format
+Unpack performs the operation hexdata \-\> Go format. v must be a pointer; for tuples it is unpacked into a struct, slice, or array, for atomic args directly into the pointed\-to value.
 
 <a name="Arguments.UnpackValues"></a>
-### func \(Arguments\) [UnpackValues](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L153>)
+### func \(Arguments\) [UnpackValues](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L174>)
 
 ```go
 func (arguments Arguments) UnpackValues(data []byte) ([]interface{}, error)
@@ -874,37 +911,39 @@ func (arguments Arguments) UnpackValues(data []byte) ([]interface{}, error)
 
 UnpackValues can be used to unpack ABI\-encoded hexdata according to the ABI\-specification, without supplying a struct to unpack into. Instead, this method returns a list containing the values. An atomic argument will be a list with one element.
 
+Static arrays are encoded inline in the head of the data \(one slot per element\), so the unpacker bumps a virtual\-arg counter to skip past them while reading the next argument.
+
 <a name="Arguments.isTuple"></a>
-### func \(Arguments\) [isTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L42>)
+### func \(Arguments\) [isTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L48>)
 
 ```go
 func (arguments Arguments) isTuple() bool
 ```
 
-isTuple returns true for non\-atomic constructs, like \(uint,uint\) or uint\[\]
+isTuple returns true for non\-atomic constructs, like \(uint,uint\) or uint\[\].
 
 <a name="Arguments.unpackAtomic"></a>
-### func \(Arguments\) [unpackAtomic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L110>)
+### func \(Arguments\) [unpackAtomic](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L125>)
 
 ```go
 func (arguments Arguments) unpackAtomic(v interface{}, marshalledValues []interface{}) error
 ```
 
-
+unpackAtomic decodes a single\-argument call directly into v. Struct destinations go through the abi → struct field mapping for the \(single\) argument's name.
 
 <a name="Arguments.unpackTuple"></a>
-### func \(Arguments\) [unpackTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L62>)
+### func \(Arguments\) [unpackTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/argument.go#L73>)
 
 ```go
 func (arguments Arguments) unpackTuple(v interface{}, marshalledValues []interface{}) error
 ```
 
-
+unpackTuple decodes a multi\-argument call into the destination struct/slice/array. For struct destinations, the abi → struct field mapping comes from \[mapAbiToStructFields\].
 
 <a name="IntPool"></a>
-## type [IntPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L12-L14>)
+## type [IntPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L16-L18>)
 
-intPool is a pool of big integers that can be reused for all big.Int operations.
+IntPool is a pool of big integers that can be reused for all big.Int operations. Used by the ABI unpacker to amortize allocations during bulk decoding.
 
 ```go
 type IntPool struct {
@@ -913,45 +952,45 @@ type IntPool struct {
 ```
 
 <a name="newIntPool"></a>
-### func [newIntPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L16>)
+### func [newIntPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L21>)
 
 ```go
 func newIntPool() *IntPool
 ```
 
-
+newIntPool returns a fresh, empty pool.
 
 <a name="IntPool.Get"></a>
-### func \(\*IntPool\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L22>)
+### func \(\*IntPool\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L28>)
 
 ```go
 func (p *IntPool) Get() *big.Int
 ```
 
-get retrieves a big int from the pool, allocating one if the pool is empty. Note, the returned int's amount is arbitrary and will not be zeroed\!
+Get retrieves a big int from the pool, allocating one if the pool is empty. The returned int's amount is arbitrary and will not be zeroed — callers must initialize it themselves.
 
 <a name="IntPool.GetZero"></a>
-### func \(\*IntPool\) [GetZero](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L31>)
+### func \(\*IntPool\) [GetZero](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L37>)
 
 ```go
 func (p *IntPool) GetZero() *big.Int
 ```
 
-getZero retrieves a big int from the pool, setting it to zero or allocating a new one if the pool is empty.
+GetZero retrieves a big int from the pool, setting it to zero or allocating a new one if the pool is empty.
 
 <a name="IntPool.Put"></a>
-### func \(\*IntPool\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L40>)
+### func \(\*IntPool\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L47>)
 
 ```go
 func (p *IntPool) Put(is ...*big.Int)
 ```
 
-put returns an allocated big int to the pool to be later reused by get calls. Note, the values as saved as is; neither put nor get zeroes the ints out\!
+Put returns one or more allocated big ints to the pool. Values are saved as is; neither Put nor Get zeroes the ints out. Returns silently when the pool is at \[poolLimit\].
 
 <a name="Method"></a>
-## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L10-L14>)
+## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L13-L17>)
 
-
+Method is one ABI function entry: its name, input arguments, and the 4\-byte method id \(first four bytes of the canonical signature hash\) used as the call's selector in \[nom.AccountBlock.Data\].
 
 ```go
 type Method struct {
@@ -962,45 +1001,45 @@ type Method struct {
 ```
 
 <a name="newMethod"></a>
-### func [newMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L16>)
+### func [newMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L21>)
 
 ```go
 func newMethod(name string, inputs Arguments) Method
 ```
 
-
+newMethod builds a [Method](<#Method>) and pre\-computes its 4\-byte id by hashing the canonical signature.
 
 <a name="Method.Id"></a>
-### func \(Method\) [Id](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L39>)
+### func \(Method\) [Id](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L52>)
 
 ```go
 func (method Method) Id() []byte
 ```
 
-
+Id returns the 4\-byte method id \(the call selector\).
 
 <a name="Method.Sig"></a>
-### func \(Method\) [Sig](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L25>)
+### func \(Method\) [Sig](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L33>)
 
 ```go
 func (method Method) Sig() string
 ```
 
-
+Sig returns the canonical Solidity\-style signature \(\`name\(type1,type2,...\)\`\). The hash of this string is the source of the 4\-byte method id.
 
 <a name="Method.String"></a>
-### func \(Method\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L32>)
+### func \(Method\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/method.go#L43>)
 
 ```go
 func (method Method) String() string
 ```
 
-
+String returns a human\-readable representation \(\`onMessage name\(type arg, type arg, ...\)\`\). Used in log lines.
 
 <a name="Type"></a>
-## type [Type](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L28-L37>)
+## type [Type](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L33-L45>)
 
-Type is the reflection of the supported argument type
+Type is the reflection of the supported argument type. Holds the element type \(Elem\) for slices/arrays, the [reflect.Kind](<https://pkg.go.dev/reflect/#Kind>) / size pair for direct mapping to a Go type, and the .T discriminator the codec dispatches on.
 
 ```go
 type Type struct {
@@ -1009,52 +1048,59 @@ type Type struct {
     Kind reflect.Kind
     Type reflect.Type
     Size int
-    T    byte // Our own type checking
+    // T is our own type checking discriminator (see the constants
+    // above).
+    T   byte
 
-    stringKind string // holds the unparsed string for deriving signatures
+    // stringKind holds the unparsed string for deriving signatures.
+    stringKind string
 }
 ```
 
 <a name="NewType"></a>
-### func [NewType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L45>)
+### func [NewType](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L62>)
 
 ```go
 func NewType(t string) (typ Type, err error)
 ```
 
-NewType creates a new reflection type of abi type given in t.
+NewType creates a new reflection type of abi type given in t. Supports the Solidity type set \(\[Int|Uint\]\[8|16|...|256\], bool, string, address, tokenStandard, hash, bytes, bytes\<N\>, plus fixed\-size and dynamic arrays\).
+
+Returns \[errUnsupportedArgType\] on unknown types, \[errInvalidArrayTypeFormatting\] on malformed brackets, or \[errInvalidZeroVariableSize\] / \[errParsingVariableSize\] on size errors.
 
 <a name="Type.String"></a>
-### func \(Type\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L165>)
+### func \(Type\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L183>)
 
 ```go
 func (t Type) String() (out string)
 ```
 
-String implements Stringer
+String implements [fmt.Stringer](<https://pkg.go.dev/fmt/#Stringer>): returns the original ABI type string used to construct t.
 
 <a name="Type.pack"></a>
-### func \(Type\) [pack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L169>)
+### func \(Type\) [pack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L191>)
 
 ```go
 func (t Type) pack(v reflect.Value) ([]byte, error)
 ```
 
-
+pack packs v according to t. Slices and arrays serialize as \`\[head₀, head₁, …, head\_n, tail₀, …\]\` where dynamic\-element heads are 32\-byte offsets into the tail; fixed\-element arrays serialize inline with no head.
 
 <a name="Type.requiresLengthPrefix"></a>
-### func \(Type\) [requiresLengthPrefix](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L215>)
+### func \(Type\) [requiresLengthPrefix](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/type.go#L237>)
 
 ```go
 func (t Type) requiresLengthPrefix() bool
 ```
 
-requireLengthPrefix returns whether the type requires any sort of length prefixing.
+requiresLengthPrefix returns whether the type requires any sort of length prefixing — true for string, bytes, and dynamic slices.
 
 <a name="Variable"></a>
-## type [Variable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/variable.go#L9-L12>)
+## type [Variable](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/variable.go#L13-L16>)
 
-Variable is used only in built\-in contracts
+Variable represents an embedded\-contract storage shape, encoded the same way as a method's argument tuple but used for ABI\-encoded contract storage records rather than method calls.
+
+Variable is used only in built\-in contracts.
 
 ```go
 type Variable struct {
@@ -1064,18 +1110,18 @@ type Variable struct {
 ```
 
 <a name="Variable.String"></a>
-### func \(Variable\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/variable.go#L14>)
+### func \(Variable\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/variable.go#L20>)
 
 ```go
 func (v Variable) String() string
 ```
 
-
+String returns a struct\-style summary \(\`struct Name \{ type field, ... \}\`\) used in log lines.
 
 <a name="intPoolPool"></a>
-## type [intPoolPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L50-L53>)
+## type [intPoolPool](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L59-L62>)
 
-intPoolPool manages a pool of intPools.
+intPoolPool manages a pool of \[IntPool\]s — one outer pool per codec call so concurrent unpack operations do not contend on a single inner pool.
 
 ```go
 type intPoolPool struct {
@@ -1085,27 +1131,27 @@ type intPoolPool struct {
 ```
 
 <a name="intPoolPool.Get"></a>
-### func \(\*intPoolPool\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L62>)
+### func \(\*intPoolPool\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L76>)
 
 ```go
 func (ipp *intPoolPool) Get() *IntPool
 ```
 
-get is looking for an available pool to return.
+Get is looking for an available pool to return; allocates a fresh one if none is available.
 
 <a name="intPoolPool.Put"></a>
-### func \(\*intPoolPool\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L75>)
+### func \(\*intPoolPool\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L90>)
 
 ```go
 func (ipp *intPoolPool) Put(ip *IntPool)
 ```
 
-put a pool that has been allocated with get.
+Put returns ip to the pool that had been allocated with \[Get\]. Drops ip silently when the outer pool is at capacity.
 
 <a name="stack"></a>
-## type [stack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L84-L86>)
+## type [stack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L100-L102>)
 
-
+stack is the per\-[IntPool](<#IntPool>) LIFO ring buffer of [big.Int](<https://pkg.go.dev/math/big/#Int>) handles.
 
 ```go
 type stack struct {
@@ -1114,39 +1160,39 @@ type stack struct {
 ```
 
 <a name="newStack"></a>
-### func [newStack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L88>)
+### func [newStack](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L105>)
 
 ```go
 func newStack() *stack
 ```
 
-
+newStack returns a fresh stack with initial capacity 1024.
 
 <a name="stack.len"></a>
-### func \(\*stack\) [len](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L102>)
+### func \(\*stack\) [len](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L123>)
 
 ```go
 func (st *stack) len() int
 ```
 
-
+len returns the current depth.
 
 <a name="stack.pop"></a>
-### func \(\*stack\) [pop](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L96>)
+### func \(\*stack\) [pop](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L116>)
 
 ```go
 func (st *stack) pop() (ret *big.Int)
 ```
 
-
+pop removes and returns the top of the stack. Panics on empty stack — caller must check \[stack.len\] first.
 
 <a name="stack.push"></a>
-### func \(\*stack\) [push](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L92>)
+### func \(\*stack\) [push](<https://github.com/zenon-network/go-zenon/blob/master/vm/abi/intpool.go#L110>)
 
 ```go
 func (st *stack) push(d *big.Int)
 ```
 
-
+push appends d to the stack.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

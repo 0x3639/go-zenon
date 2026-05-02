@@ -6,13 +6,23 @@
 import "github.com/zenon-network/go-zenon/vm/constants"
 ```
 
-Package constants defines VM\-wide numeric limits and the canonical error values that contract execution returns.
+Package constants defines the VM\-wide numeric limits and the canonical error values that contract execution returns.
 
 ### Overview
 
-constants centralizes plasma costs, block\-size limits, gas\-equivalent caps for embedded\-contract calls, and the named errors that the verifier and embedded\-contract implementations return so callers can branch on them.
+constants is a leaf package consumed by everything in the VM and embedded\-contract layers. It owns four files:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- consensus.go — the [Consensus](<#Consensus>) tuning struct and the live [ConsensusConfig](<#ConsensusConfig>).
+- plasma.go — plasma cost constants \([AccountBlockBasePlasma](<#AccountBlockBasePlasma>), [PoWDifficultyPerPlasma](<#AccountBlockBasePlasma>), etc.\) and the [PlasmaTable](<#PlasmaTable>) struct contract methods receive in \[embedded.Method.GetPlasma\].
+- embedded.go — per\-contract tunables: pillar / sentinel / stake amounts, accelerator parameters, token / spork / swap / liquidity / bridge constants, and the network reward schedules \([NetworkZnnRewardConfig](<#MomentumsPerHour>), [NetworkQsrRewardConfig](<#MomentumsPerHour>)\) plus the helpers that index into them.
+- errors.go — every [errors.New](<https://pkg.go.dev/github.com/pkg/errors/#New>) sentinel returned by the VM and the embedded contracts, grouped by contract.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — primary consumer of plasma constants and [ErrVmRunPanic](<#ErrVmRunPanic>).
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — consumes per\-contract tunables and the [PlasmaTable](<#PlasmaTable>).
+- [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) — reads [ConsensusConfig](<#ConsensusConfig>).
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — surfaces a subset of these errors to API consumers.
 
 ## Index
 
@@ -30,129 +40,259 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="Decimals"></a>
+<a name="Decimals"></a>Generic chain scale constants.
 
 ```go
 const (
-    Decimals  = 100000000
+    // Decimals is 10^8 — the atomic-unit scale factor for both ZNN
+    // and QSR balances.
+    Decimals = 100000000
+    // SecsInDay is the number of seconds in 24 hours; used in time
+    // calculations across staking, sentinel, and pillar contracts.
     SecsInDay = 24 * 60 * 60
 )
 ```
 
-<a name="AccountBlockBasePlasma"></a>
+<a name="AccountBlockBasePlasma"></a>Plasma cost constants. The base/data costs deliberately mirror Ethereum's gas costs for ergonomic familiarity.
 
 ```go
 const (
+    // AccountBlockBasePlasma is the base plasma cost per account
+    // block.
     AccountBlockBasePlasma = 21000
-    ABByteDataPlasma       = 68
+    // ABByteDataPlasma is the per-byte plasma cost for the account
+    // block's Data field on plain transfers.
+    ABByteDataPlasma = 68
 
-    EmbeddedSimplePlasma    = 2.5 * AccountBlockBasePlasma
-    EmbeddedWResponse       = 3.5 * AccountBlockBasePlasma
+    // EmbeddedSimplePlasma is the contract-call cost for methods that
+    // emit no descendants.
+    EmbeddedSimplePlasma = 2.5 * AccountBlockBasePlasma
+    // EmbeddedWResponse is the cost for methods that emit a single
+    // descendant send (typical for one-token reward withdrawals).
+    EmbeddedWResponse = 3.5 * AccountBlockBasePlasma
+    // EmbeddedWDoubleResponse is the cost for methods that emit two
+    // descendant sends (e.g., paired ZNN/QSR rewards).
     EmbeddedWDoubleResponse = 4.5 * AccountBlockBasePlasma
 
+    // NumFusionUnitsForBasePlasma is the number of fusion units that
+    // produce the per-block base plasma — i.e., 10 fusion units cover
+    // one minimum-cost block.
     NumFusionUnitsForBasePlasma = 10
-    PlasmaPerFusionUnit         = AccountBlockBasePlasma / NumFusionUnitsForBasePlasma
-    CostPerFusionUnit           = 100000000
+    // PlasmaPerFusionUnit is the plasma yielded per fusion unit.
+    PlasmaPerFusionUnit = AccountBlockBasePlasma / NumFusionUnitsForBasePlasma
+    // CostPerFusionUnit is the QSR amount (in atomic units) one
+    // fusion unit costs.
+    CostPerFusionUnit = 100000000
 
+    // PoWDifficultyPerPlasma is the PoW difficulty needed per unit of
+    // plasma earned via proof of work.
     PoWDifficultyPerPlasma = 1500
 
-    // MaxDataLength defines limit of account-block data to 16Kb
+    // MaxDataLength defines limit of account-block data to 16Kb.
     MaxDataLength = 1024 * 16
 
-    // MaxPlasmaForAccountBlock defines max available plasma for an account block.
+    // MaxPlasmaForAccountBlock defines max available plasma for an
+    // account block.
     MaxPlasmaForAccountBlock = MaxFusionPlasmaForAccount
 
-    MaxPoWPlasmaForAccountBlock  = EmbeddedWDoubleResponse
+    // MaxPoWPlasmaForAccountBlock caps how much plasma a single
+    // account block may earn from PoW alone.
+    MaxPoWPlasmaForAccountBlock = EmbeddedWDoubleResponse
+    // MaxDifficultyForAccountBlock is the PoW difficulty cap that
+    // produces [MaxPoWPlasmaForAccountBlock] plasma.
     MaxDifficultyForAccountBlock = MaxPoWPlasmaForAccountBlock * PoWDifficultyPerPlasma
 
-    // MaxFusionUnitsPerAccount limits each account to a maximum of 5000 fusion units.
-    // All units above this will not increase the maximum plasma.
-    MaxFusionUnitsPerAccount  = 5000
+    // MaxFusionUnitsPerAccount limits each account to a maximum of
+    // 5000 fusion units. All units above this will not increase the
+    // maximum plasma.
+    MaxFusionUnitsPerAccount = 5000
+    // MaxFusionPlasmaForAccount is the per-account plasma cap that
+    // follows from [MaxFusionUnitsPerAccount].
     MaxFusionPlasmaForAccount = MaxFusionUnitsPerAccount * PlasmaPerFusionUnit
+    // MaxFussedAmountForAccount is the QSR amount (atomic units) that
+    // reaches [MaxFusionUnitsPerAccount] when fused.
     MaxFussedAmountForAccount = CostPerFusionUnit * MaxFusionUnitsPerAccount
 )
 ```
 
 ## Variables
 
-<a name="MomentumsPerHour"></a>
+<a name="MomentumsPerHour"></a>Embedded\-contract tunables. Grouped by contract; reward / stake / timing values are alphanet defaults.
 
 ```go
 var (
-    MomentumsPerHour  int64 = 3600 / 10 // Number of momentums per hour. Should be used instead of plain '3600' or similar.
-    MomentumsPerEpoch       = MomentumsPerHour * 24
-    RewardTimeLimit   int64 = 3600
 
-    // UpdateMinNumMomentums is the number momentums between 2 UpdateEmbedded* calls which will execute, used for all applicable contracts
+    // MomentumsPerHour is the number of momentums per hour at the
+    // configured 10s block time. Should be used instead of plain
+    // '3600' or similar.
+    MomentumsPerHour int64 = 3600 / 10
+    // MomentumsPerEpoch is the number of momentums per 24h epoch.
+    MomentumsPerEpoch = MomentumsPerHour * 24
+    // RewardTimeLimit caps how far back (in seconds) reward
+    // computations may look.
+    RewardTimeLimit int64 = 3600
+
+    // UpdateMinNumMomentums is the number of momentums between two
+    // UpdateEmbedded* calls which will execute, used for all
+    // applicable contracts.
     UpdateMinNumMomentums = uint64(MomentumsPerHour * 5 / 6)
-    MaxEpochsPerUpdate    = 20
+    // MaxEpochsPerUpdate is the maximum number of epochs an
+    // UpdateEmbedded* call may advance through in one invocation.
+    MaxEpochsPerUpdate = 20
 
-    ProjectNameLengthMax                  = 30
-    ProjectDescriptionLengthMax           = 240
-    ProjectZnnMaximumFunds                = big.NewInt(5000 * Decimals)
-    ProjectQsrMaximumFunds                = big.NewInt(50000 * Decimals)
-    ProjectCreationAmount                 = big.NewInt(1 * Decimals)
-    PhaseTimeUnit                  int64  = 24 * 60 * 60
-    AcceleratorDuration                   = 20 * 12 * 30 * PhaseTimeUnit
-    VoteAcceptanceThreshold        uint32 = 33
-    AcceleratorProjectVotingPeriod        = 14 * PhaseTimeUnit
-    MaxBlocksPerUpdate                    = 40
+    // ProjectNameLengthMax is the maximum byte length of an
+    // accelerator project name.
+    ProjectNameLengthMax = 30
+    // ProjectDescriptionLengthMax is the maximum byte length of an
+    // accelerator project description.
+    ProjectDescriptionLengthMax = 240
+    // ProjectZnnMaximumFunds caps the ZNN amount one accelerator
+    // project may request.
+    ProjectZnnMaximumFunds = big.NewInt(5000 * Decimals)
+    // ProjectQsrMaximumFunds caps the QSR amount one accelerator
+    // project may request.
+    ProjectQsrMaximumFunds = big.NewInt(50000 * Decimals)
+    // ProjectCreationAmount is the ZNN deposit required to create an
+    // accelerator project.
+    ProjectCreationAmount = big.NewInt(1 * Decimals)
+    // PhaseTimeUnit is the time unit (in seconds) for accelerator
+    // phase / voting durations.
+    PhaseTimeUnit int64 = 24 * 60 * 60
+    // AcceleratorDuration is the total duration of the accelerator
+    // program.
+    AcceleratorDuration = 20 * 12 * 30 * PhaseTimeUnit
+    // VoteAcceptanceThreshold is the percent of pillar votes (out of
+    // 100) required for an accelerator project phase to pass.
+    VoteAcceptanceThreshold uint32 = 33
+    // AcceleratorProjectVotingPeriod is the wall-clock duration of an
+    // accelerator project's voting window.
+    AcceleratorProjectVotingPeriod = 14 * PhaseTimeUnit
+    // MaxBlocksPerUpdate caps how many blocks one update call may
+    // process at once.
+    MaxBlocksPerUpdate = 40
 
+    // PillarStakeAmount is the ZNN amount a pillar must lock to
+    // register.
     PillarStakeAmount = big.NewInt(15e3 * Decimals)
-    // PillarQsrStakeBaseAmount is the amount of QSR used for legacy pillars and for the first pillar in the network
-    PillarQsrStakeBaseAmount           = big.NewInt(150e3 * Decimals)
-    PillarQsrStakeIncreaseAmount       = big.NewInt(10e3 * Decimals) // Increase of cost for each pillar after PillarsQsrStakeNumWithInitial
-    PillarEpochLockTime          int64 = 83 * SecsInDay
-    PillarEpochRevokeTime        int64 = 7 * SecsInDay
-    PillarNameLengthMax                = 40
+    // PillarQsrStakeBaseAmount is the amount of QSR used for legacy
+    // pillars and for the first pillar in the network.
+    PillarQsrStakeBaseAmount = big.NewInt(150e3 * Decimals)
+    // PillarQsrStakeIncreaseAmount is the increase of cost for each
+    // pillar after PillarsQsrStakeNumWithInitial.
+    PillarQsrStakeIncreaseAmount = big.NewInt(10e3 * Decimals)
+    // PillarEpochLockTime is the minimum lock duration (seconds)
+    // before a pillar's stake can be revoked.
+    PillarEpochLockTime int64 = 83 * SecsInDay
+    // PillarEpochRevokeTime is the cooldown window (seconds) between
+    // the lock expiration and the revoke effective time.
+    PillarEpochRevokeTime int64 = 7 * SecsInDay
+    // PillarNameLengthMax is the maximum byte length of a pillar's
+    // display name.
+    PillarNameLengthMax = 40
 
-    SentinelZnnRegisterAmount       = big.NewInt(5e3 * Decimals)  // sentinel Znn amount required for registration
-    SentinelQsrDepositAmount        = big.NewInt(50e3 * Decimals) // sentinel Qsr amount required for registration
-    SentinelLockTimeWindow    int64 = 27 * SecsInDay
-    SentinelRevokeTimeWindow  int64 = 3 * SecsInDay
+    // SentinelZnnRegisterAmount is the ZNN amount required to
+    // register a sentinel.
+    SentinelZnnRegisterAmount = big.NewInt(5e3 * Decimals)
+    // SentinelQsrDepositAmount is the QSR amount required to register
+    // a sentinel.
+    SentinelQsrDepositAmount = big.NewInt(50e3 * Decimals)
+    // SentinelLockTimeWindow is the minimum lock duration (seconds)
+    // before a sentinel's stake can be revoked.
+    SentinelLockTimeWindow int64 = 27 * SecsInDay
+    // SentinelRevokeTimeWindow is the cooldown window (seconds)
+    // between the lock expiration and the revoke effective time.
+    SentinelRevokeTimeWindow int64 = 3 * SecsInDay
 
-    // Testnet value
+    // StakeTimeUnitSec is the staking-duration unit; durations must
+    // be a multiple of this. Testnet value.
     StakeTimeUnitSec int64 = 30 * SecsInDay
-    StakeTimeMinSec        = StakeTimeUnitSec * 1
-    StakeTimeMaxSec        = StakeTimeUnitSec * 12
-    StakeMinAmount         = big.NewInt(1 * Decimals)
+    // StakeTimeMinSec is the minimum staking duration.
+    StakeTimeMinSec = StakeTimeUnitSec * 1
+    // StakeTimeMaxSec is the maximum staking duration (12 units).
+    StakeTimeMaxSec = StakeTimeUnitSec * 12
+    // StakeMinAmount is the minimum ZNN amount one stake may lock.
+    StakeMinAmount = big.NewInt(1 * Decimals)
 
-    FuseMinAmount  = big.NewInt(10 * Decimals)
-    FuseExpiration = uint64(MomentumsPerHour * 10) // for testnet, 10 hours
+    // FuseMinAmount is the minimum QSR amount that may be fused at
+    // once.
+    FuseMinAmount = big.NewInt(10 * Decimals)
+    // FuseExpiration is the minimum lock duration (in momentums)
+    // before a fusion can be unfused. For testnet, 10 hours.
+    FuseExpiration = uint64(MomentumsPerHour * 10)
 
-    TokenIssueAmount     = big.NewInt(1 * Decimals)
-    TokenNameLengthMax   = 40  // Maximum length of a token name
-    TokenSymbolLengthMax = 10  // Maximum length of a token symbol
-    TokenDomainLengthMax = 128 // Maximum length of a token domain
-    TokenMaxSupplyBig    = common.BigP255m1
-    TokenMaxDecimals     = 18
+    // TokenIssueAmount is the ZNN issuance fee charged when issuing a
+    // new ZTS token.
+    TokenIssueAmount = big.NewInt(1 * Decimals)
+    // TokenNameLengthMax is the maximum length of a token name.
+    TokenNameLengthMax = 40
+    // TokenSymbolLengthMax is the maximum length of a token symbol.
+    TokenSymbolLengthMax = 10
+    // TokenDomainLengthMax is the maximum length of a token domain.
+    TokenDomainLengthMax = 128
+    // TokenMaxSupplyBig is the maximum representable token supply
+    // (2^255 - 1, matching the [common.BigP255m1] cap).
+    TokenMaxSupplyBig = common.BigP255m1
+    // TokenMaxDecimals is the maximum decimals a ZTS token may
+    // declare.
+    TokenMaxDecimals = 18
 
-    SporkMinHeightDelay       = uint64(6)
-    SporkNameMinLength        = 5
-    SporkNameMaxLength        = 40
+    // SporkMinHeightDelay is the minimum number of momentums between
+    // the spork-creation block and its enforcement height.
+    SporkMinHeightDelay = uint64(6)
+    // SporkNameMinLength is the minimum byte length of a spork name.
+    SporkNameMinLength = 5
+    // SporkNameMaxLength is the maximum byte length of a spork name.
+    SporkNameMaxLength = 40
+    // SporkDescriptionMaxLength is the maximum byte length of a
+    // spork description.
     SporkDescriptionMaxLength = 400
 
-    // SwapAssetDecayEpochsOffset is the number of epochs before the decay kicks in
+    // SwapAssetDecayEpochsOffset is the number of epochs before the
+    // swap-asset decay kicks in.
     SwapAssetDecayEpochsOffset = 30 * 3
-    // SwapAssetDecayTickEpochs is the number of epochs for each decay tick
+    // SwapAssetDecayTickEpochs is the number of epochs for each decay
+    // tick.
     SwapAssetDecayTickEpochs = 30
-    // SwapAssetDecayTickValuePercentage is the percentage that is lost after in each tick, equal to 10% per SwapAssetDecayTickEpochs, after SwapAssetDecayEpochsOffset
+    // SwapAssetDecayTickValuePercentage is the percentage that is
+    // lost in each tick — equal to 10% per
+    // [SwapAssetDecayTickEpochs], after [SwapAssetDecayEpochsOffset].
     SwapAssetDecayTickValuePercentage = 10
 
-    InitialBridgeAdministrator   = types.ParseAddressPanic("z1qr9vtwsfr2n0nsxl2nfh6l5esqjh2wfj85cfq9")
-    MaximumFee                   = uint32(10000)
-    MinUnhaltDurationInMomentums = uint64(6 * MomentumsPerHour)  //main net
-    MinAdministratorDelay        = uint64(2 * MomentumsPerEpoch) // main net
-    MinSoftDelay                 = uint64(MomentumsPerEpoch)     // main net
-    MinGuardians                 = 5                             // main net
+    // InitialBridgeAdministrator is the bridge administrator address
+    // active at chain birth before governance can rotate it.
+    InitialBridgeAdministrator = types.ParseAddressPanic("z1qr9vtwsfr2n0nsxl2nfh6l5esqjh2wfj85cfq9")
+    // MaximumFee is the maximum bridge fee (in bps, denominator 10000).
+    MaximumFee = uint32(10000)
+    // MinUnhaltDurationInMomentums is the minimum number of momentums
+    // the bridge must remain unhalted between halts. Mainnet value.
+    MinUnhaltDurationInMomentums = uint64(6 * MomentumsPerHour)
+    // MinAdministratorDelay is the minimum delay (in momentums)
+    // before a queued administrator change becomes active. Mainnet.
+    MinAdministratorDelay = uint64(2 * MomentumsPerEpoch)
+    // MinSoftDelay is the minimum delay (in momentums) before a queued
+    // soft change becomes active. Mainnet value.
+    MinSoftDelay = uint64(MomentumsPerEpoch)
+    // MinGuardians is the minimum number of bridge guardians. Mainnet.
+    MinGuardians = 5
 
+    // DecompressedECDSAPubKeyLength is the byte length of an
+    // uncompressed secp256k1 public key (0x04-prefixed).
     DecompressedECDSAPubKeyLength = 65
-    CompressedECDSAPubKeyLength   = 33
-    ECDSASignatureLength          = 65
+    // CompressedECDSAPubKeyLength is the byte length of a compressed
+    // secp256k1 public key.
+    CompressedECDSAPubKeyLength = 33
+    // ECDSASignatureLength is the byte length of a secp256k1
+    // signature (r || s || v).
+    ECDSASignatureLength = 65
 
-    // RewardTickDurationInEpochs represents the duration (in epochs) for each reward tick
+    // RewardTickDurationInEpochs represents the duration (in epochs)
+    // for each reward tick — the granularity at which the network
+    // reward schedule progresses.
     RewardTickDurationInEpochs uint64 = 30
 
+    // NetworkZnnRewardConfig is the per-tick ZNN reward schedule.
+    // Index `i` is consumed at epoch tick `i`; once exhausted, the
+    // last value applies in perpetuity.
     NetworkZnnRewardConfig = []int64{
         10 * MomentumsPerEpoch / 6 * Decimals,
         6 * MomentumsPerEpoch / 6 * Decimals,
@@ -167,6 +307,8 @@ var (
         3 * MomentumsPerEpoch / 6 * Decimals,
     }
 
+    // NetworkQsrRewardConfig is the per-tick QSR reward schedule.
+    // Same indexing semantics as [NetworkZnnRewardConfig].
     NetworkQsrRewardConfig = []int64{
         20000 * Decimals,
         20000 * Decimals,
@@ -178,29 +320,56 @@ var (
         5000 * Decimals,
     }
 
-    DelegationZnnRewardPercentage        int64  = 24
-    MomentumProducingZnnRewardPercentage int64  = 50
-    SentinelZnnRewardPercentage          int64  = 13
-    LiquidityZnnRewardPercentage         int64  = 13
-    LiquidityZnnTotalPercentages         uint32 = 10000
+    // DelegationZnnRewardPercentage is the percentage of the per-epoch
+    // ZNN reward distributed to delegators.
+    DelegationZnnRewardPercentage int64 = 24
+    // MomentumProducingZnnRewardPercentage is the percentage of the
+    // per-epoch ZNN reward distributed to producing pillars.
+    MomentumProducingZnnRewardPercentage int64 = 50
+    // SentinelZnnRewardPercentage is the percentage of the per-epoch
+    // ZNN reward distributed to sentinels.
+    SentinelZnnRewardPercentage int64 = 13
+    // LiquidityZnnRewardPercentage is the percentage of the per-epoch
+    // ZNN reward distributed to the liquidity program.
+    LiquidityZnnRewardPercentage int64 = 13
+    // LiquidityZnnTotalPercentages is the denominator for liquidity
+    // ZNN reward shares (basis points: 10000 = 100%).
+    LiquidityZnnTotalPercentages uint32 = 10000
 
-    StakingQsrRewardPercentage   int64  = 50
-    SentinelQsrRewardPercentage  int64  = 25
-    LiquidityQsrRewardPercentage int64  = 25
+    // StakingQsrRewardPercentage is the percentage of the per-epoch
+    // QSR reward distributed to stakers.
+    StakingQsrRewardPercentage int64 = 50
+    // SentinelQsrRewardPercentage is the percentage of the per-epoch
+    // QSR reward distributed to sentinels.
+    SentinelQsrRewardPercentage int64 = 25
+    // LiquidityQsrRewardPercentage is the percentage of the per-epoch
+    // QSR reward distributed to the liquidity program.
+    LiquidityQsrRewardPercentage int64 = 25
+    // LiquidityQsrTotalPercentages is the denominator for liquidity
+    // QSR reward shares (basis points: 10000 = 100%).
     LiquidityQsrTotalPercentages uint32 = 10000
-    LiquidityStakeWeights               = []int64{
+    // LiquidityStakeWeights is the per-stake-tier weight schedule
+    // used by the liquidity contract; index 0 is unstaked, index 12
+    // is the longest tier.
+    LiquidityStakeWeights = []int64{
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     }
 )
 ```
 
-<a name="ErrVmRunPanic"></a>
+<a name="ErrVmRunPanic"></a>Sentinel errors returned by VM execution and embedded contracts. Grouped by the contract or subsystem that surfaces them so callers can branch on the specific failure mode.
+
+Naming conventions:
+
+- \`Err\*\` — most errors. Constants are exported so consumers can identify them with \`errors.Is\` / direct equality.
+- \`RevokeNotDue\`, \`ReclaimNotDue\` — exceptions kept for historical compatibility.
 
 ```go
 var (
+    // ErrVmRunPanic is returned by the supervisor when a VM panic is
+    // caught and recovered. The originating panic value is logged.
     ErrVmRunPanic = errors.New("supervisor - VM panic")
 
-    // Common
     ErrNothingToWithdraw      = errors.New("nothing to withdraw")
     ErrNotEnoughDepositedQsr  = errors.New("not enough deposited Qsr")
     ErrInvalidTokenOrAmount   = errors.New("invalid token or amount")
@@ -216,46 +385,40 @@ var (
     ErrForbiddenParam         = errors.New("forbidden parameter")
     ErrNotEnoughSlots         = errors.New("not enough slots left")
 
-    // Common - update contract state
     ErrUpdateTooRecent      = errors.New("last update was too recent")
     ErrEpochUpdateTooRecent = errors.New("epoch update was too recent")
 
-    // Accelerator
     ErrAcceleratorEnded        = errors.New("accelerator period ended")
     ErrAcceleratorInvalidFunds = errors.New("invalid accelerator funds")
     ErrInvalidDescription      = errors.New("invalid description")
 
-    // Pillar
     ErrInvalidName = errors.New("invalid name")
     ErrNotUnique   = errors.New("name or producing address not unique")
     ErrNotActive   = errors.New("pillar is not active")
 
-    // Token
     ErrIDNotUnique        = errors.New("there is another token with the same id")
     ErrTokenInvalidText   = errors.New("invalid token name/symbol/domain/decimals")
     ErrTokenInvalidAmount = errors.New("invalid token total/max supply")
 
-    // Stake
+    // RevokeNotDue (preserved naming: no Err prefix) is returned when
+    // a stake's lock period has not yet elapsed.
     RevokeNotDue            = errors.New("staking period still active")
     ErrInvalidStakingPeriod = errors.New("invalid staking period")
 
-    // Plasma
     ErrBlockPlasmaLimitReached = errors.New("plasma limit for account-block reached")
     ErrNotEnoughPlasma         = errors.New("not enough plasma on account")
     ErrNotEnoughTotalPlasma    = errors.New("not enough TotalPlasma provided for account-block (PoW + Fused)")
 
-    // Swap
     ErrInvalidSwapCode  = errors.New("invalid swap code")
     ErrInvalidSignature = errors.New("invalid secp256k1 signature")
 
-    // Sentinel
     ErrAlreadyRevoked    = errors.New("sentinel is already revoked")
     ErrAlreadyRegistered = errors.New("sentinel is already registered")
 
-    // Spork
     ErrAlreadyActivated = errors.New("spork is already activated")
 
-    // Htlc
+    // ReclaimNotDue (preserved naming: no Err prefix) is returned when
+    // an HTLC entry is not yet expired.
     ReclaimNotDue            = errors.New("entry is not expired")
     ErrInvalidHashType       = errors.New("invalid hash type")
     ErrInvalidHashDigest     = errors.New("invalid hash digest")
@@ -263,7 +426,6 @@ var (
     ErrInvalidExpirationTime = errors.New("invalid expiration time")
     ErrExpired               = errors.New("expired")
 
-    // Bridge
     ErrUnknownNetwork                       = errors.New("unknown network")
     ErrInvalidToAddress                     = errors.New("invalid destination address")
     ErrBridgeNotInitialized                 = errors.New("bridge info is not initialized")
@@ -293,13 +455,12 @@ var (
     ErrSecurityNotInitialized               = errors.New("security not initialized")
     ErrBridgeNotHalted                      = errors.New("bridge not halted")
 
-    // Liquidity
     ErrInvalidPercentages = errors.New("invalid percentages")
     ErrInvalidRewards     = errors.New("invalid liquidity stake rewards")
 )
 ```
 
-<a name="AlphanetPlasmaTable"></a>
+<a name="AlphanetPlasmaTable"></a>AlphanetPlasmaTable is the live plasma table the alphanet build uses; consumed by [github.com/zenon\\\-network/go\\\-zenon/vm.GetBasePlasmaForAccountBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#GetBasePlasmaForAccountBlock>).
 
 ```go
 var (
@@ -314,7 +475,7 @@ var (
 )
 ```
 
-<a name="ConsensusConfig"></a>
+<a name="ConsensusConfig"></a>ConsensusConfig is the live configuration consumed by the consensus layer. The values here are alphanet defaults: 30 pillars per tick, 10s blocks \(5\-minute election cycles\), 15 random promotions, ZNN as the counting token.
 
 ```go
 var (
@@ -327,7 +488,7 @@ var (
 )
 ```
 
-<a name="MaxFussedAmountForAccountBig"></a>
+<a name="MaxFussedAmountForAccountBig"></a>MaxFussedAmountForAccountBig is the [big.Int](<https://pkg.go.dev/math/big/#Int>) form of [MaxFussedAmountForAccount](<#AccountBlockBasePlasma>) for callers \(e.g., [github.com/zenon\\\-network/go\\\-zenon/vm.AvailablePlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#AvailablePlasma>)\) that compare against arbitrary\-precision integers.
 
 ```go
 var (
@@ -336,86 +497,104 @@ var (
 ```
 
 <a name="LiquidityRewardForEpoch"></a>
-## func [LiquidityRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L185>)
+## func [LiquidityRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L322>)
 
 ```go
 func LiquidityRewardForEpoch(epoch uint64) (*big.Int, *big.Int)
 ```
 
-LiquidityRewardForEpoch returns liquidity Znn and Qsr reward for a specific epoch.
+LiquidityRewardForEpoch returns liquidity\-program ZNN and QSR reward for a specific epoch.
 
 <a name="NetworkQsrRewardPerEpoch"></a>
-## func [NetworkQsrRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L161>)
+## func [NetworkQsrRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L294>)
 
 ```go
 func NetworkQsrRewardPerEpoch(epoch uint64) int64
 ```
 
-
+NetworkQsrRewardPerEpoch is the QSR analog of [NetworkZnnRewardPerEpoch](<#NetworkZnnRewardPerEpoch>).
 
 <a name="NetworkZnnRewardPerEpoch"></a>
-## func [NetworkZnnRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L152>)
+## func [NetworkZnnRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L283>)
 
 ```go
 func NetworkZnnRewardPerEpoch(epoch uint64) int64
 ```
 
-
+NetworkZnnRewardPerEpoch returns the per\-epoch ZNN reward at the supplied epoch number, indexing into [NetworkZnnRewardConfig](<#MomentumsPerHour>) by \`epoch / RewardTickDurationInEpochs\`. Once the schedule runs out the last value applies in perpetuity.
 
 <a name="PillarRewardPerMomentum"></a>
-## func [PillarRewardPerMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L171>)
+## func [PillarRewardPerMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L306>)
 
 ```go
 func PillarRewardPerMomentum(epoch uint64) (*big.Int, *big.Int)
 ```
 
-PillarRewardPerMomentum returns delegation & producing reward per momentum.
+PillarRewardPerMomentum returns delegation & producing reward per momentum: the per\-epoch ZNN reward times the respective percentage, divided by [MomentumsPerEpoch](<#MomentumsPerHour>) to give the per\-block share.
 
 <a name="SentinelRewardForEpoch"></a>
-## func [SentinelRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L178>)
+## func [SentinelRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L314>)
 
 ```go
 func SentinelRewardForEpoch(epoch uint64) (*big.Int, *big.Int)
 ```
 
-SentinelRewardForEpoch returns sentinel Znn and Qsr reward for a specific epoch.
+SentinelRewardForEpoch returns sentinel ZNN and QSR reward for a specific epoch.
 
 <a name="StakeQsrRewardPerEpoch"></a>
-## func [StakeQsrRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L192>)
+## func [StakeQsrRewardPerEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/embedded.go#L330>)
 
 ```go
 func StakeQsrRewardPerEpoch(epoch uint64) *big.Int
 ```
 
-StakeQsrRewardPerEpoch returns staking Qsr reward for a specific epoch
+StakeQsrRewardPerEpoch returns the staking QSR reward for a specific epoch.
 
 <a name="Consensus"></a>
-## type [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/consensus.go#L7-L12>)
+## type [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/consensus.go#L10-L25>)
 
-
+Consensus bundles the chain\-wide tuning knobs the consensus layer reads. Held in a struct so tests can swap variants in via [ConsensusConfig](<#ConsensusConfig>).
 
 ```go
 type Consensus struct {
-    BlockTime   int64                    // Interval in seconds between 2 momentums
-    NodeCount   uint8                    // NodeCount in an election tick
-    RandCount   uint8                    // RandCount of pillars which are chosen in an election tick
-    CountingZTS types.ZenonTokenStandard // CountingZTS used to compute pillar weights
+    // BlockTime is the wall-clock interval between two momentums, in
+    // seconds.
+    BlockTime int64
+    // NodeCount is the number of pillars elected per tick. Each tick
+    // schedules NodeCount momentums.
+    NodeCount uint8
+    // RandCount is the number of pillars promoted from group B (lower
+    // weight) into the slate per tick. The remaining
+    // (NodeCount - RandCount) slots come from the top-weight group.
+    RandCount uint8
+    // CountingZTS is the token used to compute pillar weights — every
+    // backer's balance of this token contributes to the pillar they
+    // delegate to.
+    CountingZTS types.ZenonTokenStandard
 }
 ```
 
 <a name="PlasmaTable"></a>
-## type [PlasmaTable](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/plasma.go#L6-L14>)
+## type [PlasmaTable](<https://github.com/zenon-network/go-zenon/blob/master/vm/constants/plasma.go#L8-L26>)
 
-PlasmaTable is used to query plasma used by op code and transactions
+PlasmaTable is used to query plasma used by op code and transactions. Each contract method's \[embedded.Method.GetPlasma\] receives a [PlasmaTable](<#PlasmaTable>) so the plasma cost of a call is configurable per build.
 
 ```go
 type PlasmaTable struct {
-    TxPlasma     uint64
+    // TxPlasma is the per-block base plasma cost.
+    TxPlasma uint64
+    // TxDataPlasma is the per-byte data surcharge for plain transfers.
     TxDataPlasma uint64
 
-    // Embedded plasma costs
-    EmbeddedSimple          uint64
-    EmbeddedWWithdraw       uint64
+    // EmbeddedSimple is the plasma cost for a simple embedded call
+    // (no auto-receive descendants).
+    EmbeddedSimple uint64
+    // EmbeddedWWithdraw is the cost for a call that triggers a
+    // single-block auto-response (e.g., reward withdrawal).
+    EmbeddedWWithdraw uint64
+    // EmbeddedWDoubleWithdraw is the cost for a call that triggers
+    // two-block auto-responses (e.g., a paired ZNN/QSR reward
+    // withdrawal).
     EmbeddedWDoubleWithdraw uint64
 }
 ```

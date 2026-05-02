@@ -9,7 +9,9 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
-// reads the integer based on its kind
+// readInteger reads the integer based on its kind. Smaller-than-word
+// integers are interpreted from the trailing bytes of the 32-byte
+// word; everything beyond uint64/int64 is returned as a [*big.Int].
 func readInteger(kind reflect.Kind, b []byte) interface{} {
 	switch kind {
 	case reflect.Uint8:
@@ -33,7 +35,9 @@ func readInteger(kind reflect.Kind, b []byte) interface{} {
 	}
 }
 
-// reads a bool
+// readBool reads a bool from a 32-byte word. Requires every byte
+// except the last to be zero (Solidity-strict encoding). Returns
+// [errBadBool] otherwise.
 func readBool(word []byte) (bool, error) {
 	for _, b := range word[:31] {
 		if b != 0 {
@@ -50,7 +54,8 @@ func readBool(word []byte) (bool, error) {
 	}
 }
 
-// through reflection, creates a fixed array to be read from
+// readFixedBytes uses reflection to create a fixed array to be read
+// from word.
 func readFixedBytes(t Type, word []byte) (interface{}, error) {
 	if t.T != FixedBytesTy {
 		return nil, errInvalidlFixedBytesType
@@ -63,6 +68,9 @@ func readFixedBytes(t Type, word []byte) (interface{}, error) {
 
 }
 
+// getFullElemSize returns the in-line size in bytes one element of
+// elem occupies. Slices and dynamic types occupy [WordSize]; arrays
+// occupy `size × elementSize` (recursive).
 func getFullElemSize(elem *Type) int {
 	//all other should be counted as 32 (slices have pointers to respective elements)
 	size := WordSize
@@ -74,7 +82,9 @@ func getFullElemSize(elem *Type) int {
 	return size
 }
 
-// iteratively unpack elements
+// forEachUnpack iteratively unpacks elements. Builds either a slice
+// or an array (depending on t.T), reads `size` elements of t.Elem
+// starting at offset `start`, and returns the assembled value.
 func forEachUnpack(t Type, output []byte, start, size int) (interface{}, error) {
 	if size < 0 {
 		return nil, errNegativeInputSize(size)
@@ -118,8 +128,8 @@ func forEachUnpack(t Type, output []byte, start, size int) (interface{}, error) 
 	return refSlice.Interface(), nil
 }
 
-// toGoType parses the output bytes and recursively assigns the value of these bytes
-// into a go type with accordance with the ABI spec.
+// toGoType parses the output bytes and recursively assigns the value
+// of these bytes into a go type with accordance with the ABI spec.
 func toGoType(index int, t Type, output []byte) (interface{}, error) {
 	if index+WordSize > len(output) {
 		return nil, errInsufficientLength(output, index)
@@ -169,7 +179,13 @@ func toGoType(index int, t Type, output []byte) (interface{}, error) {
 	}
 }
 
-// interprets a 32 byte slice as an offset and then determines which indice to look to decode the type.
+// lengthPrefixPointsTo interprets a 32 byte slice as an offset and
+// then determines which indice to look to decode the type.
+//
+// Returns the start (the offset to the first byte of the value) and
+// length (the number of bytes the value occupies). All arithmetic
+// runs through borrowed [IntPool] handles to avoid per-call
+// allocation.
 func lengthPrefixPointsTo(index int, output []byte) (start int, length int, err error) {
 	intpool := PoolOfIntPools.Get()
 	defer PoolOfIntPools.Put(intpool)

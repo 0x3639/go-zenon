@@ -8,11 +8,17 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
+// ABIContract is a parsed contract ABI: the methods callers can pack
+// into [nom.AccountBlock.Data], plus the storage-record `variable`
+// shapes the contracts use to (de)serialize on-chain state.
 type ABIContract struct {
 	Methods   map[string]Method
 	Variables map[string]Variable
 }
 
+// JSONToABIContract parses a JSON-encoded ABI from reader. Panics
+// through [common.DealWithErr] on any parse failure — ABIs are
+// build-time constants, so a parse failure is a programmer error.
 func JSONToABIContract(reader io.Reader) ABIContract {
 	dec := json.NewDecoder(reader)
 
@@ -25,6 +31,10 @@ func JSONToABIContract(reader io.Reader) ABIContract {
 	return abi
 }
 
+// PackMethod encodes a method call: prefixes the resulting bytes with
+// the 4-byte method id and follows with the ABI-encoded arguments.
+// Returns an error when name is unknown or the arguments do not
+// match the method signature.
 func (abi ABIContract) PackMethod(name string, args ...interface{}) ([]byte, error) {
 	method, exist := abi.Methods[name]
 	if !exist {
@@ -37,6 +47,10 @@ func (abi ABIContract) PackMethod(name string, args ...interface{}) ([]byte, err
 	// Pack up the method ID too if not a constructor and return
 	return append(method.Id(), arguments...), nil
 }
+
+// PackMethodPanic is the panicking variant of [ABIContract.PackMethod];
+// intended for build-time-known method calls where a packing failure
+// is a programmer error.
 func (abi ABIContract) PackMethodPanic(name string, args ...interface{}) []byte {
 	data, err := abi.PackMethod(name, args...)
 	if err != nil {
@@ -44,6 +58,10 @@ func (abi ABIContract) PackMethodPanic(name string, args ...interface{}) []byte 
 	}
 	return data
 }
+
+// PackVariable encodes args into the ABI shape of the named storage
+// variable. Used by embedded contracts to write their on-chain
+// records.
 func (abi ABIContract) PackVariable(name string, args ...interface{}) ([]byte, error) {
 	variable, exist := abi.Variables[name]
 	if !exist {
@@ -52,6 +70,9 @@ func (abi ABIContract) PackVariable(name string, args ...interface{}) ([]byte, e
 
 	return variable.Inputs.Pack(args...)
 }
+
+// PackVariablePanic is the panicking variant of
+// [ABIContract.PackVariable].
 func (abi ABIContract) PackVariablePanic(name string, args ...interface{}) []byte {
 	data, err := abi.PackVariable(name, args...)
 	if err != nil {
@@ -60,6 +81,9 @@ func (abi ABIContract) PackVariablePanic(name string, args ...interface{}) []byt
 	return data
 }
 
+// UnpackMethod decodes input (method id + arguments) into v. Returns
+// an error if input is too short to carry a method id, if the id does
+// not match name, or if the argument types do not match.
 func (abi ABIContract) UnpackMethod(v interface{}, name string, input []byte) (err error) {
 	if len(input) <= 4 {
 		return errEmptyInput
@@ -69,6 +93,10 @@ func (abi ABIContract) UnpackMethod(v interface{}, name string, input []byte) (e
 	}
 	return errCouldNotLocateNamedMethod
 }
+
+// UnpackEmptyMethod decodes input as a no-argument method call:
+// requires exactly 4 bytes (the method id) and confirms the id maps
+// to name. Used to validate calls to methods with no arguments.
 func (abi ABIContract) UnpackEmptyMethod(name string, input []byte) (err error) {
 	if len(input) < 4 {
 		return errEmptyInput
@@ -80,6 +108,9 @@ func (abi ABIContract) UnpackEmptyMethod(name string, input []byte) (err error) 
 	}
 	return errCouldNotLocateNamedMethod
 }
+
+// UnpackVariable decodes input as the ABI shape of the named variable
+// into v. Used by embedded contracts to read their on-chain records.
 func (abi ABIContract) UnpackVariable(v interface{}, name string, input []byte) (err error) {
 	if len(input) == 0 {
 		return errEmptyInput
@@ -89,12 +120,15 @@ func (abi ABIContract) UnpackVariable(v interface{}, name string, input []byte) 
 	}
 	return errCouldNotLocateNamedVariable
 }
+
+// UnpackVariablePanic is the panicking variant of
+// [ABIContract.UnpackVariable].
 func (abi ABIContract) UnpackVariablePanic(v interface{}, name string, input []byte) {
 	common.DealWithErr(abi.UnpackVariable(v, name, input))
 }
 
-// MethodById looks up a method by the 4-byte id
-// returns nil if none found
+// MethodById looks up a method by the 4-byte id. Returns nil if none
+// found.
 func (abi *ABIContract) MethodById(sigdata []byte) (*Method, error) {
 	if len(sigdata) < 4 {
 		return nil, errMethodIdNotSpecified
@@ -107,7 +141,10 @@ func (abi *ABIContract) MethodById(sigdata []byte) (*Method, error) {
 	return nil, errNoMethodId(sigdata[:4])
 }
 
-// UnmarshalJSON implements json.Unmarshaler interface
+// UnmarshalJSON implements [json.Unmarshaler]: parses the canonical
+// Solidity-shaped ABI JSON ([{"type":"function","name":...,...}]).
+// `function` entries become [Method]s; `variable` entries become
+// [Variable]s used for storage encoding.
 func (abi *ABIContract) UnmarshalJSON(data []byte) error {
 	var fields []struct {
 		Type    string

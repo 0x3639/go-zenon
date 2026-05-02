@@ -2,10 +2,22 @@ package constants
 
 import "github.com/pkg/errors"
 
+// Sentinel errors returned by VM execution and embedded contracts.
+// Grouped by the contract or subsystem that surfaces them so callers
+// can branch on the specific failure mode.
+//
+// Naming conventions:
+//   - `Err*` — most errors. Constants are exported so consumers can
+//     identify them with `errors.Is` / direct equality.
+//   - `RevokeNotDue`, `ReclaimNotDue` — exceptions kept for
+//     historical compatibility.
 var (
+	// ErrVmRunPanic is returned by the supervisor when a VM panic is
+	// caught and recovered. The originating panic value is logged.
 	ErrVmRunPanic = errors.New("supervisor - VM panic")
 
 	// Common
+
 	ErrNothingToWithdraw      = errors.New("nothing to withdraw")
 	ErrNotEnoughDepositedQsr  = errors.New("not enough deposited Qsr")
 	ErrInvalidTokenOrAmount   = errors.New("invalid token or amount")
@@ -22,45 +34,59 @@ var (
 	ErrNotEnoughSlots         = errors.New("not enough slots left")
 
 	// Common - update contract state
+
 	ErrUpdateTooRecent      = errors.New("last update was too recent")
 	ErrEpochUpdateTooRecent = errors.New("epoch update was too recent")
 
 	// Accelerator
+
 	ErrAcceleratorEnded        = errors.New("accelerator period ended")
 	ErrAcceleratorInvalidFunds = errors.New("invalid accelerator funds")
 	ErrInvalidDescription      = errors.New("invalid description")
 
 	// Pillar
+
 	ErrInvalidName = errors.New("invalid name")
 	ErrNotUnique   = errors.New("name or producing address not unique")
 	ErrNotActive   = errors.New("pillar is not active")
 
 	// Token
+
 	ErrIDNotUnique        = errors.New("there is another token with the same id")
 	ErrTokenInvalidText   = errors.New("invalid token name/symbol/domain/decimals")
 	ErrTokenInvalidAmount = errors.New("invalid token total/max supply")
 
 	// Stake
+
+	// RevokeNotDue (preserved naming: no Err prefix) is returned when
+	// a stake's lock period has not yet elapsed.
 	RevokeNotDue            = errors.New("staking period still active")
 	ErrInvalidStakingPeriod = errors.New("invalid staking period")
 
 	// Plasma
+
 	ErrBlockPlasmaLimitReached = errors.New("plasma limit for account-block reached")
 	ErrNotEnoughPlasma         = errors.New("not enough plasma on account")
 	ErrNotEnoughTotalPlasma    = errors.New("not enough TotalPlasma provided for account-block (PoW + Fused)")
 
 	// Swap
+
 	ErrInvalidSwapCode  = errors.New("invalid swap code")
 	ErrInvalidSignature = errors.New("invalid secp256k1 signature")
 
 	// Sentinel
+
 	ErrAlreadyRevoked    = errors.New("sentinel is already revoked")
 	ErrAlreadyRegistered = errors.New("sentinel is already registered")
 
 	// Spork
+
 	ErrAlreadyActivated = errors.New("spork is already activated")
 
 	// Htlc
+
+	// ReclaimNotDue (preserved naming: no Err prefix) is returned when
+	// an HTLC entry is not yet expired.
 	ReclaimNotDue            = errors.New("entry is not expired")
 	ErrInvalidHashType       = errors.New("invalid hash type")
 	ErrInvalidHashDigest     = errors.New("invalid hash digest")
@@ -69,6 +95,7 @@ var (
 	ErrExpired               = errors.New("expired")
 
 	// Bridge
+
 	ErrUnknownNetwork                       = errors.New("unknown network")
 	ErrInvalidToAddress                     = errors.New("invalid destination address")
 	ErrBridgeNotInitialized                 = errors.New("bridge info is not initialized")
@@ -99,6 +126,7 @@ var (
 	ErrBridgeNotHalted                      = errors.New("bridge not halted")
 
 	// Liquidity
+
 	ErrInvalidPercentages = errors.New("invalid percentages")
 	ErrInvalidRewards     = errors.New("invalid liquidity stake rewards")
 )

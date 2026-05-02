@@ -15,16 +15,24 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// log is the package-level VM logger; alias of [common.VmLogger].
 var (
 	log = common.VmLogger
 )
 
+// Result codes embedded in a contract-receive block's [nom.AccountBlock.Data]
+// (encoded as a uint64) to advertise whether the embedded execution
+// succeeded or failed. resultInvalid is the zero value and should never
+// appear on a finalized block.
 const (
 	resultInvalid uint64 = iota
 	resultSuccess
 	resultFail
 )
 
+// errToStatus collapses a method error into one of the result codes
+// stored in the contract-receive block's data. Any non-nil error
+// becomes resultFail; nil becomes resultSuccess.
 func errToStatus(err error) uint64 {
 	switch err {
 	case nil:
@@ -34,16 +42,32 @@ func errToStatus(err error) uint64 {
 	}
 }
 
+// VM is the per-account-block execution machine: it holds the
+// [vm_context.AccountVmContext] for the block under execution and
+// exposes the four block-type entry points
+// ([VM.applySend], [VM.applyReceive], and the two contract-receive
+// flows). One VM is constructed per call to
+// [Supervisor.applyBlock] / [Supervisor.GenerateAutoReceive].
 type VM struct {
 	context vm_context.AccountVmContext
 }
 
+// NewVM wraps context in a VM ready to execute one account block.
 func NewVM(context vm_context.AccountVmContext) *VM {
 	return &VM{
 		context: context,
 	}
 }
 
+// enoughPlasma checks the block's plasma claim against context state:
+// embedded contracts have unlimited plasma; user accounts must have
+// enough fused-or-PoW plasma to cover the block's base cost. Updates
+// block.TotalPlasma and block.BasePlasma in place and credits the
+// account's per-chain plasma counter on success.
+//
+// Returns one of [constants.ErrNotEnoughPlasma],
+// [constants.ErrBlockPlasmaLimitReached], or
+// [constants.ErrNotEnoughTotalPlasma] on rejection.
 func enoughPlasma(context vm_context.AccountVmContext, block *nom.AccountBlock) error {
 	// embedded address have unlimited plasma
 	if types.IsEmbeddedAddress(block.Address) {
@@ -71,6 +95,10 @@ func enoughPlasma(context vm_context.AccountVmContext, block *nom.AccountBlock) 
 
 	return context.AddChainPlasma(block.FusedPlasma)
 }
+
+// enoughFunds reports whether the executing account has at least
+// block.Amount of block.TokenStandard. Always true for zero-amount
+// transfers (which carry no token standard).
 func enoughFunds(context vm_context.AccountVmContext, block *nom.AccountBlock) bool {
 	if block.TokenStandard == types.ZeroTokenStandard {
 		return true
@@ -85,8 +113,14 @@ func enoughFunds(context vm_context.AccountVmContext, block *nom.AccountBlock) b
 	return true
 }
 
-// applyBlock is used to apply the block on top of the vm.context
-// After calling applyBlock vm.context.Changes() has all the changes necessary to create a nom.AccountBlockTransaction
+// applyBlock applies block on top of vm.context. After applyBlock
+// returns, vm.context.Changes() carries the patch needed to assemble
+// a [nom.AccountBlockTransaction].
+//
+// Dispatches by block type: send/contract-send paths run
+// [VM.applySend], user receives run [VM.applyReceive], and contract
+// receives go through [VM.generateEmbeddedReceive] then verify the
+// generated block matches the inbound one.
 func (vm *VM) applyBlock(block *nom.AccountBlock) error {
 	if err := enoughPlasma(vm.context, block); err != nil {
 		return err
@@ -115,6 +149,13 @@ func (vm *VM) applyBlock(block *nom.AccountBlock) error {
 		panic("unknown block type")
 	}
 }
+
+// applySend executes a send (user or contract): if the recipient is
+// an embedded contract, runs the contract method's
+// [embedded.Method.ValidateSendBlock] precondition; then deducts
+// block.Amount of block.TokenStandard from the sender's balance.
+// Returns [constants.ErrInsufficientBalance] when the sender's
+// balance is below block.Amount.
 func (vm *VM) applySend(block *nom.AccountBlock) error {
 	// check can make transaction
 	if method, err := embedded.GetEmbeddedMethod(vm.context, block.ToAddress, block.Data); err != constants.ErrNotContractAddress {
@@ -138,6 +179,9 @@ func (vm *VM) applySend(block *nom.AccountBlock) error {
 
 	return nil
 }
+
+// applyReceive executes a user receive: marks the inbound send as
+// consumed and credits its amount/token to the recipient's balance.
 func (vm *VM) applyReceive(block *nom.AccountBlock) error {
 	fromBlock, err := vm.context.MomentumStore().GetAccountBlockByHash(block.FromBlockHash)
 	if err != nil {
@@ -153,9 +197,28 @@ func (vm *VM) applyReceive(block *nom.AccountBlock) error {
 	return nil
 }
 
-// generateEmbeddedReceive is used to generate the embedded receive nom.AccountBlock from an fromBlockHash
-// Since the receive-block is auto-generated, we don't actually need the whole block (just the fromBlockHash)
-// After calling applyBlock vm.context.Changes() has all the changes necessary to create a nom.AccountBlockTransaction
+// generateEmbeddedReceive synthesizes the contract-receive block for
+// the inbound send identified by fromBlockHash. The receive is
+// auto-generated (contracts don't sign), so the caller only needs the
+// originating send hash.
+//
+// Flow:
+//   - Pop the head of the contract's sequencer queue (mailbox order).
+//   - Resolve the embedded method; if the method has been removed
+//     by a spork between send and receive, [VM.rollbackEmbedded]
+//     refunds and returns.
+//   - Save state, credit the contract's balance, run the contract
+//     method, apply every emitted descendant send, and finalize.
+//
+// Returns (generatedBlock, methodErr, internalErr). methodErr is the
+// contract's own returned error (failure path) and internalErr is a
+// VM-internal failure (the only one currently is a refund-descendant
+// failure during rollback).
+//
+// generateEmbeddedReceive is used to generate the embedded receive
+// nom.AccountBlock from a fromBlockHash. After calling applyBlock
+// vm.context.Changes() has all the changes necessary to create a
+// nom.AccountBlockTransaction.
 func (vm *VM) generateEmbeddedReceive(fromBlockHash types.Hash) (*nom.AccountBlock, error, error) {
 	// mark block as received (only for contracts, using sequencer)
 	vm.context.SequencerPopFront()
@@ -192,6 +255,13 @@ func (vm *VM) generateEmbeddedReceive(fromBlockHash types.Hash) (*nom.AccountBlo
 	vm.context.Done()
 	return vm.finalizeEmbedded(fromBlockHash, descendantBlocks, nil)
 }
+
+// rollbackEmbedded reverts the in-flight contract-receive context and
+// emits a refund descendant when the originating send carried tokens.
+// methodErr is propagated to [VM.finalizeEmbedded] so the resulting
+// block records resultFail. The internal error return covers refund
+// descendant failures (rare; a contract running out of balance to
+// refund itself).
 func (vm *VM) rollbackEmbedded(fromBlockHash types.Hash, methodErr error) (*nom.AccountBlock, error, error) {
 	sendBlock, err := vm.context.MomentumStore().GetAccountBlockByHash(fromBlockHash)
 	common.DealWithErr(err) // impossible to not find send-block at rollback
@@ -223,6 +293,15 @@ func (vm *VM) rollbackEmbedded(fromBlockHash types.Hash, methodErr error) (*nom.
 
 	return vm.finalizeEmbedded(fromBlockHash, descendantBlocks, methodErr)
 }
+
+// finalizeEmbedded fills in the synthesized contract-receive block and
+// every descendant: assigns versions, chain identifier, the
+// contract's address, MomentumAcknowledged (the current frontier),
+// previous-hash linkage along the chain of (descendant₀, …,
+// descendantₙ, parent), data (the result code from executionError),
+// and the canonical hash. Returns the parent receive block and the
+// preserved executionError so callers know the contract reported a
+// failure even though the receive itself was committed.
 func (vm *VM) finalizeEmbedded(fromBlockHash types.Hash, descendantBlocks []*nom.AccountBlock, executionError error) (*nom.AccountBlock, error, error) {
 	var err error
 
@@ -272,16 +351,28 @@ func (vm *VM) finalizeEmbedded(fromBlockHash types.Hash, descendantBlocks []*nom
 	return block, executionError, nil
 }
 
+// MomentumVM is the momentum-level execution machine: it commits one
+// momentum's worth of (already-validated) account-block transactions
+// atomically into the underlying momentum context so the resulting
+// patch can be paired with the momentum into a
+// [nom.MomentumTransaction].
 type MomentumVM struct {
 	context vm_context.MomentumVMContext
 }
 
+// NewMomentumVM wraps context in a [MomentumVM].
 func NewMomentumVM(context vm_context.MomentumVMContext) *MomentumVM {
 	return &MomentumVM{
 		context: context,
 	}
 }
 
+// applyMomentum walks the momentum's content list and admits each
+// (header, patch) pair into the context via
+// [store.Momentum.AddAccountBlockTransaction].
+//
+// Caller is responsible for verifying the momentum first; applyMomentum
+// is a pure state-application step.
 func (vm *MomentumVM) applyMomentum(pool chain.AccountPool, momentum *nom.Momentum) error {
 	momentumStore := vm.context
 

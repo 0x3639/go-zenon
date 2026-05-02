@@ -6,13 +6,30 @@
 import "github.com/zenon-network/go-zenon/vm/vm_context"
 ```
 
-Package vm\_context provides the per\-block execution context handed to embedded\-contract methods.
+Package vm\_context provides the per\-block and per\-momentum execution contexts handed to embedded\-contract methods and to the VM supervisor.
 
 ### Overview
 
-A vm\_context exposes read access to the current chain state, the momentum being produced, the account block under execution, the configured plasma budget, and the helpers that contracts use to emit descendant sends. It is the only API surface a contract sees during execution.
+vm\_context owns two interfaces:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- [AccountVmContext](<#AccountVmContext>) — per\-account\-block surface. Bundles chain and consensus reads, balance helpers, lifecycle hooks \(Save/Reset/Done for contract\-receive rollback\), and spork\-status checks.
+- [MomentumVMContext](<#MomentumVMContext>) — per\-momentum surface, equivalent to [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) for callers that only need to admit account\-block transactions into a momentum view.
+
+### Key Concepts
+
+- Working view vs snapshot — \[accountVmContext.Save\] parks the current account view and installs a fresh snapshot for contract execution. \[accountVmContext.Reset\] discards the snapshot's writes; \[accountVmContext.Done\] applies them onto the parked view.
+- Genesis variants — [NewGenesisAccountContext](<#NewGenesisAccountContext>) \(per\-contract seeding\) and [NewGenesisMomentumVMContext](<#NewGenesisMomentumVMContext>) \(in\-memory genesis momentum context\) are used during genesis assembly only.
+
+### Concurrency
+
+Contexts are not goroutine\-safe; one is constructed per executed block / momentum and not shared.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — primary consumer; constructs contexts via the supervisor and hands them to contract methods.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — contract methods read and mutate state through this context.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — the underlying [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) / [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) views the contexts wrap.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus/api](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/>) — supplies the [api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>) embedded in [AccountVmContext](<#AccountVmContext>).
 
 ## Index
 
@@ -38,54 +55,76 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="AccountVmContext"></a>
-## type [AccountVmContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/interfaces.go#L12-L38>)
+## type [AccountVmContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/interfaces.go#L19-L67>)
 
-
+AccountVmContext is the per\-account\-block execution surface handed to embedded contracts and to the VM's send/receive paths. It bundles chain reads \([store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) for the account chain, [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) for the surrounding chain state\), consensus reads \([api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>) for pillar weights and epoch stats\), balance helpers, lifecycle hooks \(Save/Reset/Done for the contract\-receive rollback path\), and spork\-status checks.
 
 ```go
 type AccountVmContext interface {
     api.PillarReader
     store.Account
+    // MomentumStore returns the [store.Momentum] view this context is
+    // pinned at — typically the [chain/nom.AccountBlock.MomentumAcknowledged]
+    // of the block under execution.
     MomentumStore() store.Momentum
 
+    // GetFrontierMomentum returns the most recent committed momentum.
     GetFrontierMomentum() (*nom.Momentum, error)
+    // GetGenesisMomentum returns the genesis momentum.
     GetGenesisMomentum() *nom.Momentum
 
+    // Save snapshots the account view so subsequent writes can be
+    // rolled back via [AccountVmContext.Reset]. Used by
+    // contract-receive execution before invoking the contract method.
     Save()
+    // Reset reverts to the snapshot taken by [AccountVmContext.Save].
+    // Called when contract execution fails.
     Reset()
+    // Done finalizes the snapshot: extracts the patch from the working
+    // view and applies it onto the saved view. Called when contract
+    // execution succeeds.
     Done()
 
+    // AddBalance credits amount of ts to the executing account.
     AddBalance(ts *types.ZenonTokenStandard, amount *big.Int)
+    // SubBalance debits amount of ts from the executing account.
+    // Panics if the resulting balance would be negative — the VM is
+    // expected to have checked enoughFunds beforehand.
     SubBalance(ts *types.ZenonTokenStandard, amount *big.Int)
 
+    // IsAcceleratorSporkEnforced reports whether the accelerator spork
+    // is active at this context's momentum height.
     IsAcceleratorSporkEnforced() bool
+    // IsHtlcSporkEnforced reports whether the HTLC spork is active.
     IsHtlcSporkEnforced() bool
+    // IsBridgeAndLiquiditySporkEnforced reports whether the bridge +
+    // liquidity spork is active.
     IsBridgeAndLiquiditySporkEnforced() bool
 }
 ```
 
 <a name="NewAccountContext"></a>
-### func [NewAccountContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L22>)
+### func [NewAccountContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L30>)
 
 ```go
 func NewAccountContext(momentumStore store.Momentum, accountBlock store.Account, pillarReader api.PillarReader) AccountVmContext
 ```
 
-
+NewAccountContext wires an [AccountVmContext](<#AccountVmContext>) over the supplied momentum store, account view, and pillar reader. The supervisor constructs one per executed account block.
 
 <a name="NewGenesisAccountContext"></a>
-### func [NewGenesisAccountContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L30>)
+### func [NewGenesisAccountContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L43>)
 
 ```go
 func NewGenesisAccountContext(address types.Address) AccountVmContext
 ```
 
-
+NewGenesisAccountContext returns an [AccountVmContext](<#AccountVmContext>) for an embedded contract being seeded at genesis: empty momentum store and pillar reader, fresh in\-memory account view rooted at address. Used by [github.com/zenon\\\-network/go\\\-zenon/chain/genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/>) when running each contract's seeding routine.
 
 <a name="MomentumVMContext"></a>
-## type [MomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L8-L10>)
+## type [MomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L14-L16>)
 
-
+MomentumVMContext is the per\-momentum execution surface used by [github.com/zenon\\\-network/go\\\-zenon/vm.MomentumVM](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#MomentumVM>). It is exactly [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) — momentum execution doesn't need balance helpers or contract\-receive lifecycle hooks; admitting account\-block transactions through [store.Momentum.AddAccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum.AddAccountBlockTransaction>) is the only operation.
 
 ```go
 type MomentumVMContext interface {
@@ -94,27 +133,27 @@ type MomentumVMContext interface {
 ```
 
 <a name="NewGenesisMomentumVMContext"></a>
-### func [NewGenesisMomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L22>)
+### func [NewGenesisMomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L39>)
 
 ```go
 func NewGenesisMomentumVMContext() MomentumVMContext
 ```
 
-
+NewGenesisMomentumVMContext returns a [MomentumVMContext](<#MomentumVMContext>) backed by an empty in\-memory store. Used by [github.com/zenon\\\-network/go\\\-zenon/vm.Supervisor.GenerateGenesisMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#Supervisor.GenerateGenesisMomentum>) where there is no previous momentum to read from.
 
 <a name="NewMomentumVMContext"></a>
-### func [NewMomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L16>)
+### func [NewMomentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L29>)
 
 ```go
 func NewMomentumVMContext(store store.Momentum) MomentumVMContext
 ```
 
-
+NewMomentumVMContext wraps an existing momentum store in the per\-momentum execution context. The supervisor passes the store pinned at the previous momentum so the new momentum's content applies onto a snapshot taken just before it.
 
 <a name="accountVmContext"></a>
-## type [accountVmContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L11-L16>)
+## type [accountVmContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L15-L20>)
 
-
+accountVmContext is the [AccountVmContext](<#AccountVmContext>) implementation. The embedded [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) is the working view that contract code reads/writes; accountStoreSnapshot holds the saved view for \[accountVmContext.Reset\] / \[accountVmContext.Done\].
 
 ```go
 type accountVmContext struct {
@@ -126,108 +165,110 @@ type accountVmContext struct {
 ```
 
 <a name="accountVmContext.AddBalance"></a>
-### func \(\*accountVmContext\) [AddBalance](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/balance.go#L10>)
+### func \(\*accountVmContext\) [AddBalance](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/balance.go#L14>)
 
 ```go
 func (ctx *accountVmContext) AddBalance(ts *types.ZenonTokenStandard, amount *big.Int)
 ```
 
-
+AddBalance credits amount of ts to the executing account by reading the current balance, adding, and writing it back. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on read/write failure — those errors are bugs at this point.
 
 <a name="accountVmContext.Done"></a>
-### func \(\*accountVmContext\) [Done](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L16>)
+### func \(\*accountVmContext\) [Done](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L31>)
 
 ```go
 func (ctx *accountVmContext) Done()
 ```
 
+Done finalizes the saved snapshot: extracts the changes patch from the working view, restores the saved view as the current handle, and applies the patch onto it. The contract method's successful effects propagate to the underlying store.
 
+Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on apply failure.
 
 <a name="accountVmContext.GetFrontierMomentum"></a>
-### func \(\*accountVmContext\) [GetFrontierMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/state.go#L7>)
+### func \(\*accountVmContext\) [GetFrontierMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/state.go#L9>)
 
 ```go
 func (ctx *accountVmContext) GetFrontierMomentum() (*nom.Momentum, error)
 ```
 
-
+GetFrontierMomentum returns the most recent committed momentum from the underlying momentum store.
 
 <a name="accountVmContext.GetGenesisMomentum"></a>
-### func \(\*accountVmContext\) [GetGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/state.go#L10>)
+### func \(\*accountVmContext\) [GetGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/state.go#L15>)
 
 ```go
 func (ctx *accountVmContext) GetGenesisMomentum() *nom.Momentum
 ```
 
-
+GetGenesisMomentum returns the genesis momentum from the underlying momentum store.
 
 <a name="accountVmContext.IsAcceleratorSporkEnforced"></a>
-### func \(\*accountVmContext\) [IsAcceleratorSporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L8>)
+### func \(\*accountVmContext\) [IsAcceleratorSporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L12>)
 
 ```go
 func (ctx *accountVmContext) IsAcceleratorSporkEnforced() bool
 ```
 
-
+IsAcceleratorSporkEnforced reports whether the accelerator spork is active at this context's momentum height. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on a momentum\-store read failure \(which would indicate corrupt state\).
 
 <a name="accountVmContext.IsBridgeAndLiquiditySporkEnforced"></a>
-### func \(\*accountVmContext\) [IsBridgeAndLiquiditySporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L20>)
+### func \(\*accountVmContext\) [IsBridgeAndLiquiditySporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L27>)
 
 ```go
 func (ctx *accountVmContext) IsBridgeAndLiquiditySporkEnforced() bool
 ```
 
-
+IsBridgeAndLiquiditySporkEnforced reports whether the bridge \+ liquidity spork is active.
 
 <a name="accountVmContext.IsHtlcSporkEnforced"></a>
-### func \(\*accountVmContext\) [IsHtlcSporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L14>)
+### func \(\*accountVmContext\) [IsHtlcSporkEnforced](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/spork.go#L19>)
 
 ```go
 func (ctx *accountVmContext) IsHtlcSporkEnforced() bool
 ```
 
-
+IsHtlcSporkEnforced reports whether the HTLC spork is active.
 
 <a name="accountVmContext.MomentumStore"></a>
-### func \(\*accountVmContext\) [MomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L18>)
+### func \(\*accountVmContext\) [MomentumStore](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/account_context.go#L23>)
 
 ```go
 func (ctx *accountVmContext) MomentumStore() store.Momentum
 ```
 
-
+MomentumStore returns the momentum view this context is pinned at.
 
 <a name="accountVmContext.Reset"></a>
-### func \(\*accountVmContext\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L12>)
+### func \(\*accountVmContext\) [Reset](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L20>)
 
 ```go
 func (ctx *accountVmContext) Reset()
 ```
 
-
+Reset reverts to the saved snapshot, discarding everything written since the matching \[accountVmContext.Save\]. Used by the rollback path after a contract method fails.
 
 <a name="accountVmContext.Save"></a>
-### func \(\*accountVmContext\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L7>)
+### func \(\*accountVmContext\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/lifecycle.go#L11>)
 
 ```go
 func (ctx *accountVmContext) Save()
 ```
 
-
+Save snapshots the working account view: parks the existing handle in accountStoreSnapshot and replaces the working handle with a fresh snapshot that subsequent mutations write into. Called before invoking a contract method so the supervisor can reset on failure.
 
 <a name="accountVmContext.SubBalance"></a>
-### func \(\*accountVmContext\) [SubBalance](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/balance.go#L16>)
+### func \(\*accountVmContext\) [SubBalance](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/balance.go#L25>)
 
 ```go
 func (ctx *accountVmContext) SubBalance(ts *types.ZenonTokenStandard, amount *big.Int)
 ```
 
-
+SubBalance debits amount of ts from the executing account. Panics if the resulting balance would be negative — the VM checks enoughFunds before calling this, so an underflow here is a logic error.
 
 <a name="momentumVMContext"></a>
-## type [momentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L12-L14>)
+## type [momentumVMContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm_context/momentum_context.go#L21-L23>)
 
-
+momentumVMContext is the [MomentumVMContext](<#MomentumVMContext>) implementation; embeds [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) directly so every store method passes through unchanged.
 
 ```go
 type momentumVMContext struct {

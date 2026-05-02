@@ -9,14 +9,19 @@ import (
 // Argument holds the name of the argument and the corresponding type.
 // Types are used when packing and testing arguments.
 type Argument struct {
-	Name    string
-	Type    Type
-	Indexed bool // indexed is only used by events
+	Name string
+	Type Type
+	// Indexed is only used by events.
+	Indexed bool
 }
 
+// Arguments is an ordered list of [Argument]s — the input shape of a
+// [Method] or the storage shape of a [Variable].
 type Arguments []Argument
 
-// UnmarshalJSON implements json.Unmarshaler interface
+// UnmarshalJSON implements [json.Unmarshaler]: parses the
+// `{name, type, indexed}` JSON form into an [Argument], resolving
+// the type string through [NewType].
 func (argument *Argument) UnmarshalJSON(data []byte) error {
 	var extarg struct {
 		Name    string
@@ -38,12 +43,15 @@ func (argument *Argument) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// isTuple returns true for non-atomic constructs, like (uint,uint) or uint[]
+// isTuple returns true for non-atomic constructs, like (uint,uint) or
+// uint[].
 func (arguments Arguments) isTuple() bool {
 	return len(arguments) > 1
 }
 
-// Unpack performs the operation hexdata -> Go format
+// Unpack performs the operation hexdata -> Go format. v must be a
+// pointer; for tuples it is unpacked into a struct, slice, or array,
+// for atomic args directly into the pointed-to value.
 func (arguments Arguments) Unpack(v interface{}, data []byte) error {
 	// make sure the passed value is arguments pointer
 	if reflect.Ptr != reflect.ValueOf(v).Kind() {
@@ -59,6 +67,9 @@ func (arguments Arguments) Unpack(v interface{}, data []byte) error {
 	return arguments.unpackAtomic(v, marshalledValues)
 }
 
+// unpackTuple decodes a multi-argument call into the destination
+// struct/slice/array. For struct destinations, the abi → struct field
+// mapping comes from [mapAbiToStructFields].
 func (arguments Arguments) unpackTuple(v interface{}, marshalledValues []interface{}) error {
 	var (
 		value = reflect.ValueOf(v).Elem()
@@ -107,6 +118,10 @@ func (arguments Arguments) unpackTuple(v interface{}, marshalledValues []interfa
 	}
 	return nil
 }
+
+// unpackAtomic decodes a single-argument call directly into v.
+// Struct destinations go through the abi → struct field mapping for
+// the (single) argument's name.
 func (arguments Arguments) unpackAtomic(v interface{}, marshalledValues []interface{}) error {
 	if len(marshalledValues) != 1 {
 		return errWrongPackedLength(marshalledValues)
@@ -132,8 +147,9 @@ func (arguments Arguments) unpackAtomic(v interface{}, marshalledValues []interf
 	return set(elem, reflectValue, arguments[0])
 }
 
-// Computes the full size of an array;
-// i.e. counting nested arrays, which count towards size for unpacking.
+// getArraySize computes the full size of an array; counting nested
+// arrays, which count towards size for unpacking. Used to advance the
+// virtual-argument cursor in [Arguments.UnpackValues].
 func getArraySize(arr *Type) int {
 	size := arr.Size
 	// Arrays can be nested, with each element being the same size
@@ -147,9 +163,14 @@ func getArraySize(arr *Type) int {
 	return size
 }
 
-// UnpackValues can be used to unpack ABI-encoded hexdata according to the ABI-specification,
-// without supplying a struct to unpack into. Instead, this method returns a list containing the
-// values. An atomic argument will be a list with one element.
+// UnpackValues can be used to unpack ABI-encoded hexdata according to
+// the ABI-specification, without supplying a struct to unpack into.
+// Instead, this method returns a list containing the values. An
+// atomic argument will be a list with one element.
+//
+// Static arrays are encoded inline in the head of the data (one slot
+// per element), so the unpacker bumps a virtual-arg counter to skip
+// past them while reading the next argument.
 func (arguments Arguments) UnpackValues(data []byte) ([]interface{}, error) {
 	retval := make([]interface{}, 0, len(arguments))
 	virtualArgs := 0
@@ -176,7 +197,10 @@ func (arguments Arguments) UnpackValues(data []byte) ([]interface{}, error) {
 	return retval, nil
 }
 
-// Pack performs the operation Go format -> Hexdata
+// Pack performs the operation Go format -> Hexdata. Static arguments
+// go directly into the head; dynamic arguments (string, bytes,
+// slices) write a 32-byte offset into the head and append their
+// payload to the tail.
 func (arguments Arguments) Pack(args ...interface{}) ([]byte, error) {
 	// Make sure arguments match up and pack them
 	abiArgs := arguments
@@ -228,8 +252,9 @@ func (arguments Arguments) Pack(args ...interface{}) ([]byte, error) {
 	return ret, nil
 }
 
-// capitalise makes the first character of a string upper case, also removing any
-// prefixing underscores from the variable names.
+// capitalise makes the first character of a string upper case, also
+// removing any prefixing underscores from the variable names. Used
+// when implicit-mapping ABI argument names to Go struct field names.
 func capitalise(input string) string {
 	for len(input) > 0 && input[0] == '_' {
 		input = input[1:]

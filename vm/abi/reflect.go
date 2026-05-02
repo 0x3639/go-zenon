@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// indirect recursively dereferences the value until it either gets the value
-// or finds a big.Int
+// indirect recursively dereferences the value until it either gets
+// the value or finds a [big.Int] (which is treated as a value type
+// even when reached through a pointer).
 func indirect(v reflect.Value) reflect.Value {
 	if v.Kind() == reflect.Ptr && v.Elem().Type() != derefbigT {
 		return indirect(v.Elem())
@@ -14,8 +15,9 @@ func indirect(v reflect.Value) reflect.Value {
 	return v
 }
 
-// reflectIntKind returns the reflect using the given size and
-// unsignedness.
+// reflectIntKindAndType returns the reflect kind/type matching the
+// supplied integer size and signedness. Falls back to [bigT] for
+// sizes the host's native ints can't represent.
 func reflectIntKindAndType(unsigned bool, size int) (reflect.Kind, reflect.Type) {
 	switch size {
 	case 8:
@@ -42,18 +44,19 @@ func reflectIntKindAndType(unsigned bool, size int) (reflect.Kind, reflect.Type)
 	return reflect.Ptr, bigT
 }
 
-// mustArrayToBytesSlice creates a new byte slice with the exact same size as value
-// and copies the bytes in value to the new slice.
+// mustArrayToByteSlice creates a new byte slice with the exact same
+// size as value and copies the bytes in value to the new slice.
+// Used to convert fixed-size byte arrays to slices for downstream
+// packing.
 func mustArrayToByteSlice(value reflect.Value) reflect.Value {
 	slice := reflect.MakeSlice(reflect.TypeOf([]byte{}), value.Len(), value.Len())
 	reflect.Copy(slice, value)
 	return slice
 }
 
-// set attempts to assign src to dst by either setting, copying or otherwise.
-//
-// set is a bit more lenient when it comes to assignment and doesn't force an as
-// strict ruleset as bare `reflect` does.
+// set attempts to assign src to dst by either setting, copying or
+// otherwise. set is a bit more lenient when it comes to assignment
+// and doesn't force as strict a ruleset as bare reflect does.
 func set(dst, src reflect.Value, output Argument) error {
 	dstType := dst.Type()
 	srcType := src.Type()
@@ -70,7 +73,9 @@ func set(dst, src reflect.Value, output Argument) error {
 	return nil
 }
 
-// requireAssignable assures that `dest` is a pointer and it's not an interface.
+// requireAssignable assures that dst is a pointer or interface — the
+// only kinds the codec can write into through reflection. Returns
+// [errUnmarshalTypeFailed] otherwise.
 func requireAssignable(dst, src reflect.Value) error {
 	if dst.Kind() != reflect.Ptr && dst.Kind() != reflect.Interface {
 		return errUnmarshalTypeFailed(src, dst)
@@ -78,7 +83,9 @@ func requireAssignable(dst, src reflect.Value) error {
 	return nil
 }
 
-// requireUnpackKind verifies preconditions for unpacking `args` into `kind`
+// requireUnpackKind verifies preconditions for unpacking args into
+// kind. Tuples must land in a struct, slice, or array; scalar kinds
+// are rejected.
 func requireUnpackKind(v reflect.Value, t reflect.Type, k reflect.Kind,
 	args Arguments) error {
 
@@ -94,12 +101,19 @@ func requireUnpackKind(v reflect.Value, t reflect.Type, k reflect.Kind,
 	return nil
 }
 
-// mapAbiToStringField maps abi to struct fields.
-// first round: for each Exportable field that contains a `abi:""` tag
-//   and this field name exists in the arguments, pair them together.
-// second round: for each argument field that has not been already linked,
-//   find what variable is expected to be mapped into, if it exists and has not been
-//   used, pair them.
+// mapAbiToStructFields maps abi to struct fields.
+//
+// First round: for each Exportable field that contains an `abi:""`
+// tag and this field name exists in the arguments, pair them
+// together.
+//
+// Second round: for each argument field that has not been already
+// linked, find what variable is expected to be mapped into. If it
+// exists and has not been used, pair them.
+//
+// Returns one of [errEmptyTagName], [errTagAlreadyMapped],
+// [errTagNotFound], [errMultipleVariable], [errMultipleOutput], or
+// [errPureUnderscoredOutput] on a malformed mapping.
 func mapAbiToStructFields(args Arguments, value reflect.Value) (map[string]string, error) {
 
 	typ := value.Type()

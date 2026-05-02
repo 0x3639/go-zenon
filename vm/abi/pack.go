@@ -9,8 +9,9 @@ import (
 	common2 "github.com/zenon-network/go-zenon/common"
 )
 
-// packBytesSlice packs the given bytes as [L, V] as the canonical representation
-// bytes slice
+// packBytesSlice packs the given bytes as `[length, value]`, the
+// canonical representation for variable-length byte payloads. Values
+// are right-padded to a multiple of [WordSize].
 func packBytesSlice(bytes []byte, l int) ([]byte, error) {
 	length, err := packNum(reflect.ValueOf(l))
 	if err != nil {
@@ -19,8 +20,12 @@ func packBytesSlice(bytes []byte, l int) ([]byte, error) {
 	return append(length, common.RightPadBytes(bytes, (l+WordSize-1)/WordSize*WordSize)...), nil
 }
 
-// packElement packs the given reflect value according to the abi specification in
-// t.
+// packElement packs the given reflect value according to the abi
+// specification in t. Returns [errPackFailed] for unsupported types.
+//
+// Address and TokenStandard are left-padded to a 32-byte word so
+// they fit Solidity's 20-byte-address-with-zero-prefix layout.
+// FixedBytes are right-padded.
 func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 	switch t.T {
 	case IntTy, UintTy:
@@ -62,7 +67,10 @@ func packElement(t Type, reflectValue reflect.Value) ([]byte, error) {
 	}
 }
 
-// packNum packs the given number (using the reflect value) and will cast it to appropriate number representation
+// packNum packs the given number (using the reflect value) and will
+// cast it to appropriate number representation. Pointer values are
+// expected to be `*big.Int`; signed/unsigned ints are routed through
+// [U256] for 32-byte big-endian encoding.
 func packNum(value reflect.Value) ([]byte, error) {
 	switch kind := value.Kind(); kind {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:

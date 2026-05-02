@@ -10,9 +10,30 @@ Package vm executes account blocks: it routes them to the right embedded contrac
 
 ### Overview
 
-vm exposes a Supervisor that, given an [github.com/zenon\\\-network/go\\\-zenon/chain/nom.AccountBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock>), constructs an execution context, invokes the appropriate [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) contract method \(or performs a plain user transfer\), and returns the resulting block transaction to the chain layer for insertion.
+vm exposes a [Supervisor](<#Supervisor>) that, given a [chain/nom.AccountBlock](<https://pkg.go.dev/chain/nom/#AccountBlock>), constructs an execution context, invokes the appropriate [vm/embedded](<https://pkg.go.dev/vm/embedded/>) contract method \(or performs a plain user transfer\), and returns the resulting block transaction to the chain layer for insertion. A second machine \([MomentumVM](<#MomentumVM>)\) commits a momentum's worth of \(already\-validated\) account\-block patches at once.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- Supervisor — the public entry point. Owns chain, consensus, verifier handles and exposes [Supervisor.ApplyBlock](<#Supervisor.ApplyBlock>), [Supervisor.ApplyMomentum](<#Supervisor.ApplyMomentum>), [Supervisor.GenerateFromTemplate](<#Supervisor.GenerateFromTemplate>), [Supervisor.GenerateAutoReceive](<#Supervisor.GenerateAutoReceive>), [Supervisor.GenerateMomentum](<#Supervisor.GenerateMomentum>), and [Supervisor.GenerateGenesisMomentum](<#Supervisor.GenerateGenesisMomentum>).
+- VM — per\-account\-block executor. Dispatches by block type: send, user receive, contract receive \(with descendant blocks \+ rollback\). The contract\-receive flow auto\-generates the receive block from the originating send, refunding tokens on failure.
+- MomentumVM — per\-momentum executor. Walks the momentum content and admits each \(header, patch\) pair into the momentum view.
+- SignFunc — pluggable signing callback used by [Supervisor.GenerateFromTemplate](<#Supervisor.GenerateFromTemplate>) / [Supervisor.GenerateMomentum](<#Supervisor.GenerateMomentum>).
+- Plasma — per\-block resource cost. Derived from fused QSR \([FussedAmountToPlasma](<#FussedAmountToPlasma>)\), PoW difficulty \([DifficultyToPlasma](<#DifficultyToPlasma>)\), or the contract method's [embedded.Method.GetPlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/#Method.GetPlasma>). The verifier rejects blocks below [GetBasePlasmaForAccountBlock](<#GetBasePlasmaForAccountBlock>).
+
+### Concurrency
+
+The supervisor is goroutine\-safe: every method constructs fresh contexts and the underlying handles \(chain, verifier, consensus\) are themselves safe for concurrent use. Per\-block VM and per\-momentum MomentumVM instances are short\-lived and not shared.
+
+All Apply / Generate entry points wrap execution in a recover guard: a VM panic becomes [constants.ErrVmRunPanic](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrVmRunPanic>) for the caller rather than crashing the node.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — supplies the chain handle and the destination for the produced transactions.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) — supplies [consensus.Consensus.FixedPillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#Consensus.FixedPillarReader>) to the per\-block execution context.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — runs every block and momentum through validation before execution.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — dispatches contract method calls during block execution.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/vm\\\_context](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/>) — defines the per\-block and per\-momentum execution contexts.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/constants](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/>) — plasma limits and the embedded\-contract sentinel errors.
 
 ## Index
 
@@ -61,7 +82,7 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="resultInvalid"></a>
+<a name="resultInvalid"></a>Result codes embedded in a contract\-receive block's [nom.AccountBlock.Data](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.Data>) \(encoded as a uint64\) to advertise whether the embedded execution succeeded or failed. resultInvalid is the zero value and should never appear on a finalized block.
 
 ```go
 const (
@@ -73,7 +94,7 @@ const (
 
 ## Variables
 
-<a name="log"></a>
+<a name="log"></a>log is the package\-level VM logger; alias of [common.VmLogger](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#VmLogger>).
 
 ```go
 var (
@@ -82,83 +103,87 @@ var (
 ```
 
 <a name="AvailablePlasma"></a>
-## func [AvailablePlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L57>)
+## func [AvailablePlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L73>)
 
 ```go
 func AvailablePlasma(momentum store.Momentum, account store.Account) (uint64, error)
 ```
 
-AvailablePlasma returns only the total amount of plasma available. \*Takes\* into consideration used plasma by unconfirmed blocks.
+AvailablePlasma returns the plasma the account can still spend. Computed as \`fusedPlasma \+ committedChainPlasma \- uncommittedChainPlasma\`, then clamped to the per\-account maximum.
 
-Plasma equals to fusedPlasma \- plasmaUsedByUnconfirmedBlocks
+\*Takes\* into consideration used plasma by unconfirmed blocks. Plasma equals to fusedPlasma \- plasmaUsedByUnconfirmedBlocks.
 
 <a name="DifficultyToPlasma"></a>
-## func [DifficultyToPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L25>)
+## func [DifficultyToPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L35>)
 
 ```go
 func DifficultyToPlasma(difficulty uint64) uint64
 ```
 
-
+DifficultyToPlasma is the inverse of [GetDifficultyForPlasma](<#GetDifficultyForPlasma>): converts a PoW difficulty into the plasma amount it earns. Caps at [constants.MaxPoWPlasmaForAccountBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaxPoWPlasmaForAccountBlock>) when the difficulty exceeds the per\-block maximum; zero difficulty earns zero plasma.
 
 <a name="FussedAmountToPlasma"></a>
-## func [FussedAmountToPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L39>)
+## func [FussedAmountToPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L53>)
 
 ```go
 func FussedAmountToPlasma(amount *big.Int) uint64
 ```
 
-
+FussedAmountToPlasma converts a fused\-QSR amount into the plasma it produces. Caps at [constants.MaxFusionPlasmaForAccount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaxFusionPlasmaForAccount>) when the amount is at or above [constants.MaxFussedAmountForAccountBig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaxFussedAmountForAccountBig>); nil or non\-positive amounts return zero.
 
 <a name="GetBasePlasmaForAccountBlock"></a>
-## func [GetBasePlasmaForAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L86>)
+## func [GetBasePlasmaForAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L110>)
 
 ```go
 func GetBasePlasmaForAccountBlock(context vm_context.AccountVmContext, block *nom.AccountBlock) (uint64, error)
 ```
 
-GetBasePlasmaForAccountBlock calculates the smallest plasma required for an account block.
+GetBasePlasmaForAccountBlock calculates the smallest plasma required for an account block. Embedded contracts have unlimited plasma \(so the cost is zero\); user receives pay a flat [constants.AccountBlockBasePlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#AccountBlockBasePlasma>); user sends pay either the data surcharge for plain transfers or the [embedded.Method.GetPlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/#Method.GetPlasma>) cost when calling a contract.
+
+Returns [verifier.ErrABDataTooBig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/#ErrABDataTooBig>) when a plain transfer's data payload exceeds [constants.MaxDataLength](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaxDataLength>).
 
 <a name="GetDifficultyForPlasma"></a>
-## func [GetDifficultyForPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L17>)
+## func [GetDifficultyForPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/plasma.go#L22>)
 
 ```go
 func GetDifficultyForPlasma(requiredPlasma uint64) (uint64, error)
 ```
 
-
+GetDifficultyForPlasma converts a desired plasma amount into the PoW difficulty needed to earn that plasma. Returns [constants.ErrForbiddenParam](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrForbiddenParam>) when the requested plasma exceeds [constants.MaxPoWPlasmaForAccountBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaxPoWPlasmaForAccountBlock>); zero plasma maps to zero difficulty.
 
 <a name="enoughFunds"></a>
-## func [enoughFunds](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L74>)
+## func [enoughFunds](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L102>)
 
 ```go
 func enoughFunds(context vm_context.AccountVmContext, block *nom.AccountBlock) bool
 ```
 
-
+enoughFunds reports whether the executing account has at least block.Amount of block.TokenStandard. Always true for zero\-amount transfers \(which carry no token standard\).
 
 <a name="enoughPlasma"></a>
-## func [enoughPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L47>)
+## func [enoughPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L71>)
 
 ```go
 func enoughPlasma(context vm_context.AccountVmContext, block *nom.AccountBlock) error
 ```
 
+enoughPlasma checks the block's plasma claim against context state: embedded contracts have unlimited plasma; user accounts must have enough fused\-or\-PoW plasma to cover the block's base cost. Updates block.TotalPlasma and block.BasePlasma in place and credits the account's per\-chain plasma counter on success.
 
+Returns one of [constants.ErrNotEnoughPlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrNotEnoughPlasma>), [constants.ErrBlockPlasmaLimitReached](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrBlockPlasmaLimitReached>), or [constants.ErrNotEnoughTotalPlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrNotEnoughTotalPlasma>) on rejection.
 
 <a name="errToStatus"></a>
-## func [errToStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L28>)
+## func [errToStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L36>)
 
 ```go
 func errToStatus(err error) uint64
 ```
 
-
+errToStatus collapses a method error into one of the result codes stored in the contract\-receive block's data. Any non\-nil error becomes resultFail; nil becomes resultSuccess.
 
 <a name="ContractExecution"></a>
-## type [ContractExecution](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L33-L36>)
+## type [ContractExecution](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L51-L54>)
 
-
+ContractExecution is the result of an auto\-receive: the produced transaction plus the contract method's returned error \(if any\). ReturnedError is informational — the transaction is still valid and will be committed regardless.
 
 ```go
 type ContractExecution struct {
@@ -168,9 +193,9 @@ type ContractExecution struct {
 ```
 
 <a name="MomentumVM"></a>
-## type [MomentumVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L275-L277>)
+## type [MomentumVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L359-L361>)
 
-
+MomentumVM is the momentum\-level execution machine: it commits one momentum's worth of \(already\-validated\) account\-block transactions atomically into the underlying momentum context so the resulting patch can be paired with the momentum into a [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>).
 
 ```go
 type MomentumVM struct {
@@ -179,36 +204,42 @@ type MomentumVM struct {
 ```
 
 <a name="NewMomentumVM"></a>
-### func [NewMomentumVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L279>)
+### func [NewMomentumVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L364>)
 
 ```go
 func NewMomentumVM(context vm_context.MomentumVMContext) *MomentumVM
 ```
 
-
+NewMomentumVM wraps context in a [MomentumVM](<#MomentumVM>).
 
 <a name="MomentumVM.applyMomentum"></a>
-### func \(\*MomentumVM\) [applyMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L285>)
+### func \(\*MomentumVM\) [applyMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L376>)
 
 ```go
 func (vm *MomentumVM) applyMomentum(pool chain.AccountPool, momentum *nom.Momentum) error
 ```
 
+applyMomentum walks the momentum's content list and admits each \(header, patch\) pair into the context via [store.Momentum.AddAccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum.AddAccountBlockTransaction>).
 
+Caller is responsible for verifying the momentum first; applyMomentum is a pure state\-application step.
 
 <a name="SignFunc"></a>
-## type [SignFunc](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L23>)
+## type [SignFunc](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L27>)
 
-SignFunc is the function type defining the callback when a block requires a method to sign the transaction in supervisor
+SignFunc is the function type defining the callback when a block requires a method to sign the transaction in supervisor.
+
+Returns \(signedData, address, publicKey, err\). The address and public key are used by the supervisor to populate the account block's identity fields.
 
 ```go
 type SignFunc func(data []byte) (signedData []byte, addr *types.Address, pubkey []byte, err error)
 ```
 
 <a name="Supervisor"></a>
-## type [Supervisor](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L25-L31>)
+## type [Supervisor](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L39-L45>)
 
+Supervisor is the VM\-layer entry point: it routes blocks and momentums to the right execution context, runs the verifier before applying state, and packs the result into the [nom.AccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlockTransaction>) / [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>) forms the chain layer commits.
 
+One supervisor instance is shared across the node lifetime; it is safe for concurrent use because every method constructs fresh contexts and the underlying chain/verifier/consensus handles are themselves goroutine\-safe.
 
 ```go
 type Supervisor struct {
@@ -221,162 +252,168 @@ type Supervisor struct {
 ```
 
 <a name="NewSupervisor"></a>
-### func [NewSupervisor](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L38>)
+### func [NewSupervisor](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L58>)
 
 ```go
 func NewSupervisor(chain chain.Chain, consensus consensus.Consensus) *Supervisor
 ```
 
-
+NewSupervisor wires a [Supervisor](<#Supervisor>) over chain and consensus. The supervisor builds its own [verifier.Verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/#Verifier>) from those handles.
 
 <a name="Supervisor.ApplyBlock"></a>
-### func \(\*Supervisor\) [ApplyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L72>)
+### func \(\*Supervisor\) [ApplyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L104>)
 
 ```go
 func (s *Supervisor) ApplyBlock(block *nom.AccountBlock) (*nom.AccountBlockTransaction, error)
 ```
 
-
+ApplyBlock validates and executes block, returning the resulting [nom.AccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlockTransaction>). Rejects [nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) — those are nested inside a parent receive and must be applied together with it via the contract\-receive path.
 
 <a name="Supervisor.ApplyMomentum"></a>
-### func \(\*Supervisor\) [ApplyMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L78>)
+### func \(\*Supervisor\) [ApplyMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L118>)
 
 ```go
 func (s *Supervisor) ApplyMomentum(detailed *nom.DetailedMomentum) (result *nom.MomentumTransaction, internalErr error)
 ```
 
+ApplyMomentum verifies the momentum and applies its content to a fresh momentum context, returning the [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>) \(momentum \+ state patch\) the chain layer commits.
 
+Wraps the work in a recover/panic\-to\-error guard so a VM panic becomes [constants.ErrVmRunPanic](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrVmRunPanic>) for the caller rather than crashing the node.
 
 <a name="Supervisor.GenerateAutoReceive"></a>
-### func \(\*Supervisor\) [GenerateAutoReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L115>)
+### func \(\*Supervisor\) [GenerateAutoReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L164>)
 
 ```go
 func (s *Supervisor) GenerateAutoReceive(sendBlock *nom.AccountBlock) (*ContractExecution, error)
 ```
 
-
+GenerateAutoReceive synthesizes the contract\-receive transaction for sendBlock. Used by the chain layer \(and by the receive\-mailbox drain in [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>)\) to create the auto\-receive that completes a contract send.
 
 <a name="Supervisor.GenerateFromTemplate"></a>
-### func \(\*Supervisor\) [GenerateFromTemplate](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L105>)
+### func \(\*Supervisor\) [GenerateFromTemplate](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L149>)
 
 ```go
 func (s *Supervisor) GenerateFromTemplate(template *nom.AccountBlock, signFunc SignFunc) (*nom.AccountBlockTransaction, error)
 ```
 
-
+GenerateFromTemplate fills in the missing fields of template \(chain identifier, version, MomentumAcknowledged, previous hash, height, plasma\) and runs the block through the apply pipeline, signing with signFunc.
 
 <a name="Supervisor.GenerateGenesisMomentum"></a>
-### func \(\*Supervisor\) [GenerateGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L177>)
+### func \(\*Supervisor\) [GenerateGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L236>)
 
 ```go
 func (s *Supervisor) GenerateGenesisMomentum(template *nom.Momentum, pool chain.AccountPool) (result *nom.MomentumTransaction, internalErr error)
 ```
 
-
+GenerateGenesisMomentum builds the height\-1 genesis transaction from the supplied template and account pool. Bypasses the verifier \(genesis is the only momentum that does not flow through it\) and the producer signature \(no producer at genesis\).
 
 <a name="Supervisor.GenerateMomentum"></a>
-### func \(\*Supervisor\) [GenerateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L151>)
+### func \(\*Supervisor\) [GenerateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L205>)
 
 ```go
 func (s *Supervisor) GenerateMomentum(detailed *nom.DetailedMomentum, signFunc SignFunc) (result *nom.MomentumTransaction, internalErr error)
 ```
 
-
+GenerateMomentum verifies, applies, and signs a momentum produced from detailed. Used by [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) when the local node is the elected producer for the momentum's tick.
 
 <a name="Supervisor.applyBlock"></a>
-### func \(\*Supervisor\) [applyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L200>)
+### func \(\*Supervisor\) [applyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L265>)
 
 ```go
 func (s *Supervisor) applyBlock(block *nom.AccountBlock, signFunc SignFunc) (transaction *nom.AccountBlockTransaction, internalErr error)
 ```
 
+applyBlock is the common path for \[ApplyBlock\] / \[GenerateFromTemplate\]. Verifies block, runs it through the per\-block VM, packs the result, and \(if signFunc is non\-nil\) signs it.
 
+Wraps the work in a recover/panic\-to\-error guard so a VM panic becomes [constants.ErrVmRunPanic](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrVmRunPanic>) for the caller.
 
 <a name="Supervisor.newBlockContext"></a>
-### func \(\*Supervisor\) [newBlockContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L47>)
+### func \(\*Supervisor\) [newBlockContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L71>)
 
 ```go
 func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext
 ```
 
-
+newBlockContext builds the per\-account\-block VM context from chain and consensus state. Panics on missing dependencies — they would indicate the verifier admitted a block whose preconditions were already broken.
 
 <a name="Supervisor.newMomentumContext"></a>
-### func \(\*Supervisor\) [newMomentumContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L66>)
+### func \(\*Supervisor\) [newMomentumContext](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L94>)
 
 ```go
 func (s *Supervisor) newMomentumContext(momentum *nom.Momentum) vm_context.MomentumVMContext
 ```
 
-
+newMomentumContext builds the per\-momentum VM context anchored at the previous momentum's view \(so the new momentum's content applies onto a snapshot taken just before it\).
 
 <a name="Supervisor.packBlock"></a>
-### func \(\*Supervisor\) [packBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L239>)
+### func \(\*Supervisor\) [packBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L315>)
 
 ```go
 func (s *Supervisor) packBlock(context vm_context.AccountVmContext, block *nom.AccountBlock, signFunc SignFunc) (*nom.AccountBlockTransaction, error)
 ```
 
+packBlock finalizes a block: extracts the patch from context, computes the canonical hash, signs \(if signFunc is non\-nil\), then runs the transactional verifier as a final sanity check.
 
+Note: when signFunc is non\-nil, the block is signed twice — first against ComputeHash without ChangesHash, then with ChangesHash set. The second signature overwrites the first.
 
 <a name="Supervisor.packMomentum"></a>
-### func \(\*Supervisor\) [packMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L275>)
+### func \(\*Supervisor\) [packMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L356>)
 
 ```go
 func (s *Supervisor) packMomentum(context vm_context.MomentumVMContext, momentum *nom.Momentum, signFunc SignFunc, isGenesis bool) (*nom.MomentumTransaction, error)
 ```
 
-
+packMomentum finalizes a momentum: extracts the patch, sets ChangesHash \+ Hash, signs with signFunc when supplied, and runs the transactional verifier \(skipped at genesis since there is no previous momentum to validate against\).
 
 <a name="Supervisor.setAll"></a>
-### func \(\*Supervisor\) [setAll](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L229>)
+### func \(\*Supervisor\) [setAll](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L297>)
 
 ```go
 func (s *Supervisor) setAll(template *nom.AccountBlock) error
 ```
 
-
+setAll fills in the template's MomentumAcknowledged, previous\-block linkage, and identity fields in order. Calls into the per\-field setters below.
 
 <a name="Supervisor.setBlockFields"></a>
-### func \(\*Supervisor\) [setBlockFields](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L318>)
+### func \(\*Supervisor\) [setBlockFields](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L406>)
 
 ```go
 func (s *Supervisor) setBlockFields(block *nom.AccountBlock)
 ```
 
-
+setBlockFields fills the block's chain identifier, version, and type\-dependent amount/token fields. Receives must carry zero amount and zero token; sends default to zero amount when not set.
 
 <a name="Supervisor.setBlockHH"></a>
-### func \(\*Supervisor\) [setBlockHH](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L333>)
+### func \(\*Supervisor\) [setBlockHH](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L424>)
 
 ```go
 func (s *Supervisor) setBlockHH(block *nom.AccountBlock) error
 ```
 
-
+setBlockHH resolves the block's previous\-hash \+ height from the account chain frontier when the caller left them as zero.
 
 <a name="Supervisor.setBlockMomentum"></a>
-### func \(\*Supervisor\) [setBlockMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L343>)
+### func \(\*Supervisor\) [setBlockMomentum](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L440>)
 
 ```go
 func (s *Supervisor) setBlockMomentum(block *nom.AccountBlock) error
 ```
 
-
+setBlockMomentum fills MomentumAcknowledged. For embedded contracts \(auto\-receives\) it pins the value to the momentum that confirmed the originating send, so the verifier's auto\-generated\-block check matches. For user blocks it pins the frontier momentum.
 
 <a name="Supervisor.setBlockPlasma"></a>
-### func \(\*Supervisor\) [setBlockPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L308>)
+### func \(\*Supervisor\) [setBlockPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/supervisor.go#L392>)
 
 ```go
 func (s *Supervisor) setBlockPlasma(context vm_context.AccountVmContext, block *nom.AccountBlock) error
 ```
 
-
+setBlockPlasma fills the block's FusedPlasma from the base\-plasma computation when the caller has not explicitly set Difficulty or FusedPlasma.
 
 <a name="VM"></a>
-## type [VM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L37-L39>)
+## type [VM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L51-L53>)
 
-
+VM is the per\-account\-block execution machine: it holds the [vm\\\_context.AccountVmContext](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext>) for the block under execution and exposes the four block\-type entry points \(\[VM.applySend\], \[VM.applyReceive\], and the two contract\-receive flows\). One VM is constructed per call to \[Supervisor.applyBlock\] / [Supervisor.GenerateAutoReceive](<#Supervisor.GenerateAutoReceive>).
 
 ```go
 type VM struct {
@@ -385,66 +422,78 @@ type VM struct {
 ```
 
 <a name="NewVM"></a>
-### func [NewVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L41>)
+### func [NewVM](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L56>)
 
 ```go
 func NewVM(context vm_context.AccountVmContext) *VM
 ```
 
-
+NewVM wraps context in a VM ready to execute one account block.
 
 <a name="VM.applyBlock"></a>
-### func \(\*VM\) [applyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L90>)
+### func \(\*VM\) [applyBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L124>)
 
 ```go
 func (vm *VM) applyBlock(block *nom.AccountBlock) error
 ```
 
-applyBlock is used to apply the block on top of the vm.context After calling applyBlock vm.context.Changes\(\) has all the changes necessary to create a nom.AccountBlockTransaction
+applyBlock applies block on top of vm.context. After applyBlock returns, vm.context.Changes\(\) carries the patch needed to assemble a [nom.AccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlockTransaction>).
+
+Dispatches by block type: send/contract\-send paths run \[VM.applySend\], user receives run \[VM.applyReceive\], and contract receives go through \[VM.generateEmbeddedReceive\] then verify the generated block matches the inbound one.
 
 <a name="VM.applyReceive"></a>
-### func \(\*VM\) [applyReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L141>)
+### func \(\*VM\) [applyReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L185>)
 
 ```go
 func (vm *VM) applyReceive(block *nom.AccountBlock) error
 ```
 
-
+applyReceive executes a user receive: marks the inbound send as consumed and credits its amount/token to the recipient's balance.
 
 <a name="VM.applySend"></a>
-### func \(\*VM\) [applySend](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L118>)
+### func \(\*VM\) [applySend](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L159>)
 
 ```go
 func (vm *VM) applySend(block *nom.AccountBlock) error
 ```
 
-
+applySend executes a send \(user or contract\): if the recipient is an embedded contract, runs the contract method's [embedded.Method.ValidateSendBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/#Method.ValidateSendBlock>) precondition; then deducts block.Amount of block.TokenStandard from the sender's balance. Returns [constants.ErrInsufficientBalance](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrInsufficientBalance>) when the sender's balance is below block.Amount.
 
 <a name="VM.finalizeEmbedded"></a>
-### func \(\*VM\) [finalizeEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L226>)
+### func \(\*VM\) [finalizeEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L305>)
 
 ```go
 func (vm *VM) finalizeEmbedded(fromBlockHash types.Hash, descendantBlocks []*nom.AccountBlock, executionError error) (*nom.AccountBlock, error, error)
 ```
 
-
+finalizeEmbedded fills in the synthesized contract\-receive block and every descendant: assigns versions, chain identifier, the contract's address, MomentumAcknowledged \(the current frontier\), previous\-hash linkage along the chain of \(descendant₀, …, descendantₙ, parent\), data \(the result code from executionError\), and the canonical hash. Returns the parent receive block and the preserved executionError so callers know the contract reported a failure even though the receive itself was committed.
 
 <a name="VM.generateEmbeddedReceive"></a>
-### func \(\*VM\) [generateEmbeddedReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L159>)
+### func \(\*VM\) [generateEmbeddedReceive](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L222>)
 
 ```go
 func (vm *VM) generateEmbeddedReceive(fromBlockHash types.Hash) (*nom.AccountBlock, error, error)
 ```
 
-generateEmbeddedReceive is used to generate the embedded receive nom.AccountBlock from an fromBlockHash Since the receive\-block is auto\-generated, we don't actually need the whole block \(just the fromBlockHash\) After calling applyBlock vm.context.Changes\(\) has all the changes necessary to create a nom.AccountBlockTransaction
+generateEmbeddedReceive synthesizes the contract\-receive block for the inbound send identified by fromBlockHash. The receive is auto\-generated \(contracts don't sign\), so the caller only needs the originating send hash.
+
+Flow:
+
+- Pop the head of the contract's sequencer queue \(mailbox order\).
+- Resolve the embedded method; if the method has been removed by a spork between send and receive, \[VM.rollbackEmbedded\] refunds and returns.
+- Save state, credit the contract's balance, run the contract method, apply every emitted descendant send, and finalize.
+
+Returns \(generatedBlock, methodErr, internalErr\). methodErr is the contract's own returned error \(failure path\) and internalErr is a VM\-internal failure \(the only one currently is a refund\-descendant failure during rollback\).
+
+generateEmbeddedReceive is used to generate the embedded receive nom.AccountBlock from a fromBlockHash. After calling applyBlock vm.context.Changes\(\) has all the changes necessary to create a nom.AccountBlockTransaction.
 
 <a name="VM.rollbackEmbedded"></a>
-### func \(\*VM\) [rollbackEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L195>)
+### func \(\*VM\) [rollbackEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/vm/vm.go#L265>)
 
 ```go
 func (vm *VM) rollbackEmbedded(fromBlockHash types.Hash, methodErr error) (*nom.AccountBlock, error, error)
 ```
 
-
+rollbackEmbedded reverts the in\-flight contract\-receive context and emits a refund descendant when the originating send carried tokens. methodErr is propagated to \[VM.finalizeEmbedded\] so the resulting block records resultFail. The internal error return covers refund descendant failures \(rare; a contract running out of balance to refund itself\).
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

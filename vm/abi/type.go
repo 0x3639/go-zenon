@@ -9,7 +9,9 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
-// Type enumerator
+// Type discriminator constants — the .T field on [Type] uses these
+// to distinguish the high-level kind without re-parsing the type
+// string.
 const (
 	IntTy byte = iota
 	UintTy
@@ -24,24 +26,39 @@ const (
 	HashTy
 )
 
-// Type is the reflection of the supported argument type
+// Type is the reflection of the supported argument type. Holds the
+// element type (Elem) for slices/arrays, the [reflect.Kind] / size
+// pair for direct mapping to a Go type, and the .T discriminator
+// the codec dispatches on.
 type Type struct {
 	Elem *Type
 
 	Kind reflect.Kind
 	Type reflect.Type
 	Size int
-	T    byte // Our own type checking
+	// T is our own type checking discriminator (see the constants
+	// above).
+	T byte
 
-	stringKind string // holds the unparsed string for deriving signatures
+	// stringKind holds the unparsed string for deriving signatures.
+	stringKind string
 }
 
+// typeRegex parses the ABI sub-types: a base type name and an
+// optional size suffix (e.g., `uint256`, `bytes32`).
 var (
-	// typeRegex parses the abi sub types
 	typeRegex = regexp.MustCompile("([a-zA-Z]+)([0-9]+)?")
 )
 
 // NewType creates a new reflection type of abi type given in t.
+// Supports the Solidity type set ([Int|Uint][8|16|...|256], bool,
+// string, address, tokenStandard, hash, bytes, bytes<N>, plus
+// fixed-size and dynamic arrays).
+//
+// Returns [errUnsupportedArgType] on unknown types,
+// [errInvalidArrayTypeFormatting] on malformed brackets, or
+// [errInvalidZeroVariableSize] / [errParsingVariableSize] on size
+// errors.
 func NewType(t string) (typ Type, err error) {
 	if t == "uint" || t == "int" {
 		// this should fail because it means that there's something wrong with
@@ -161,11 +178,16 @@ func NewType(t string) (typ Type, err error) {
 	return
 }
 
-// String implements Stringer
+// String implements [fmt.Stringer]: returns the original ABI type
+// string used to construct t.
 func (t Type) String() (out string) {
 	return t.stringKind
 }
 
+// pack packs v according to t. Slices and arrays serialize as
+// `[head₀, head₁, …, head_n, tail₀, …]` where dynamic-element heads
+// are 32-byte offsets into the tail; fixed-element arrays serialize
+// inline with no head.
 func (t Type) pack(v reflect.Value) ([]byte, error) {
 	// dereference pointer first if it's a pointer
 	v = indirect(v)
@@ -210,20 +232,21 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 	return packElement(t, v)
 }
 
-// requireLengthPrefix returns whether the type requires any sort of length
-// prefixing.
+// requiresLengthPrefix returns whether the type requires any sort of
+// length prefixing — true for string, bytes, and dynamic slices.
 func (t Type) requiresLengthPrefix() bool {
 	return t.T == StringTy || t.T == BytesTy || t.T == SliceTy
 }
 
 // getTypeSize returns the size that this type needs to occupy.
-// We distinguish static and dynamic types. Static types are encoded in-place
-// and dynamic types are encoded at a separately allocated location after the
-// current block.
-// So for a static variable, the size returned represents the size that the
-// variable actually occupies.
-// For a dynamic variable, the returned size is fixed 32 bytes, which is used
-// to store the location reference for actual value storage.
+//
+// We distinguish static and dynamic types. Static types are encoded
+// in-place and dynamic types are encoded at a separately allocated
+// location after the current block. So for a static variable, the
+// size returned represents the size that the variable actually
+// occupies. For a dynamic variable, the returned size is fixed 32
+// bytes, which is used to store the location reference for actual
+// value storage.
 func getTypeSize(t Type) int {
 	if t.T == ArrayTy && !t.Elem.requiresLengthPrefix() {
 		// Recursively calculate type size if it is a nested array

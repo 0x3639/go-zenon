@@ -8,17 +8,24 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// Word-size constants used by the ABI codec. WordSize matches
+// Solidity's 32-byte word; WordBits and WordBytes describe the
+// host machine's `big.Word` (used by the [PaddedBigBytes] fast path).
 const (
-	// number of bits in chain big.Word
+	// WordBits is the number of bits in a [big.Word] on the host
+	// architecture.
 	WordBits = 32 << (uint64(^big.Word(0)) >> 63)
 
-	// number of bytes in chain big.Word
+	// WordBytes is the number of bytes in a [big.Word].
 	WordBytes = WordBits / 8
 
-	// number of bytes in chain vm word
+	// WordSize is the number of bytes in one ABI word — always 32.
 	WordSize = 32
 )
 
+// Cached reflection types for the supported Go-side argument types.
+// The codec compares against these to avoid repeated reflect.TypeOf
+// allocations on hot paths.
 var (
 	bigT           = reflect.TypeOf(&big.Int{})
 	derefbigT      = reflect.TypeOf(big.Int{})
@@ -35,11 +42,15 @@ var (
 	hashT          = reflect.TypeOf(types.Hash{})
 )
 
-// U256 converts a big Int into a 256bit VM number.
+// U256 converts a big Int into a 256bit VM number: takes n mod 2^256
+// and pads to a 32-byte big-endian slice.
 func U256(n *big.Int) []byte {
 	return PaddedBigBytes(n.And(n, common.BigP256m1), WordSize)
 }
 
+// PaddedBigBytes returns the big-endian byte representation of bigint
+// padded to n bytes. Used to encode integer arguments at fixed
+// 32-byte word size.
 func PaddedBigBytes(bigint *big.Int, n int) []byte {
 	if bigint.BitLen()/8 >= n {
 		return bigint.Bytes()
