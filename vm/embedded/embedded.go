@@ -10,27 +10,55 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
-// Method defines interfaces of embedded contracts
+// Method defines interfaces of embedded contracts. Every embedded
+// contract method implements these three hooks; the VM
+// supervisor calls them in a fixed order during account-block
+// execution (see [github.com/zenon-network/go-zenon/vm.VM]).
 type Method interface {
 	// GetPlasma returns the required plasma to call this Method.
-	// This cost includes the upfront cost for the embedded receive-block.
+	// This cost includes the upfront cost for the embedded
+	// receive-block (typically pulled from the supplied
+	// [constants.PlasmaTable]).
 	GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 
 	// ValidateSendBlock is called as a static check on send-blocks.
-	// All send blocks need to pass this verification before being added in the chain.
+	// All send blocks need to pass this verification before being
+	// added in the chain.
 	ValidateSendBlock(block *nom.AccountBlock) error
 
-	// ReceiveBlock is called to generate the descendant blocks and to apply the sendBlock
-	// The actual receive-block is generated in the VM.
-	// If an error occurred (returned err) the context is rollback and the tokens are refunded.
+	// ReceiveBlock is called to generate the descendant blocks and
+	// to apply the sendBlock. The actual receive-block is generated
+	// in the VM. If an error occurred (returned err) the context is
+	// rollback and the tokens are refunded.
 	ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 }
 
+// embeddedImplementation pairs an ABI contract definition with the
+// method-dispatch table for one embedded contract address. The map
+// is keyed by method name; the supervisor decodes the call's 4-byte
+// selector via the ABI and dispatches by name.
 type embeddedImplementation struct {
 	m   map[string]Method
 	abi abi.ABIContract
 }
 
+// Pre-built dispatch tables, one per spork tier. Tables are
+// constructed once at package init and stacked: each tier inherits
+// from the previous and layers on the contracts/methods the spork
+// activates.
+//
+//   - originEmbedded — the genesis-time set: Plasma, Pillar, Token,
+//     Sentinel, Swap, Stake, Spork, Liquidity (donations only),
+//     Accelerator (donations only).
+//   - acceleratorEmbedded — adds full Accelerator and CollectReward
+//     wiring.
+//   - bridgeAndLiquidityEmbedded — adds Bridge and the full
+//     Liquidity method set.
+//   - htlcEmbedded — adds the HTLC contract.
+//
+// The active tier at any momentum height is selected by
+// [GetEmbeddedMethod] based on which sporks the VM context reports
+// active.
 var (
 	originEmbedded             = getOrigin()
 	acceleratorEmbedded        = getAccelerator()
@@ -38,6 +66,9 @@ var (
 	bridgeAndLiquidityEmbedded = getBridgeAndLiquidity()
 )
 
+// getHtlc layers the HTLC contract onto the bridge+liquidity tier.
+// Used as the active table whenever
+// [vm_context.AccountVmContext.IsHtlcSporkEnforced] reports true.
 func getHtlc() map[types.Address]*embeddedImplementation {
 	contracts := getBridgeAndLiquidity()
 	contracts[types.HtlcContract] = &embeddedImplementation{
@@ -53,6 +84,9 @@ func getHtlc() map[types.Address]*embeddedImplementation {
 	return contracts
 }
 
+// getBridgeAndLiquidity layers the Bridge contract and the full
+// Liquidity method set onto the accelerator tier. Used when the
+// bridge+liquidity spork is active.
 func getBridgeAndLiquidity() map[types.Address]*embeddedImplementation {
 	contracts := getAccelerator()
 	contracts[types.BridgeContract] = &embeddedImplementation{
@@ -97,6 +131,10 @@ func getBridgeAndLiquidity() map[types.Address]*embeddedImplementation {
 	return contracts
 }
 
+// getAccelerator layers the Accelerator contract (full method set)
+// onto the origin tier and adds CollectReward wiring to the
+// pillar/sentinel/stake contracts. Used when the accelerator spork
+// is active.
 func getAccelerator() map[types.Address]*embeddedImplementation {
 	contracts := getOrigin()
 	contracts[types.AcceleratorContract] = &embeddedImplementation{
@@ -121,6 +159,10 @@ func getAccelerator() map[types.Address]*embeddedImplementation {
 	return contracts
 }
 
+// getOrigin returns the genesis-time embedded-contract dispatch
+// table — the set of contracts and methods active before any spork
+// is activated. Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork,
+// plus the donation-only stubs of Liquidity and Accelerator.
 func getOrigin() map[types.Address]*embeddedImplementation {
 	return map[types.Address]*embeddedImplementation{
 		types.PlasmaContract: {
@@ -206,10 +248,19 @@ func getOrigin() map[types.Address]*embeddedImplementation {
 	}
 }
 
-// GetEmbeddedMethod finds method instance of embedded contract by address and abiSelector
-// - returns constants.ErrNotContractAddress in case address is not an embedded address (bad prefix)
-// - returns constants.ErrContractDoesntExist in case the address doesn't link to a valid embedded contract
-// - returns constants.ErrContractMethodNotFound if the method doesn't exist
+// GetEmbeddedMethod finds method instance of embedded contract by
+// address and abiSelector. Selects the active dispatch table by
+// inspecting the spork-status checks on context, walking from the
+// most-specific spork (HTLC) to the least (origin) so each tier
+// inherits from the previous.
+//
+// Returns:
+//   - [constants.ErrNotContractAddress] when address is not an
+//     embedded address (bad type byte prefix).
+//   - [constants.ErrContractDoesntExist] when the address doesn't
+//     link to a valid embedded contract.
+//   - [constants.ErrContractMethodNotFound] when the method doesn't
+//     exist in the active dispatch table for this spork tier.
 func GetEmbeddedMethod(context vm_context.AccountVmContext, address types.Address, abiSelector []byte) (Method, error) {
 	if !types.IsEmbeddedAddress(address) {
 		return nil, constants.ErrNotContractAddress

@@ -996,7 +996,7 @@ const (
 )
 ```
 
-<a name="jsonPlasma"></a>
+<a name="jsonPlasma"></a>jsonPlasma is the canonical Solidity\-shaped ABI for the Plasma contract: two methods \(Fuse, CancelFuse\) and two storage record shapes \(fusionInfo per\-fusion, fusedAmount per\-beneficiary summary\).
 
 ```go
 const (
@@ -1019,7 +1019,9 @@ const (
 		]}
 	]`
 
-    FuseMethodName       = "Fuse"
+    // FuseMethodName names the QSR-fusing method.
+    FuseMethodName = "Fuse"
+    // CancelFuseMethodName names the un-fuse / withdraw method.
     CancelFuseMethodName = "CancelFuse"
 
     variableNameFusionInfo  = "fusionInfo"
@@ -1064,7 +1066,7 @@ const (
 )
 ```
 
-<a name="jsonSpork"></a>
+<a name="jsonSpork"></a>jsonSpork is the canonical Solidity\-shaped ABI for the Spork contract: two methods \(CreateSpork, ActivateSpork\) and one storage record shape \(sporkInfo\).
 
 ```go
 const (
@@ -1082,18 +1084,23 @@ const (
 		]}
 	]`
 
-    SporkCreateMethodName   = "CreateSpork"
+    // SporkCreateMethodName names the spork-creation method.
+    SporkCreateMethodName = "CreateSpork"
+    // SporkActivateMethodName names the spork-activation method.
     SporkActivateMethodName = "ActivateSpork"
 
+    // sporkInfoVariableName is the storage variable name used to
+    // (de)encode [Spork] records.
     sporkInfoVariableName = "sporkInfo"
 )
 ```
 
-<a name="_"></a>
+<a name="_"></a>Single\-byte storage prefixes used by the Spork contract. Index 0 is intentionally skipped \(reserved by the storage decorator\).
 
 ```go
 const (
     _   byte = iota
+    // sporkInfoPrefix namespaces per-spork records keyed by id.
     sporkInfoPrefix
 )
 ```
@@ -1125,7 +1132,7 @@ const (
 )
 ```
 
-<a name="jsonSwap"></a>
+<a name="jsonSwap"></a>jsonSwap is the canonical Solidity\-shaped ABI for the Swap contract: one method \(RetrieveAssets\) and one storage record shape \(swapEntry\).
 
 ```go
 const (
@@ -1133,18 +1140,22 @@ const (
 	[
 		{"type":"function","name":"RetrieveAssets", "inputs":[{"name":"publicKey","type":"string"},{"name":"signature","type":"string"}]},
 		{"type":"variable","name":"swapEntry", "inputs":[
-			{"name":"znn","type":"uint256"}, 
+			{"name":"znn","type":"uint256"},
 			{"name":"qsr","type":"uint256"}
 		]}
 	]`
 
+    // RetrieveAssetsMethodName names the legacy-claim retrieval
+    // method.
     RetrieveAssetsMethodName = "RetrieveAssets"
 
+    // swapEntryVariableName is the storage variable name used to
+    // (de)encode [SwapAssets] records.
     swapEntryVariableName = "swapEntry"
 )
 ```
 
-<a name="jsonToken"></a>
+<a name="jsonToken"></a>jsonToken is the canonical Solidity\-shaped ABI for the Token contract: four methods \(IssueToken, Mint, Burn, UpdateToken\) and the per\-token storage record \(tokenInfo\).
 
 ```go
 const (
@@ -1168,9 +1179,14 @@ const (
 			{"name":"isUtility","type":"bool"}]}
 	]`
 
-    IssueMethodName       = "IssueToken"
-    MintMethodName        = "Mint"
-    BurnMethodName        = "Burn"
+    // IssueMethodName names the new-token issuance method.
+    IssueMethodName = "IssueToken"
+    // MintMethodName names the per-token mint method.
+    MintMethodName = "Mint"
+    // BurnMethodName names the per-token burn method (caller's
+    // balance is destroyed).
+    BurnMethodName = "Burn"
+    // UpdateTokenMethodName names the metadata-update method.
     UpdateTokenMethodName = "UpdateToken"
 
     tokenInfoVariableName = "tokenInfo"
@@ -1262,27 +1278,38 @@ var (
 )
 ```
 
-<a name="ABIPlasma"></a>
+<a name="ABIPlasma"></a>ABIPlasma is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the plasma contract.
 
 ```go
 var (
-    // ABIPlasma is abi definition of the plasma contract
     ABIPlasma = abi.JSONToABIContract(strings.NewReader(jsonPlasma))
 
-    fusionInfoKeyPrefix  = []byte{1}
+    // fusionInfoKeyPrefix namespaces per-fusion records keyed by
+    // (owner, id).
+    fusionInfoKeyPrefix = []byte{1}
+    // fusedAmountKeyPrefix namespaces per-beneficiary cumulative
+    // fused amounts.
     fusedAmountKeyPrefix = []byte{2}
 )
 ```
 
-<a name="ABISpork"></a>
+<a name="ABISpork"></a>ABISpork is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Spork contract.
+
+CommunitySporkAddressStartHeight / CommunitySporkAddressEndHeight bracket the window in which the [types.CommunitySporkAddress](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#CommunitySporkAddress>) transitional spork\-controlling address is allowed to operate.
 
 ```go
 var (
-    // ABISpork is abi definition of token contract
+    // ABISpork is abi definition of token contract.
     ABISpork = abi.JSONToABIContract(strings.NewReader(jsonSpork))
 
-    CommunitySporkAddressStartHeight uint64 = 10109240 // Targeting 2025-04-16 12:00:00 UTC
-    CommunitySporkAddressEndHeight   uint64 = 13243712 // Targeting 2026-04-16 12:00:00 UTC
+    // CommunitySporkAddressStartHeight is the momentum height at
+    // which the community spork address becomes valid. Targeting
+    // 2025-04-16 12:00:00 UTC.
+    CommunitySporkAddressStartHeight uint64 = 10109240
+    // CommunitySporkAddressEndHeight is the momentum height past
+    // which the community spork address is no longer accepted.
+    // Targeting 2026-04-16 12:00:00 UTC.
+    CommunitySporkAddressEndHeight uint64 = 13243712
 )
 ```
 
@@ -1296,13 +1323,13 @@ var (
 )
 ```
 
-<a name="ABIToken"></a>
+<a name="ABIToken"></a>ABIToken is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the token contract.
 
 ```go
 var (
-    // ABIToken is abi definition of token contract
     ABIToken = abi.JSONToABIContract(strings.NewReader(jsonToken))
 
+    // tokenInfoKeyPrefix namespaces per-token records.
     tokenInfoKeyPrefix = []byte{1}
 )
 ```
@@ -1323,7 +1350,7 @@ var (
 )
 ```
 
-<a name="ABISwap"></a>
+<a name="ABISwap"></a>ABISwap is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Swap contract.
 
 ```go
 var (
@@ -1404,22 +1431,22 @@ func getDelegationInfoKey(addr types.Address) []byte
 
 
 <a name="getFusedAmountKey"></a>
-## func [getFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L168>)
+## func [getFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L210>)
 
 ```go
 func getFusedAmountKey(beneficiary types.Address) []byte
 ```
 
-
+getFusedAmountKey composes the storage key for a per\-beneficiary cumulative record.
 
 <a name="getFusionInfoKey"></a>
-## func [getFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L75>)
+## func [getFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L94>)
 
 ```go
 func getFusionInfoKey(addr types.Address, hash types.Hash) []byte
 ```
 
-
+getFusionInfoKey composes the storage key for one fusion record.
 
 <a name="getHtlcInfoKey"></a>
 ## func [getHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L140>)
@@ -1530,22 +1557,22 @@ func getStakeInfoKey(id types.Hash, address types.Address) []byte
 
 
 <a name="getSwapAssetsKey"></a>
-## func [getSwapAssetsKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L54>)
+## func [getSwapAssetsKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L72>)
 
 ```go
 func getSwapAssetsKey(keyIdHash types.Hash) []byte
 ```
 
-
+getSwapAssetsKey returns the database key holding the swap entry for keyIdHash. Note: swap uses a flat key namespace \(no prefix byte\) because it is the only table in the contract's storage.
 
 <a name="getTokenInfoKey"></a>
-## func [getTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L114>)
+## func [getTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L138>)
 
 ```go
 func getTokenInfoKey(ts types.ZenonTokenStandard) []byte
 ```
 
-
+getTokenInfoKey composes the storage key for one token record.
 
 <a name="getUnwrapTokenRequestKey"></a>
 ## func [getUnwrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L862>)
@@ -1575,22 +1602,22 @@ func isDelegationInfoKey(key []byte) bool
 
 
 <a name="isFusedAmountKey"></a>
-## func [isFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L171>)
+## func [isFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L216>)
 
 ```go
 func isFusedAmountKey(key []byte) bool
 ```
 
-
+isFusedAmountKey reports whether key belongs to the fusedAmount keyspace.
 
 <a name="isFusionInfoKey"></a>
-## func [isFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L78>)
+## func [isFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L100>)
 
 ```go
 func isFusionInfoKey(key []byte) bool
 ```
 
-
+isFusionInfoKey reports whether key belongs to the fusionInfo keyspace.
 
 <a name="isHtlcInfoKey"></a>
 ## func [isHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L143>)
@@ -1683,13 +1710,13 @@ func isStakeInfoKey(key []byte) bool
 
 
 <a name="isTokenInfoKey"></a>
-## func [isTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L117>)
+## func [isTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L144>)
 
 ```go
 func isTokenInfoKey(key []byte) bool
 ```
 
-
+isTokenInfoKey reports whether key belongs to the tokenInfo keyspace.
 
 <a name="timeChallengeKey"></a>
 ## func [timeChallengeKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L629>)
@@ -1710,22 +1737,22 @@ func unmarshalDelegationInfo(key []byte) (*types.Address, error)
 
 
 <a name="unmarshalFusedAmountKey"></a>
-## func [unmarshalFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L174>)
+## func [unmarshalFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L222>)
 
 ```go
 func unmarshalFusedAmountKey(key []byte) (*types.Address, error)
 ```
 
-
+unmarshalFusedAmountKey extracts beneficiary from a fusedAmount key.
 
 <a name="unmarshalFusionInfoKey"></a>
-## func [unmarshalFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L81>)
+## func [unmarshalFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L106>)
 
 ```go
 func unmarshalFusionInfoKey(key []byte) (*types.Hash, *types.Address, error)
 ```
 
-
+unmarshalFusionInfoKey extracts \(id, owner\) from a fusionInfo key. Returns an error when key is not a fusionInfo key.
 
 <a name="unmarshalHtlcInfoKey"></a>
 ## func [unmarshalHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L147>)
@@ -1818,13 +1845,13 @@ func unmarshalStakeInfoKey(key []byte) (*types.Hash, *types.Address, error)
 
 
 <a name="unmarshalTokenInfoKey"></a>
-## func [unmarshalTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L120>)
+## func [unmarshalTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L150>)
 
 ```go
 func unmarshalTokenInfoKey(key []byte) (*types.ZenonTokenStandard, error)
 ```
 
-
+unmarshalTokenInfoKey extracts the [types.ZenonTokenStandard](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZenonTokenStandard>) from a tokenInfo key.
 
 <a name="unmarshalVotableHashKey"></a>
 ## func [unmarshalVotableHashKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L536>)
@@ -2014,9 +2041,9 @@ type FundParam struct {
 ```
 
 <a name="FusedAmount"></a>
-## type [FusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L149-L152>)
+## type [FusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L186-L189>)
 
-
+FusedAmount is the per\-beneficiary cumulative fused\-QSR record: the total a particular address has been granted across all fusions. The plasma layer reads this directly to compute available plasma without iterating fusions.
 
 ```go
 type FusedAmount struct {
@@ -2026,45 +2053,45 @@ type FusedAmount struct {
 ```
 
 <a name="GetFusedAmount"></a>
-### func [GetFusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L201>)
+### func [GetFusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L256>)
 
 ```go
 func GetFusedAmount(context db.DB, beneficiary types.Address) (*FusedAmount, error)
 ```
 
-
+GetFusedAmount returns the cumulative fused amount for beneficiary, or zero when no fusions have ever named it \(the caller does not need to special\-case absence\).
 
 <a name="parseFusedAmount"></a>
-### func [parseFusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L185>)
+### func [parseFusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L236>)
 
 ```go
 func parseFusedAmount(key, data []byte) (*FusedAmount, error)
 ```
 
-
+parseFusedAmount decodes a \(key, data\) pair into a [FusedAmount](<#FusedAmount>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="FusedAmount.Delete"></a>
-### func \(\*FusedAmount\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L164>)
+### func \(\*FusedAmount\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L204>)
 
 ```go
 func (entry *FusedAmount) Delete(context db.DB) error
 ```
 
-
+Delete removes entry from context's storage.
 
 <a name="FusedAmount.Save"></a>
-### func \(\*FusedAmount\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L154>)
+### func \(\*FusedAmount\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L192>)
 
 ```go
 func (entry *FusedAmount) Save(context db.DB) error
 ```
 
-
+Save writes entry into context's storage.
 
 <a name="FusionInfo"></a>
-## type [FusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L51-L57>)
+## type [FusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L65-L71>)
 
-
+FusionInfo is one fusion record: an owner has locked Amount QSR to Beneficiary \(granting plasma to that address\) until ExpirationHeight. Id distinguishes multiple fusions from the same owner.
 
 ```go
 type FusionInfo struct {
@@ -2077,49 +2104,49 @@ type FusionInfo struct {
 ```
 
 <a name="GetFusionInfo"></a>
-### func [GetFusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L116>)
+### func [GetFusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L146>)
 
 ```go
 func GetFusionInfo(context db.DB, owner types.Address, id types.Hash) (*FusionInfo, error)
 ```
 
-
+GetFusionInfo returns the fusion record for \(owner, id\).
 
 <a name="GetFusionInfoListByOwner"></a>
-### func [GetFusionInfoListByOwner](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L124>)
+### func [GetFusionInfoListByOwner](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L157>)
 
 ```go
 func GetFusionInfoListByOwner(context db.DB, owner types.Address) ([]*FusionInfo, *big.Int, error)
 ```
 
-
+GetFusionInfoListByOwner returns every fusion record for owner plus the summed Amount across them.
 
 <a name="parseFusionInfo"></a>
-### func [parseFusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L99>)
+### func [parseFusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L127>)
 
 ```go
 func parseFusionInfo(key, data []byte) (*FusionInfo, error)
 ```
 
-
+parseFusionInfo decodes a \(key, data\) pair into a [FusionInfo](<#FusionInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="FusionInfo.Delete"></a>
-### func \(\*FusionInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L71>)
+### func \(\*FusionInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L89>)
 
 ```go
 func (entry *FusionInfo) Delete(context db.DB) error
 ```
 
-
+Delete removes entry from context's storage.
 
 <a name="FusionInfo.Save"></a>
-### func \(\*FusionInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L59>)
+### func \(\*FusionInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L75>)
 
 ```go
 func (entry *FusionInfo) Save(context db.DB) error
 ```
 
-
+Save writes entry into context's storage under \(owner, id\).
 
 <a name="HtlcInfo"></a>
 ## type [HtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L98-L108>)
@@ -2280,9 +2307,9 @@ func (entry *HtlcProxyUnlockInfo) Save(context db.DB) error
 
 
 <a name="IssueParam"></a>
-## type [IssueParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L51-L61>)
+## type [IssueParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L61-L71>)
 
-
+IssueParam is the call\-shape struct for [IssueMethodName](<#jsonToken>).
 
 ```go
 type IssueParam struct {
@@ -2697,9 +2724,9 @@ type LiquidityStakeEntryMarshal struct {
 ```
 
 <a name="MintParam"></a>
-## type [MintParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L62-L66>)
+## type [MintParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L75-L79>)
 
-
+MintParam is the call\-shape struct for [MintMethodName](<#jsonToken>): the target token, the amount, and the recipient address.
 
 ```go
 type MintParam struct {
@@ -2899,9 +2926,9 @@ type OrchestratorInfoParam struct {
 ```
 
 <a name="ParamRetrieveAssets"></a>
-## type [ParamRetrieveAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L32-L35>)
+## type [ParamRetrieveAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L43-L46>)
 
-
+ParamRetrieveAssets is the call\-shape struct for [RetrieveAssetsMethodName](<#jsonSwap>) — the legacy\-chain public key and the secp256k1 signature proving its possession.
 
 ```go
 type ParamRetrieveAssets struct {
@@ -3853,9 +3880,9 @@ type SetTokenPairParam struct {
 ```
 
 <a name="Spork"></a>
-## type [Spork](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L46-L54>)
+## type [Spork](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L71-L80>)
 
-
+Spork is the on\-chain representation of one protocol upgrade: id, human\-readable name and description, and the activation state. Once activated, EnforcementHeight is set to the activation momentum height plus [constants.SporkMinHeightDelay](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SporkMinHeightDelay>).
 
 ```go
 type Spork struct {
@@ -3863,65 +3890,66 @@ type Spork struct {
     Name        string     `json:"name"`
     Description string     `json:"description"`
 
-    // If the spork is active, Activated = true and EnforcementHeight = activation momentum height + HeightDelay
+    // If the spork is active, Activated = true and
+    // EnforcementHeight = activation momentum height + HeightDelay.
     Activated         bool   `json:"activated"`
     EnforcementHeight uint64 `json:"enforcementHeight"`
 }
 ```
 
 <a name="GetAllSporks"></a>
-### func [GetAllSporks](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L90>)
+### func [GetAllSporks](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L130>)
 
 ```go
 func GetAllSporks(context db.DB) []*Spork
 ```
 
-
+GetAllSporks enumerates every spork record in iteration order. Used by the chain layer's spork\-enforcement check.
 
 <a name="GetSporkInfoById"></a>
-### func [GetSporkInfoById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L78>)
+### func [GetSporkInfoById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L115>)
 
 ```go
 func GetSporkInfoById(context db.DB, id types.Hash) *Spork
 ```
 
-
+GetSporkInfoById returns the spork record for id, or nil if no such spork is stored. Panics on storage I/O failure.
 
 <a name="parseSporkInfo"></a>
-### func [parseSporkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L72>)
+### func [parseSporkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L107>)
 
 ```go
 func parseSporkInfo(data []byte) *Spork
 ```
 
-
+parseSporkInfo decodes data \(an ABI\-encoded sporkInfo record\) into a [\\\*Spork](<#Spork>). Panics on malformed input.
 
 <a name="Spork.Data"></a>
-### func \(\*Spork\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L59>)
+### func \(\*Spork\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L90>)
 
 ```go
 func (spork *Spork) Data() []byte
 ```
 
-
+Data returns spork ABI\-encoded as the \`sporkInfo\` storage variable.
 
 <a name="Spork.Key"></a>
-### func \(\*Spork\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L68>)
+### func \(\*Spork\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L101>)
 
 ```go
 func (spork *Spork) Key() []byte
 ```
 
-
+Key returns the database key holding spork \(\`sporkInfoPrefix || id\`\).
 
 <a name="Spork.Save"></a>
-### func \(\*Spork\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L56>)
+### func \(\*Spork\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L84>)
 
 ```go
 func (spork *Spork) Save(context db.DB)
 ```
 
-
+Save writes spork into context's storage under its keyspace. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on write failure.
 
 <a name="StakeByExpirationTime"></a>
 ## type [StakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L166>)
@@ -4022,9 +4050,9 @@ func (stake *StakeInfo) Save(context db.DB) error
 
 
 <a name="SwapAssets"></a>
-## type [SwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L37-L41>)
+## type [SwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L51-L55>)
 
-
+SwapAssets is the on\-chain genesis claim for one legacy\-chain key id: how much ZNN and QSR the legacy holder may redeem. Records are keyed by KeyIdHash \(the hash of the legacy key id\).
 
 ```go
 type SwapAssets struct {
@@ -4035,40 +4063,40 @@ type SwapAssets struct {
 ```
 
 <a name="GetSwapAssets"></a>
-### func [GetSwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L79>)
+### func [GetSwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L107>)
 
 ```go
 func GetSwapAssets(context db.DB) ([]*SwapAssets, error)
 ```
 
-
+GetSwapAssets enumerates every swap entry in storage in iteration order.
 
 <a name="GetSwapAssetsByKeyIdHash"></a>
-### func [GetSwapAssetsByKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L71>)
+### func [GetSwapAssetsByKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L96>)
 
 ```go
 func GetSwapAssetsByKeyIdHash(context db.DB, keyIdHash types.Hash) (*SwapAssets, error)
 ```
 
-
+GetSwapAssetsByKeyIdHash returns the swap entry registered for keyIdHash, or [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if none is.
 
 <a name="parseSwapAssets"></a>
-### func [parseSwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L57>)
+### func [parseSwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L79>)
 
 ```go
 func parseSwapAssets(data, key []byte) (*SwapAssets, error)
 ```
 
-
+parseSwapAssets decodes data into a [SwapAssets](<#SwapAssets>) and pins KeyIdHash from key. Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="SwapAssets.Save"></a>
-### func \(\*SwapAssets\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L43>)
+### func \(\*SwapAssets\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L58>)
 
 ```go
 func (assets *SwapAssets) Save(context db.DB) error
 ```
 
-
+Save writes assets into context's storage.
 
 <a name="TimeChallengeInfo"></a>
 ## type [TimeChallengeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L596-L600>)
@@ -4129,9 +4157,9 @@ func (t *TimeChallengeInfo) Save(context db.DB) error
 
 
 <a name="TokenInfo"></a>
-## type [TokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L74-L89>)
+## type [TokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L96-L111>)
 
-
+TokenInfo is the on\-chain registration of one ZTS token: human metadata \(name/symbol/domain/decimals\), supply tracking \(TotalSupply / MaxSupply\), capability flags \(IsMintable/IsBurnable/IsUtility\), and the owning address. The TokenStandard field is derived from the storage key during decoding.
 
 ```go
 type TokenInfo struct {
@@ -4153,40 +4181,40 @@ type TokenInfo struct {
 ```
 
 <a name="GetTokenInfo"></a>
-### func [GetTokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L146>)
+### func [GetTokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L182>)
 
 ```go
 func GetTokenInfo(context db.DB, ts types.ZenonTokenStandard) (*TokenInfo, error)
 ```
 
-
+GetTokenInfo returns the token record for ts, or [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if no such token is registered.
 
 <a name="GetTokenInfoList"></a>
-### func [GetTokenInfoList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L154>)
+### func [GetTokenInfoList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L192>)
 
 ```go
 func GetTokenInfoList(context db.DB) ([]*TokenInfo, error)
 ```
 
-
+GetTokenInfoList enumerates every token record in iteration order.
 
 <a name="parseTokenInfo"></a>
-### func [parseTokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L130>)
+### func [parseTokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L163>)
 
 ```go
 func parseTokenInfo(key, data []byte) (*TokenInfo, error)
 ```
 
-
+parseTokenInfo decodes a \(key, data\) pair into a [TokenInfo](<#TokenInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="TokenInfo.Save"></a>
-### func \(\*TokenInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L91>)
+### func \(\*TokenInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L114>)
 
 ```go
 func (token *TokenInfo) Save(context db.DB) error
 ```
 
-
+Save writes token into context's storage.
 
 <a name="TokenPair"></a>
 ## type [TokenPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L344-L354>)
@@ -4517,9 +4545,9 @@ type UnwrapTokenRequestMarshal struct {
 ```
 
 <a name="UpdateTokenParam"></a>
-## type [UpdateTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L67-L72>)
+## type [UpdateTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L83-L88>)
 
-
+UpdateTokenParam is the call\-shape struct for [UpdateTokenMethodName](<#jsonToken>): rotates owner and the burn/mint flags.
 
 ```go
 type UpdateTokenParam struct {

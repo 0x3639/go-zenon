@@ -9,14 +9,21 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// sporkLog is the per-contract logger; tagged with `contract=spork`.
 var (
 	sporkLog = common.EmbeddedLogger.New("contract", "spork")
 )
 
+// CreateSporkMethod implements the spork-creation flow: stores a new
+// [definition.Spork] record at hash `block.Hash` with `Activated =
+// false`. Only the configured spork-controlling address (or the
+// community fallback within its time window) may invoke this method.
 type CreateSporkMethod struct {
 	MethodName string
 }
 
+// checkSporkMetaDataStatic enforces the static name/description
+// length bounds. Returns [constants.ErrForbiddenParam] on violation.
 func checkSporkMetaDataStatic(sporkInfo *definition.Spork) error {
 	if len(sporkInfo.Name) < constants.SporkNameMinLength || len(sporkInfo.Name) > constants.SporkNameMaxLength {
 		return constants.ErrForbiddenParam
@@ -27,6 +34,10 @@ func checkSporkMetaDataStatic(sporkInfo *definition.Spork) error {
 	return nil
 }
 
+// checkCommunitySporkAddressValidity rejects calls from the
+// community spork address before
+// [definition.CommunitySporkAddressStartHeight] or after
+// [definition.CommunitySporkAddressEndHeight].
 func checkCommunitySporkAddressValidity(context vm_context.AccountVmContext) error {
 	frontierMomentum, err := context.GetFrontierMomentum()
 	common.DealWithErr(err)
@@ -39,9 +50,16 @@ func checkCommunitySporkAddressValidity(context vm_context.AccountVmContext) err
 	return nil
 }
 
+// GetPlasma returns the simple-call plasma cost.
 func (p *CreateSporkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock checks the caller is the configured spork
+// address or the community address, the call carries no value, and
+// the encoded name/description satisfy [checkSporkMetaDataStatic].
+// Repacks block.Data into canonical form so descendants see a
+// stable encoding.
 func (p *CreateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	if block.Address != *types.SporkAddress && block.Address != types.CommunitySporkAddress {
 		return constants.ErrPermissionDenied
@@ -69,6 +87,11 @@ func (p *CreateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 
 	return nil
 }
+
+// ReceiveBlock re-runs the validation, gates community-address
+// calls by the time window, and persists the new spork record
+// keyed by sendBlock.Hash with Activated=false. Returns no
+// descendant blocks.
 func (p *CreateSporkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		sporkLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -103,13 +126,20 @@ func (p *CreateSporkMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 	return nil, nil
 }
 
+// ActivateSporkMethod implements the spork-activation flow: flips an
+// existing [definition.Spork]'s Activated flag and pins its
+// EnforcementHeight to `currentFrontier + SporkMinHeightDelay`.
 type ActivateSporkMethod struct {
 	MethodName string
 }
 
+// GetPlasma returns the simple-call plasma cost.
 func (p *ActivateSporkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock checks caller authority and that the call
+// carries no value, and decodes the target spork id.
 func (p *ActivateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -128,6 +158,13 @@ func (p *ActivateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABISpork.PackMethod(p.MethodName, id)
 	return err
 }
+
+// ReceiveBlock activates the named spork: validates the call, gates
+// community-address calls by the time window, looks up the spork by
+// id, and (if it exists and is not already activated) flips
+// Activated and computes EnforcementHeight. Returns
+// [constants.ErrDataNonExistent] for unknown ids,
+// [constants.ErrAlreadyActivated] for double-activation.
 func (p *ActivateSporkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		sporkLog.Debug("invalid spork activation - syntactic validation failed", "address", sendBlock.Address, "reason", err)

@@ -457,7 +457,7 @@ var (
 )
 ```
 
-<a name="sporkLog"></a>
+<a name="sporkLog"></a>sporkLog is the per\-contract logger; tagged with \`contract=spork\`.
 
 ```go
 var (
@@ -833,13 +833,13 @@ func checkAvailableProducingAddress(context vm_context.AccountVmContext, produci
 returns true if producing address is not used or belonged to this pillar in the past
 
 <a name="checkCommunitySporkAddressValidity"></a>
-## func [checkCommunitySporkAddressValidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L30>)
+## func [checkCommunitySporkAddressValidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L41>)
 
 ```go
 func checkCommunitySporkAddressValidity(context vm_context.AccountVmContext) error
 ```
 
-
+checkCommunitySporkAddressValidity rejects calls from the community spork address before [definition.CommunitySporkAddressStartHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#CommunitySporkAddressStartHeight>) or after [definition.CommunitySporkAddressEndHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#CommunitySporkAddressEndHeight>).
 
 <a name="checkHtlc"></a>
 ## func [checkHtlc](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L37>)
@@ -896,13 +896,13 @@ func checkReceivedFunds(context vm_context.AccountVmContext, project *definition
 
 
 <a name="checkSporkMetaDataStatic"></a>
-## func [checkSporkMetaDataStatic](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L20>)
+## func [checkSporkMetaDataStatic](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L27>)
 
 ```go
 func checkSporkMetaDataStatic(sporkInfo *definition.Spork) error
 ```
 
-
+checkSporkMetaDataStatic enforces the static name/description length bounds. Returns [constants.ErrForbiddenParam](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrForbiddenParam>) on violation.
 
 <a name="checkToken"></a>
 ## func [checkToken](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/token.go#L23>)
@@ -1094,9 +1094,9 @@ func updateStakeRewards(context vm_context.AccountVmContext) error
 
 
 <a name="ActivateSporkMethod"></a>
-## type [ActivateSporkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L106-L108>)
+## type [ActivateSporkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L132-L134>)
 
-
+ActivateSporkMethod implements the spork\-activation flow: flips an existing [definition.Spork](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#Spork>)'s Activated flag and pins its EnforcementHeight to \`currentFrontier \+ SporkMinHeightDelay\`.
 
 ```go
 type ActivateSporkMethod struct {
@@ -1105,31 +1105,31 @@ type ActivateSporkMethod struct {
 ```
 
 <a name="ActivateSporkMethod.GetPlasma"></a>
-### func \(\*ActivateSporkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L110>)
+### func \(\*ActivateSporkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L137>)
 
 ```go
 func (p *ActivateSporkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="ActivateSporkMethod.ReceiveBlock"></a>
-### func \(\*ActivateSporkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L131>)
+### func \(\*ActivateSporkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L168>)
 
 ```go
 func (p *ActivateSporkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock activates the named spork: validates the call, gates community\-address calls by the time window, looks up the spork by id, and \(if it exists and is not already activated\) flips Activated and computes EnforcementHeight. Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) for unknown ids, [constants.ErrAlreadyActivated](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrAlreadyActivated>) for double\-activation.
 
 <a name="ActivateSporkMethod.ValidateSendBlock"></a>
-### func \(\*ActivateSporkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L113>)
+### func \(\*ActivateSporkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L143>)
 
 ```go
 func (p *ActivateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock checks caller authority and that the call carries no value, and decodes the target spork id.
 
 <a name="AddPhaseMethod"></a>
 ## type [AddPhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L167-L169>)
@@ -1645,9 +1645,9 @@ func (p *CreateProjectMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="CreateSporkMethod"></a>
-## type [CreateSporkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L16-L18>)
+## type [CreateSporkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L21-L23>)
 
-
+CreateSporkMethod implements the spork\-creation flow: stores a new [definition.Spork](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#Spork>) record at hash \`block.Hash\` with \`Activated = false\`. Only the configured spork\-controlling address \(or the community fallback within its time window\) may invoke this method.
 
 ```go
 type CreateSporkMethod struct {
@@ -1656,31 +1656,31 @@ type CreateSporkMethod struct {
 ```
 
 <a name="CreateSporkMethod.GetPlasma"></a>
-### func \(\*CreateSporkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L42>)
+### func \(\*CreateSporkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L54>)
 
 ```go
 func (p *CreateSporkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 ```
 
-
+GetPlasma returns the simple\-call plasma cost.
 
 <a name="CreateSporkMethod.ReceiveBlock"></a>
-### func \(\*CreateSporkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L72>)
+### func \(\*CreateSporkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L95>)
 
 ```go
 func (p *CreateSporkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 ```
 
-
+ReceiveBlock re\-runs the validation, gates community\-address calls by the time window, and persists the new spork record keyed by sendBlock.Hash with Activated=false. Returns no descendant blocks.
 
 <a name="CreateSporkMethod.ValidateSendBlock"></a>
-### func \(\*CreateSporkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L45>)
+### func \(\*CreateSporkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/spork.go#L63>)
 
 ```go
 func (p *CreateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ```
 
-
+ValidateSendBlock checks the caller is the configured spork address or the community address, the call carries no value, and the encoded name/description satisfy \[checkSporkMetaDataStatic\]. Repacks block.Data into canonical form so descendants see a stable encoding.
 
 <a name="DelegateMethod"></a>
 ## type [DelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L663-L665>)

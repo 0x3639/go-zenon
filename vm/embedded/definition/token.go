@@ -12,6 +12,9 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// jsonToken is the canonical Solidity-shaped ABI for the Token
+// contract: four methods (IssueToken, Mint, Burn, UpdateToken) and
+// the per-token storage record (tokenInfo).
 const (
 	jsonToken = `
 	[
@@ -33,21 +36,28 @@ const (
 			{"name":"isUtility","type":"bool"}]}
 	]`
 
-	IssueMethodName       = "IssueToken"
-	MintMethodName        = "Mint"
-	BurnMethodName        = "Burn"
+	// IssueMethodName names the new-token issuance method.
+	IssueMethodName = "IssueToken"
+	// MintMethodName names the per-token mint method.
+	MintMethodName = "Mint"
+	// BurnMethodName names the per-token burn method (caller's
+	// balance is destroyed).
+	BurnMethodName = "Burn"
+	// UpdateTokenMethodName names the metadata-update method.
 	UpdateTokenMethodName = "UpdateToken"
 
 	tokenInfoVariableName = "tokenInfo"
 )
 
+// ABIToken is the parsed [abi.ABIContract] for the token contract.
 var (
-	// ABIToken is abi definition of token contract
 	ABIToken = abi.JSONToABIContract(strings.NewReader(jsonToken))
 
+	// tokenInfoKeyPrefix namespaces per-token records.
 	tokenInfoKeyPrefix = []byte{1}
 )
 
+// IssueParam is the call-shape struct for [IssueMethodName].
 type IssueParam struct {
 	TokenName   string
 	TokenSymbol string
@@ -59,11 +69,17 @@ type IssueParam struct {
 	IsBurnable  bool
 	IsUtility   bool
 }
+
+// MintParam is the call-shape struct for [MintMethodName]: the
+// target token, the amount, and the recipient address.
 type MintParam struct {
 	TokenStandard  types.ZenonTokenStandard
 	Amount         *big.Int
 	ReceiveAddress types.Address
 }
+
+// UpdateTokenParam is the call-shape struct for
+// [UpdateTokenMethodName]: rotates owner and the burn/mint flags.
 type UpdateTokenParam struct {
 	TokenStandard types.ZenonTokenStandard
 	Owner         types.Address
@@ -71,6 +87,12 @@ type UpdateTokenParam struct {
 	IsBurnable    bool
 }
 
+// TokenInfo is the on-chain registration of one ZTS token: human
+// metadata (name/symbol/domain/decimals), supply tracking
+// (TotalSupply / MaxSupply), capability flags
+// (IsMintable/IsBurnable/IsUtility), and the owning address. The
+// TokenStandard field is derived from the storage key during
+// decoding.
 type TokenInfo struct {
 	Owner       types.Address `json:"owner"`
 	TokenName   string        `json:"tokenName"`
@@ -88,6 +110,7 @@ type TokenInfo struct {
 	TokenStandard types.ZenonTokenStandard `json:"tokenStandard"`
 }
 
+// Save writes token into context's storage.
 func (token *TokenInfo) Save(context db.DB) error {
 	data, err := ABIToken.PackVariable(
 		tokenInfoVariableName,
@@ -111,12 +134,19 @@ func (token *TokenInfo) Save(context db.DB) error {
 	)
 }
 
+// getTokenInfoKey composes the storage key for one token record.
 func getTokenInfoKey(ts types.ZenonTokenStandard) []byte {
 	return append(tokenInfoKeyPrefix, ts.Bytes()...)
 }
+
+// isTokenInfoKey reports whether key belongs to the tokenInfo
+// keyspace.
 func isTokenInfoKey(key []byte) bool {
 	return key[0] == tokenInfoKeyPrefix[0]
 }
+
+// unmarshalTokenInfoKey extracts the [types.ZenonTokenStandard]
+// from a tokenInfo key.
 func unmarshalTokenInfoKey(key []byte) (*types.ZenonTokenStandard, error) {
 	if !isTokenInfoKey(key) {
 		return nil, errors.Errorf("invalid key! Not token info key")
@@ -127,6 +157,9 @@ func unmarshalTokenInfoKey(key []byte) (*types.ZenonTokenStandard, error) {
 	}
 	return tokenStandard, nil
 }
+
+// parseTokenInfo decodes a (key, data) pair into a [TokenInfo].
+// Returns [constants.ErrDataNonExistent] when data is empty.
 func parseTokenInfo(key, data []byte) (*TokenInfo, error) {
 	if len(data) > 0 {
 		tokenStandard, err := unmarshalTokenInfoKey(key)
@@ -143,6 +176,9 @@ func parseTokenInfo(key, data []byte) (*TokenInfo, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetTokenInfo returns the token record for ts, or
+// [constants.ErrDataNonExistent] if no such token is registered.
 func GetTokenInfo(context db.DB, ts types.ZenonTokenStandard) (*TokenInfo, error) {
 	key := getTokenInfoKey(ts)
 	if data, err := context.Get(key); err != nil {
@@ -151,6 +187,8 @@ func GetTokenInfo(context db.DB, ts types.ZenonTokenStandard) (*TokenInfo, error
 		return parseTokenInfo(key, data)
 	}
 }
+
+// GetTokenInfoList enumerates every token record in iteration order.
 func GetTokenInfoList(context db.DB) ([]*TokenInfo, error) {
 	iterator := context.NewIterator(tokenInfoKeyPrefix)
 	defer iterator.Release()

@@ -10,9 +10,31 @@ Package embedded is the dispatcher for Zenon's built\-in system contracts.
 
 ### Overview
 
-embedded maps a system address \(Pillar, Sentinel, Stake, Token, Plasma, Spork, Swap, Accelerator, HTLC, Bridge, Liquidity\) to its current implementation, taking into account active sporks. Each contract method implements three hooks: GetPlasma \(cost\), ValidateSendBlock \(preconditions on the inbound send\), and ReceiveBlock \(the state transition\).
+embedded maps a system address \(Pillar, Sentinel, Stake, Token, Plasma, Spork, Swap, Accelerator, HTLC, Bridge, Liquidity\) to its current implementation, taking into account active sporks. Each contract method implements three hooks \(\[Method.GetPlasma\], \[Method.ValidateSendBlock\], \[Method.ReceiveBlock\]\) and is resolved through [GetEmbeddedMethod](<#GetEmbeddedMethod>) given a target address and the call's 4\-byte ABI selector.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Spork Tiering
+
+Four pre\-built dispatch tables are stacked in increasing activation order:
+
+- originEmbedded — genesis\-time contracts \(Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork\) plus donation\-only stubs for Liquidity and Accelerator.
+- acceleratorEmbedded — adds the full Accelerator contract and CollectReward wiring across pillar/sentinel/stake.
+- bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
+- htlcEmbedded — adds the HTLC contract.
+
+[GetEmbeddedMethod](<#GetEmbeddedMethod>) selects the table based on which sporks the caller's [vm\\\_context.AccountVmContext](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext>) reports as enforced.
+
+### Sub\\\-packages
+
+- definition — per\-contract ABI definitions and storage record types.
+- implementation — per\-contract method behavior.
+- tests — embedded\-contract integration test suite.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — primary consumer; calls [GetEmbeddedMethod](<#GetEmbeddedMethod>) from the per\-account\-block VM.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/abi](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/>) — supplies the ABI codec used for selector dispatch and storage encoding.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/constants](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/>) — supplies the [constants.PlasmaTable](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PlasmaTable>) consumed by \[Method.GetPlasma\].
+- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — defines the per\-contract address constants \(PillarContract, SentinelContract, …\) the dispatcher keys on.
 
 ## Index
 
@@ -28,7 +50,14 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="originEmbedded"></a>
+<a name="originEmbedded"></a>Pre\-built dispatch tables, one per spork tier. Tables are constructed once at package init and stacked: each tier inherits from the previous and layers on the contracts/methods the spork activates.
+
+- originEmbedded — the genesis\-time set: Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Liquidity \(donations only\), Accelerator \(donations only\).
+- acceleratorEmbedded — adds full Accelerator and CollectReward wiring.
+- bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
+- htlcEmbedded — adds the HTLC contract.
+
+The active tier at any momentum height is selected by [GetEmbeddedMethod](<#GetEmbeddedMethod>) based on which sporks the VM context reports active.
 
 ```go
 var (
@@ -40,76 +69,86 @@ var (
 ```
 
 <a name="getAccelerator"></a>
-## func [getAccelerator](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L100>)
+## func [getAccelerator](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L138>)
 
 ```go
 func getAccelerator() map[types.Address]*embeddedImplementation
 ```
 
-
+getAccelerator layers the Accelerator contract \(full method set\) onto the origin tier and adds CollectReward wiring to the pillar/sentinel/stake contracts. Used when the accelerator spork is active.
 
 <a name="getBridgeAndLiquidity"></a>
-## func [getBridgeAndLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L56>)
+## func [getBridgeAndLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L90>)
 
 ```go
 func getBridgeAndLiquidity() map[types.Address]*embeddedImplementation
 ```
 
-
+getBridgeAndLiquidity layers the Bridge contract and the full Liquidity method set onto the accelerator tier. Used when the bridge\+liquidity spork is active.
 
 <a name="getHtlc"></a>
-## func [getHtlc](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L41>)
+## func [getHtlc](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L72>)
 
 ```go
 func getHtlc() map[types.Address]*embeddedImplementation
 ```
 
-
+getHtlc layers the HTLC contract onto the bridge\+liquidity tier. Used as the active table whenever [vm\\\_context.AccountVmContext.IsHtlcSporkEnforced](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext.IsHtlcSporkEnforced>) reports true.
 
 <a name="getOrigin"></a>
-## func [getOrigin](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L124>)
+## func [getOrigin](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L166>)
 
 ```go
 func getOrigin() map[types.Address]*embeddedImplementation
 ```
 
-
+getOrigin returns the genesis\-time embedded\-contract dispatch table — the set of contracts and methods active before any spork is activated. Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, plus the donation\-only stubs of Liquidity and Accelerator.
 
 <a name="Method"></a>
-## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L14-L27>)
+## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L17-L34>)
 
-Method defines interfaces of embedded contracts
+Method defines interfaces of embedded contracts. Every embedded contract method implements these three hooks; the VM supervisor calls them in a fixed order during account\-block execution \(see [github.com/zenon\\\-network/go\\\-zenon/vm.VM](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#VM>)\).
 
 ```go
 type Method interface {
     // GetPlasma returns the required plasma to call this Method.
-    // This cost includes the upfront cost for the embedded receive-block.
+    // This cost includes the upfront cost for the embedded
+    // receive-block (typically pulled from the supplied
+    // [constants.PlasmaTable]).
     GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
 
     // ValidateSendBlock is called as a static check on send-blocks.
-    // All send blocks need to pass this verification before being added in the chain.
+    // All send blocks need to pass this verification before being
+    // added in the chain.
     ValidateSendBlock(block *nom.AccountBlock) error
 
-    // ReceiveBlock is called to generate the descendant blocks and to apply the sendBlock
-    // The actual receive-block is generated in the VM.
-    // If an error occurred (returned err) the context is rollback and the tokens are refunded.
+    // ReceiveBlock is called to generate the descendant blocks and
+    // to apply the sendBlock. The actual receive-block is generated
+    // in the VM. If an error occurred (returned err) the context is
+    // rollback and the tokens are refunded.
     ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
 }
 ```
 
 <a name="GetEmbeddedMethod"></a>
-### func [GetEmbeddedMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L213>)
+### func [GetEmbeddedMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L264>)
 
 ```go
 func GetEmbeddedMethod(context vm_context.AccountVmContext, address types.Address, abiSelector []byte) (Method, error)
 ```
 
-GetEmbeddedMethod finds method instance of embedded contract by address and abiSelector \- returns constants.ErrNotContractAddress in case address is not an embedded address \(bad prefix\) \- returns constants.ErrContractDoesntExist in case the address doesn't link to a valid embedded contract \- returns constants.ErrContractMethodNotFound if the method doesn't exist
+GetEmbeddedMethod finds method instance of embedded contract by address and abiSelector. Selects the active dispatch table by inspecting the spork\-status checks on context, walking from the most\-specific spork \(HTLC\) to the least \(origin\) so each tier inherits from the previous.
+
+Returns:
+
+- [constants.ErrNotContractAddress](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrNotContractAddress>) when address is not an embedded address \(bad type byte prefix\).
+- [constants.ErrContractDoesntExist](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrContractDoesntExist>) when the address doesn't link to a valid embedded contract.
+- [constants.ErrContractMethodNotFound](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrContractMethodNotFound>) when the method doesn't exist in the active dispatch table for this spork tier.
 
 <a name="embeddedImplementation"></a>
-## type [embeddedImplementation](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L29-L32>)
+## type [embeddedImplementation](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L40-L43>)
 
-
+embeddedImplementation pairs an ABI contract definition with the method\-dispatch table for one embedded contract address. The map is keyed by method name; the supervisor decodes the call's 4\-byte selector via the ABI and dispatches by name.
 
 ```go
 type embeddedImplementation struct {
