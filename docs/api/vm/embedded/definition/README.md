@@ -359,14 +359,24 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="VotingStatus"></a>
+<a name="VotingStatus"></a>Project / phase status codes used by the Accelerator state machine. Values progress: Voting → Active → Paid → Completed, or to Closed if voting / payment fails. The discriminator is stored in the project / phase records.
+
+jsonAccelerator is the canonical Solidity\-shaped ABI for the Accelerator contract: project lifecycle \(CreateProject, AddPhase, UpdatePhase, Update\), pillar voting \(VoteByName, VoteByProdAddress\), donations \(Donate\), and the per\-project / per\-phase storage records.
 
 ```go
 const (
+    // VotingStatus marks an entry that has been created and is in
+    // its voting window.
     VotingStatus uint8 = iota
+    // ActiveStatus marks a project / phase whose vote passed; it
+    // is awaiting payout.
     ActiveStatus
+    // PaidStatus marks a phase that has been funded.
     PaidStatus
+    // ClosedStatus marks an entry that did not pass voting.
     ClosedStatus
+    // CompletedStatus marks a project whose every phase has been
+    // paid.
     CompletedStatus
 
     jsonAccelerator = `
@@ -435,9 +445,13 @@ const (
 		]}
 	]`
 
+    // CreateProjectMethodName names the project-creation method
+    // (caller pays [constants.ProjectCreationAmount] ZNN).
     CreateProjectMethodName = "CreateProject"
-    AddPhaseMethodName      = "AddPhase"
-    UpdatePhaseMethodName   = "UpdatePhase"
+    // AddPhaseMethodName names the add-phase-to-project method.
+    AddPhaseMethodName = "AddPhase"
+    // UpdatePhaseMethodName names the phase-metadata-update method.
+    UpdatePhaseMethodName = "UpdatePhase"
 
     ProjectVariableName = "project"
     PhaseVariableName   = "phase"
@@ -761,7 +775,7 @@ const (
 )
 ```
 
-<a name="jsonHtlc"></a>
+<a name="jsonHtlc"></a>jsonHtlc is the canonical Solidity\-shaped ABI for the HTLC \(Hashed Time\-Lock Contract\) contract: Create / Reclaim / Unlock for the per\-entry lifecycle, and DenyProxyUnlock / AllowProxyUnlock for the per\-account proxy\-unlock toggle. Stored records: htlcInfo \(one per HTLC\) and htlcProxyUnlockInfo \(one per address\).
 
 ```go
 const (
@@ -801,11 +815,23 @@ const (
 		]}
 	]`
 
-    CreateHtlcMethodName  = "Create"
+    // CreateHtlcMethodName names the HTLC-creation method:
+    // caller locks tokens behind a hash + expiration time.
+    CreateHtlcMethodName = "Create"
+    // ReclaimHtlcMethodName names the post-expiration reclaim
+    // method (sender retrieves their tokens once expirationTime is
+    // reached without a successful unlock).
     ReclaimHtlcMethodName = "Reclaim"
-    UnlockHtlcMethodName  = "Unlock"
+    // UnlockHtlcMethodName names the preimage-redeem method (the
+    // hash-locked address claims the tokens by revealing the
+    // preimage, before expiration).
+    UnlockHtlcMethodName = "Unlock"
 
-    DenyHtlcProxyUnlockMethodName  = "DenyProxyUnlock"
+    // DenyHtlcProxyUnlockMethodName names the per-account
+    // proxy-unlock-deny toggle.
+    DenyHtlcProxyUnlockMethodName = "DenyProxyUnlock"
+    // AllowHtlcProxyUnlockMethodName names the per-account
+    // proxy-unlock-allow toggle.
     AllowHtlcProxyUnlockMethodName = "AllowProxyUnlock"
 
     variableNameHtlcInfo            = "htlcInfo"
@@ -813,16 +839,20 @@ const (
 )
 ```
 
-<a name="HashTypeSHA3"></a>
+<a name="HashTypeSHA3"></a>Hash\-type discriminators selecting the digest algorithm used by an HTLC entry's hash lock.
 
 ```go
 const (
+    // HashTypeSHA3 selects SHA3-256.
     HashTypeSHA3 uint8 = iota
+    // HashTypeSHA256 selects SHA-256.
     HashTypeSHA256
 )
 ```
 
-<a name="jsonLiquidity"></a>
+<a name="jsonLiquidity"></a>jsonLiquidity is the canonical Solidity\-shaped ABI for the Liquidity contract: liquidity\-program funding \(Fund, BurnZnn\), administered configuration \(SetTokenTuple, SetAdditionalReward, SetIsHalted\), governance \(ChangeAdministrator, ProposeAdministrator, NominateGuardians, Emergency\), staking \(LiquidityStake, CancelLiquidityStake, UnlockLiquidityStakeEntries\), and the periodic Update / Donate / CollectReward methods.
+
+Storage records: liquidityInfo \(singleton\), tokenTuple \(per\-token configuration\), liquidityStakeEntry \(per\-stake\), securityInfo \(guardian / delay configuration\).
 
 ```go
 const (
@@ -898,14 +928,29 @@ const (
 		]}
 	]`
 
-    FundMethodName                        = "Fund"
-    BurnZnnMethodName                     = "BurnZnn"
-    SetTokenTupleMethodName               = "SetTokenTuple"
-    LiquidityStakeMethodName              = "LiquidityStake"
-    CancelLiquidityStakeMethodName        = "CancelLiquidityStake"
+    // FundMethodName credits the liquidity reward pool from a
+    // caller-supplied transfer.
+    FundMethodName = "Fund"
+    // BurnZnnMethodName burns a portion of the liquidity reward
+    // pool via the Token contract.
+    BurnZnnMethodName = "BurnZnn"
+    // SetTokenTupleMethodName configures the per-token reward
+    // shares (administrator-only).
+    SetTokenTupleMethodName = "SetTokenTuple"
+    // LiquidityStakeMethodName locks tokens for liquidity rewards.
+    LiquidityStakeMethodName = "LiquidityStake"
+    // CancelLiquidityStakeMethodName begins unlocking a stake
+    // (refund follows after the lock window).
+    CancelLiquidityStakeMethodName = "CancelLiquidityStake"
+    // UnlockLiquidityStakeEntriesMethodName completes the unlock
+    // flow once the lock window has elapsed.
     UnlockLiquidityStakeEntriesMethodName = "UnlockLiquidityStakeEntries"
-    SetAdditionalRewardMethodName         = "SetAdditionalReward"
-    SetIsHaltedMethodName                 = "SetIsHalted"
+    // SetAdditionalRewardMethodName credits extra rewards into
+    // the pool (administrator-only).
+    SetAdditionalRewardMethodName = "SetAdditionalReward"
+    // SetIsHaltedMethodName toggles the halted flag (no further
+    // staking when halted).
+    SetIsHaltedMethodName = "SetIsHalted"
 
     liquidityInfoVariableName       = "liquidityInfo"
     tokenTupleVariableName          = "tokenTuple"
@@ -913,7 +958,7 @@ const (
 )
 ```
 
-<a name="jsonPillars"></a>
+<a name="jsonPillars"></a>jsonPillars is the canonical Solidity\-shaped ABI for the Pillar contract: registration \(Register, RegisterLegacy\), updates \(UpdatePillar, Update\), revocation \(Revoke\), delegation \(Delegate, Undelegate\), QSR deposit/withdraw, reward collection, plus the storage record shapes \(pillarInfo, producingPillarName, LegacyPillarEntry, delegationInfo, pillarEpochHistory\).
 
 ```go
 const (
@@ -980,13 +1025,22 @@ const (
 		]}
 	]`
 
-    RegisterMethodName       = "Register"
+    // RegisterMethodName names the standard pillar-registration
+    // method.
+    RegisterMethodName = "Register"
+    // LegacyRegisterMethodName names the legacy-claim-backed
+    // registration method (consumes a legacy-pillar slot via a
+    // secp256k1 signature).
     LegacyRegisterMethodName = "RegisterLegacy"
 
+    // UpdatePillarMethodName names the pillar-metadata-update method.
     UpdatePillarMethodName = "UpdatePillar"
-    RevokeMethodName       = "Revoke"
-    DelegateMethodName     = "Delegate"
-    UndelegateMethodName   = "Undelegate"
+    // RevokeMethodName names the pillar-revocation method.
+    RevokeMethodName = "Revoke"
+    // DelegateMethodName names the delegate-to-pillar method.
+    DelegateMethodName = "Delegate"
+    // UndelegateMethodName names the un-delegate method.
+    UndelegateMethodName = "Undelegate"
 
     pillarInfoVariableName          = "pillarInfo"
     producingPillarNameVariableName = "producingPillarName"
@@ -1243,7 +1297,7 @@ var (
 )
 ```
 
-<a name="ABIHtlc"></a>
+<a name="ABIHtlc"></a>ABIHtlc is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the HTLC contract. 1=htlcInfo \(per\-HTLC\), 2=htlcProxyUnlockInfo \(per\-address\).
 
 ```go
 var (
@@ -1254,7 +1308,7 @@ var (
 )
 ```
 
-<a name="ABILiquidity"></a>
+<a name="ABILiquidity"></a>ABILiquidity is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Liquidity contract. 1=liquidityInfo \(singleton config\), 2=liquidityStakeEntry \(per\-stake records\).
 
 ```go
 var (
@@ -1265,11 +1319,13 @@ var (
 )
 ```
 
-<a name="ABIPillars"></a>
+<a name="ABIPillars"></a>ABIPillars is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Pillar contract. The per\-prefix key namespaces follow: 1=pillarInfo, 2=producingPillarName \(reverse index by producer\), 3=LegacyPillarEntry, 4=delegationInfo, 5=pillarEpochHistory.
+
+Pillar\-type discriminators tag each pillar with how it was registered \([LegacyPillarType](<#ABIPillars>) consumed a legacy slot; [NormalPillarType](<#ABIPillars>) paid the QSR\-burn price\). [AnyPillarType](<#ABIPillars>) is the wildcard for queries.
 
 ```go
 var (
-    // ABIPillars is abi definition of pillar contract
+    // ABIPillars is abi definition of pillar contract.
     ABIPillars = abi.JSONToABIContract(strings.NewReader(jsonPillars))
 
     pillarInfoKeyPrefix          = []byte{1}
@@ -1278,8 +1334,14 @@ var (
     delegationInfoKeyPrefix      = []byte{4}
     pillarEpochHistoryKeyPrefix  = []byte{5}
 
-    AnyPillarType    = uint8(0)
+    // AnyPillarType is the wildcard used by queries that should
+    // match either pillar kind.
+    AnyPillarType = uint8(0)
+    // LegacyPillarType marks pillars registered via
+    // [LegacyRegisterMethodName] (consumed a legacy claim slot).
     LegacyPillarType = uint8(1)
+    // NormalPillarType marks pillars registered via the standard
+    // [RegisterMethodName] (paid the QSR-burn price).
     NormalPillarType = uint8(2)
 )
 ```
@@ -1365,7 +1427,7 @@ var (
 )
 ```
 
-<a name="HashTypeDigestSizes"></a>
+<a name="HashTypeDigestSizes"></a>HashTypeDigestSizes maps each hash\-type discriminator to its canonical digest length in bytes \(used to validate hashLock length on Create\).
 
 ```go
 var HashTypeDigestSizes = map[uint8]uint8{
@@ -1384,7 +1446,7 @@ func GetNetworkInfoKey(networkClass uint32, chainId uint32) []byte
 
 
 <a name="GetPillarInfoKey"></a>
-## func [GetPillarInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L161>)
+## func [GetPillarInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L208>)
 
 ```go
 func GetPillarInfoKey(name string) []byte
@@ -1393,7 +1455,7 @@ func GetPillarInfoKey(name string) []byte
 
 
 <a name="GetProducingPillarKey"></a>
-## func [GetProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L224>)
+## func [GetProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L274>)
 
 ```go
 func GetProducingPillarKey(producing types.Address) []byte
@@ -1402,7 +1464,7 @@ func GetProducingPillarKey(producing types.Address) []byte
 
 
 <a name="IterateLiquidityStakeEntries"></a>
-## func [IterateLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L387>)
+## func [IterateLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L421>)
 
 ```go
 func IterateLiquidityStakeEntries(context db.DB, f func(entry *LiquidityStakeEntry) error) error
@@ -1429,7 +1491,7 @@ func IterateStakeEntries(context db.DB, f func(*StakeInfo) error) error
 IterateStakeEntries calls f for every stake record. f returning a non\-nil error stops iteration; data\-non\-existent entries are silently skipped.
 
 <a name="getDelegationInfoKey"></a>
-## func [getDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L285>)
+## func [getDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L339>)
 
 ```go
 func getDelegationInfoKey(addr types.Address) []byte
@@ -1456,7 +1518,7 @@ func getFusionInfoKey(addr types.Address, hash types.Hash) []byte
 getFusionInfoKey composes the storage key for one fusion record.
 
 <a name="getHtlcInfoKey"></a>
-## func [getHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L140>)
+## func [getHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L167>)
 
 ```go
 func getHtlcInfoKey(hash types.Hash) []byte
@@ -1465,7 +1527,7 @@ func getHtlcInfoKey(hash types.Hash) []byte
 
 
 <a name="getHtlcProxyUnlockInfoKey"></a>
-## func [getHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L256>)
+## func [getHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L283>)
 
 ```go
 func getHtlcProxyUnlockInfoKey(address types.Address) []byte
@@ -1474,7 +1536,7 @@ func getHtlcProxyUnlockInfoKey(address types.Address) []byte
 
 
 <a name="getLegacyPillarEntryKey"></a>
-## func [getLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L367>)
+## func [getLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L425>)
 
 ```go
 func getLegacyPillarEntryKey(keyIdHash types.Hash) []byte
@@ -1483,7 +1545,7 @@ func getLegacyPillarEntryKey(keyIdHash types.Hash) []byte
 
 
 <a name="getLiquidityStakeEntryKey"></a>
-## func [getLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L335>)
+## func [getLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L369>)
 
 ```go
 func getLiquidityStakeEntryKey(id types.Hash, address types.Address) []byte
@@ -1492,7 +1554,7 @@ func getLiquidityStakeEntryKey(id types.Hash, address types.Address) []byte
 
 
 <a name="getPillarEpochHistoryEntryKey"></a>
-## func [getPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L461>)
+## func [getPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L525>)
 
 ```go
 func getPillarEpochHistoryEntryKey(epoch uint64, name string) []byte
@@ -1501,7 +1563,7 @@ func getPillarEpochHistoryEntryKey(epoch uint64, name string) []byte
 
 
 <a name="getPillarEpochHistoryPrefixKey"></a>
-## func [getPillarEpochHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L456>)
+## func [getPillarEpochHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L520>)
 
 ```go
 func getPillarEpochHistoryPrefixKey(epoch uint64) []byte
@@ -1600,7 +1662,7 @@ func getWrapTokenRequestKey(creationMomentumHeight uint64, id types.Hash) []byte
 
 
 <a name="isDelegationInfoKey"></a>
-## func [isDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L288>)
+## func [isDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L342>)
 
 ```go
 func isDelegationInfoKey(key []byte) bool
@@ -1627,7 +1689,7 @@ func isFusionInfoKey(key []byte) bool
 isFusionInfoKey reports whether key belongs to the fusionInfo keyspace.
 
 <a name="isHtlcInfoKey"></a>
-## func [isHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L143>)
+## func [isHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L170>)
 
 ```go
 func isHtlcInfoKey(key []byte) bool
@@ -1636,7 +1698,7 @@ func isHtlcInfoKey(key []byte) bool
 
 
 <a name="isHtlcProxyUnlockInfoKey"></a>
-## func [isHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L259>)
+## func [isHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L286>)
 
 ```go
 func isHtlcProxyUnlockInfoKey(key []byte) bool
@@ -1645,7 +1707,7 @@ func isHtlcProxyUnlockInfoKey(key []byte) bool
 
 
 <a name="isLegacyPillarEntryKey"></a>
-## func [isLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L370>)
+## func [isLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L428>)
 
 ```go
 func isLegacyPillarEntryKey(key []byte) bool
@@ -1654,7 +1716,7 @@ func isLegacyPillarEntryKey(key []byte) bool
 
 
 <a name="isLiquidityStakeEntryKey"></a>
-## func [isLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L338>)
+## func [isLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L372>)
 
 ```go
 func isLiquidityStakeEntryKey(key []byte) bool
@@ -1663,7 +1725,7 @@ func isLiquidityStakeEntryKey(key []byte) bool
 
 
 <a name="isPillarEpochHistoryEntryKey"></a>
-## func [isPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L464>)
+## func [isPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L528>)
 
 ```go
 func isPillarEpochHistoryEntryKey(key []byte) bool
@@ -1672,7 +1734,7 @@ func isPillarEpochHistoryEntryKey(key []byte) bool
 
 
 <a name="isProducingPillarKey"></a>
-## func [isProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L227>)
+## func [isProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L277>)
 
 ```go
 func isProducingPillarKey(key []byte) bool
@@ -1735,7 +1797,7 @@ func timeChallengeKey(methodName string) []byte
 
 
 <a name="unmarshalDelegationInfo"></a>
-## func [unmarshalDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L291>)
+## func [unmarshalDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L345>)
 
 ```go
 func unmarshalDelegationInfo(key []byte) (*types.Address, error)
@@ -1762,7 +1824,7 @@ func unmarshalFusionInfoKey(key []byte) (*types.Hash, *types.Address, error)
 unmarshalFusionInfoKey extracts \(id, owner\) from a fusionInfo key. Returns an error when key is not a fusionInfo key.
 
 <a name="unmarshalHtlcInfoKey"></a>
-## func [unmarshalHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L147>)
+## func [unmarshalHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L174>)
 
 ```go
 func unmarshalHtlcInfoKey(key []byte) (*types.Hash, error)
@@ -1771,7 +1833,7 @@ func unmarshalHtlcInfoKey(key []byte) (*types.Hash, error)
 
 
 <a name="unmarshalHtlcProxyUnlockInfoKey"></a>
-## func [unmarshalHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L262>)
+## func [unmarshalHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L289>)
 
 ```go
 func unmarshalHtlcProxyUnlockInfoKey(key []byte) (*types.Address, error)
@@ -1780,7 +1842,7 @@ func unmarshalHtlcProxyUnlockInfoKey(key []byte) (*types.Address, error)
 
 
 <a name="unmarshalLegacyPillarEntryKey"></a>
-## func [unmarshalLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L373>)
+## func [unmarshalLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L431>)
 
 ```go
 func unmarshalLegacyPillarEntryKey(key []byte) (*types.Hash, error)
@@ -1789,7 +1851,7 @@ func unmarshalLegacyPillarEntryKey(key []byte) (*types.Hash, error)
 
 
 <a name="unmarshalLiquidityStakeEntryKey"></a>
-## func [unmarshalLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L341>)
+## func [unmarshalLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L375>)
 
 ```go
 func unmarshalLiquidityStakeEntryKey(key []byte) (*types.Hash, *types.Address, error)
@@ -1798,7 +1860,7 @@ func unmarshalLiquidityStakeEntryKey(key []byte) (*types.Hash, *types.Address, e
 
 
 <a name="unmarshalPillarEpochHistoryEntryKey"></a>
-## func [unmarshalPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L467>)
+## func [unmarshalPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L531>)
 
 ```go
 func unmarshalPillarEpochHistoryEntryKey(key []byte) (uint64, string, error)
@@ -1807,7 +1869,7 @@ func unmarshalPillarEpochHistoryEntryKey(key []byte) (uint64, string, error)
 
 
 <a name="unmarshalProducingPillarKey"></a>
-## func [unmarshalProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L230>)
+## func [unmarshalProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L280>)
 
 ```go
 func unmarshalProducingPillarKey(key []byte) (*types.Address, error)
@@ -1870,7 +1932,7 @@ func unmarshalVotableHashKey(key []byte) (*types.Hash, error)
 
 
 <a name="AcceleratorParam"></a>
-## type [AcceleratorParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L118-L125>)
+## type [AcceleratorParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L140-L147>)
 
 
 
@@ -1940,7 +2002,7 @@ func (b *BridgeInfoVariable) Save(context db.DB) error
 
 
 <a name="BurnParam"></a>
-## type [BurnParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L291-L293>)
+## type [BurnParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L325-L327>)
 
 
 
@@ -1964,7 +2026,7 @@ type ChangeECDSAPubKeyParam struct {
 ```
 
 <a name="CreateHtlcParam"></a>
-## type [CreateHtlcParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L90-L96>)
+## type [CreateHtlcParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L117-L123>)
 
 
 
@@ -1979,9 +2041,9 @@ type CreateHtlcParam struct {
 ```
 
 <a name="DelegationInfo"></a>
-## type [DelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L266-L269>)
+## type [DelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L320-L323>)
 
-
+DelegationInfo is one delegation record: a backer address directing its weight to a named pillar. One record per backer \(delegations are exclusive — a backer cannot split across pillars\).
 
 ```go
 type DelegationInfo struct {
@@ -1991,7 +2053,7 @@ type DelegationInfo struct {
 ```
 
 <a name="GetDelegationInfo"></a>
-### func [GetDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L318>)
+### func [GetDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L372>)
 
 ```go
 func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, error)
@@ -2000,7 +2062,7 @@ func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, e
 
 
 <a name="GetDelegationsList"></a>
-### func [GetDelegationsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L326>)
+### func [GetDelegationsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L380>)
 
 ```go
 func GetDelegationsList(context db.DB) ([]*DelegationInfo, error)
@@ -2009,7 +2071,7 @@ func GetDelegationsList(context db.DB) ([]*DelegationInfo, error)
 
 
 <a name="parseDelegationInfo"></a>
-### func [parseDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L301>)
+### func [parseDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L355>)
 
 ```go
 func parseDelegationInfo(key, data []byte) (*DelegationInfo, error)
@@ -2018,7 +2080,7 @@ func parseDelegationInfo(key, data []byte) (*DelegationInfo, error)
 
 
 <a name="DelegationInfo.Delete"></a>
-### func \(\*DelegationInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L281>)
+### func \(\*DelegationInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L335>)
 
 ```go
 func (delegation *DelegationInfo) Delete(context db.DB) error
@@ -2027,7 +2089,7 @@ func (delegation *DelegationInfo) Delete(context db.DB) error
 
 
 <a name="DelegationInfo.Save"></a>
-### func \(\*DelegationInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L271>)
+### func \(\*DelegationInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L325>)
 
 ```go
 func (delegation *DelegationInfo) Save(context db.DB) error
@@ -2036,7 +2098,7 @@ func (delegation *DelegationInfo) Save(context db.DB) error
 
 
 <a name="FundParam"></a>
-## type [FundParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L286-L289>)
+## type [FundParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L320-L323>)
 
 
 
@@ -2156,7 +2218,7 @@ func (entry *FusionInfo) Save(context db.DB) error
 Save writes entry into context's storage under \(owner, id\).
 
 <a name="HtlcInfo"></a>
-## type [HtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L98-L108>)
+## type [HtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L125-L135>)
 
 
 
@@ -2175,7 +2237,7 @@ type HtlcInfo struct {
 ```
 
 <a name="GetHtlcInfo"></a>
-### func [GetHtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L176>)
+### func [GetHtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L203>)
 
 ```go
 func GetHtlcInfo(context db.DB, id types.Hash) (*HtlcInfo, error)
@@ -2184,7 +2246,7 @@ func GetHtlcInfo(context db.DB, id types.Hash) (*HtlcInfo, error)
 
 
 <a name="parseHtlcInfo"></a>
-### func [parseHtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L160>)
+### func [parseHtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L187>)
 
 ```go
 func parseHtlcInfo(key, data []byte) (*HtlcInfo, error)
@@ -2193,7 +2255,7 @@ func parseHtlcInfo(key, data []byte) (*HtlcInfo, error)
 
 
 <a name="HtlcInfo.Delete"></a>
-### func \(\*HtlcInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L136>)
+### func \(\*HtlcInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L163>)
 
 ```go
 func (h *HtlcInfo) Delete(context db.DB) error
@@ -2202,7 +2264,7 @@ func (h *HtlcInfo) Delete(context db.DB) error
 
 
 <a name="HtlcInfo.MarshalJSON"></a>
-### func \(\*HtlcInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L213>)
+### func \(\*HtlcInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L240>)
 
 ```go
 func (h *HtlcInfo) MarshalJSON() ([]byte, error)
@@ -2211,7 +2273,7 @@ func (h *HtlcInfo) MarshalJSON() ([]byte, error)
 
 
 <a name="HtlcInfo.Save"></a>
-### func \(\*HtlcInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L119>)
+### func \(\*HtlcInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L146>)
 
 ```go
 func (h *HtlcInfo) Save(context db.DB) error
@@ -2220,7 +2282,7 @@ func (h *HtlcInfo) Save(context db.DB) error
 
 
 <a name="HtlcInfo.String"></a>
-### func \(\*HtlcInfo\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L110>)
+### func \(\*HtlcInfo\) [String](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L137>)
 
 ```go
 func (h *HtlcInfo) String() string
@@ -2229,7 +2291,7 @@ func (h *HtlcInfo) String() string
 
 
 <a name="HtlcInfo.ToHtlcInfoMarshal"></a>
-### func \(\*HtlcInfo\) [ToHtlcInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L197>)
+### func \(\*HtlcInfo\) [ToHtlcInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L224>)
 
 ```go
 func (h *HtlcInfo) ToHtlcInfoMarshal() *HtlcInfoMarshal
@@ -2238,7 +2300,7 @@ func (h *HtlcInfo) ToHtlcInfoMarshal() *HtlcInfoMarshal
 
 
 <a name="HtlcInfo.UnmarshalJSON"></a>
-### func \(\*HtlcInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L217>)
+### func \(\*HtlcInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L244>)
 
 ```go
 func (h *HtlcInfo) UnmarshalJSON(data []byte) error
@@ -2247,7 +2309,7 @@ func (h *HtlcInfo) UnmarshalJSON(data []byte) error
 
 
 <a name="HtlcInfoMarshal"></a>
-## type [HtlcInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L185-L195>)
+## type [HtlcInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L212-L222>)
 
 
 
@@ -2266,7 +2328,7 @@ type HtlcInfoMarshal struct {
 ```
 
 <a name="HtlcProxyUnlockInfo"></a>
-## type [HtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L236-L239>)
+## type [HtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L263-L266>)
 
 
 
@@ -2278,7 +2340,7 @@ type HtlcProxyUnlockInfo struct {
 ```
 
 <a name="GetHtlcProxyUnlockInfo"></a>
-### func [GetHtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L289>)
+### func [GetHtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L316>)
 
 ```go
 func GetHtlcProxyUnlockInfo(context db.DB, address types.Address) (*HtlcProxyUnlockInfo, error)
@@ -2287,7 +2349,7 @@ func GetHtlcProxyUnlockInfo(context db.DB, address types.Address) (*HtlcProxyUnl
 
 
 <a name="parseHtlcProxyUnlockInfo"></a>
-### func [parseHtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L273>)
+### func [parseHtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L300>)
 
 ```go
 func parseHtlcProxyUnlockInfo(key, data []byte) (*HtlcProxyUnlockInfo, error)
@@ -2296,7 +2358,7 @@ func parseHtlcProxyUnlockInfo(key, data []byte) (*HtlcProxyUnlockInfo, error)
 
 
 <a name="HtlcProxyUnlockInfo.Delete"></a>
-### func \(\*HtlcProxyUnlockInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L251>)
+### func \(\*HtlcProxyUnlockInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L278>)
 
 ```go
 func (entry *HtlcProxyUnlockInfo) Delete(context db.DB) error
@@ -2305,7 +2367,7 @@ func (entry *HtlcProxyUnlockInfo) Delete(context db.DB) error
 
 
 <a name="HtlcProxyUnlockInfo.Save"></a>
-### func \(\*HtlcProxyUnlockInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L241>)
+### func \(\*HtlcProxyUnlockInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L268>)
 
 ```go
 func (entry *HtlcProxyUnlockInfo) Save(context db.DB) error
@@ -2400,9 +2462,9 @@ func (upd *LastUpdateVariable) Save(context db.DB) error
 
 
 <a name="LegacyPillarEntry"></a>
-## type [LegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L349-L352>)
+## type [LegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L407-L410>)
 
-
+LegacyPillarEntry is the on\-chain claim of one legacy holder's pillar slot pool. PillarCount is decremented every time a legacy registration consumes a slot; the entry is deleted when it reaches zero.
 
 ```go
 type LegacyPillarEntry struct {
@@ -2412,7 +2474,7 @@ type LegacyPillarEntry struct {
 ```
 
 <a name="GetLegacyPillarEntry"></a>
-### func [GetLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L399>)
+### func [GetLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L457>)
 
 ```go
 func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEntry, error)
@@ -2421,7 +2483,7 @@ func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEnt
 
 
 <a name="GetLegacyPillarList"></a>
-### func [GetLegacyPillarList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L407>)
+### func [GetLegacyPillarList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L465>)
 
 ```go
 func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error)
@@ -2430,7 +2492,7 @@ func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error)
 
 
 <a name="parseLegacyPillarEntry"></a>
-### func [parseLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L383>)
+### func [parseLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L441>)
 
 ```go
 func parseLegacyPillarEntry(key, data []byte) (*LegacyPillarEntry, error)
@@ -2439,7 +2501,7 @@ func parseLegacyPillarEntry(key, data []byte) (*LegacyPillarEntry, error)
 
 
 <a name="LegacyPillarEntry.Delete"></a>
-### func \(\*LegacyPillarEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L363>)
+### func \(\*LegacyPillarEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L421>)
 
 ```go
 func (legacy *LegacyPillarEntry) Delete(context db.DB) error
@@ -2448,7 +2510,7 @@ func (legacy *LegacyPillarEntry) Delete(context db.DB) error
 
 
 <a name="LegacyPillarEntry.Save"></a>
-### func \(\*LegacyPillarEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L354>)
+### func \(\*LegacyPillarEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L412>)
 
 ```go
 func (legacy *LegacyPillarEntry) Save(context db.DB) error
@@ -2457,9 +2519,9 @@ func (legacy *LegacyPillarEntry) Save(context db.DB) error
 
 
 <a name="LegacyRegisterParam"></a>
-## type [LegacyRegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L119-L123>)
+## type [LegacyRegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L157-L161>)
 
-
+LegacyRegisterParam is the call\-shape for [LegacyRegisterMethodName](<#jsonPillars>) — adds the legacy\-chain public key and secp256k1 signature proving the legacy holder's authority.
 
 ```go
 type LegacyRegisterParam struct {
@@ -2470,7 +2532,7 @@ type LegacyRegisterParam struct {
 ```
 
 <a name="LiquidityInfo"></a>
-## type [LiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L117-L123>)
+## type [LiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L151-L157>)
 
 
 
@@ -2485,7 +2547,7 @@ type LiquidityInfo struct {
 ```
 
 <a name="GetLiquidityInfo"></a>
-### func [GetLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L217>)
+### func [GetLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L251>)
 
 ```go
 func GetLiquidityInfo(context db.DB) (*LiquidityInfo, error)
@@ -2494,7 +2556,7 @@ func GetLiquidityInfo(context db.DB) (*LiquidityInfo, error)
 
 
 <a name="parseLiquidityInfo"></a>
-### func [parseLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L185>)
+### func [parseLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L219>)
 
 ```go
 func parseLiquidityInfo(data []byte) (*LiquidityInfo, error)
@@ -2503,7 +2565,7 @@ func parseLiquidityInfo(data []byte) (*LiquidityInfo, error)
 
 
 <a name="LiquidityInfo.MarshalJSON"></a>
-### func \(\*LiquidityInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L148>)
+### func \(\*LiquidityInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L182>)
 
 ```go
 func (l *LiquidityInfo) MarshalJSON() ([]byte, error)
@@ -2512,7 +2574,7 @@ func (l *LiquidityInfo) MarshalJSON() ([]byte, error)
 
 
 <a name="LiquidityInfo.ToLiquidityInfoMarshal"></a>
-### func \(\*LiquidityInfo\) [ToLiquidityInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L133>)
+### func \(\*LiquidityInfo\) [ToLiquidityInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L167>)
 
 ```go
 func (l *LiquidityInfo) ToLiquidityInfoMarshal() LiquidityInfoMarshal
@@ -2521,7 +2583,7 @@ func (l *LiquidityInfo) ToLiquidityInfoMarshal() LiquidityInfoMarshal
 
 
 <a name="LiquidityInfo.UnmarshalJSON"></a>
-### func \(\*LiquidityInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L152>)
+### func \(\*LiquidityInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L186>)
 
 ```go
 func (l *LiquidityInfo) UnmarshalJSON(data []byte) error
@@ -2530,7 +2592,7 @@ func (l *LiquidityInfo) UnmarshalJSON(data []byte) error
 
 
 <a name="LiquidityInfoMarshal"></a>
-## type [LiquidityInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L125-L131>)
+## type [LiquidityInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L159-L165>)
 
 
 
@@ -2545,9 +2607,9 @@ type LiquidityInfoMarshal struct {
 ```
 
 <a name="LiquidityInfoVariable"></a>
-## type [LiquidityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L110-L116>)
+## type [LiquidityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L144-L150>)
 
-
+LiquidityInfoVariable is the on\-disk storage shape of the liquidity\-info singleton: administrator, halted flag, accumulated rewards, and the byte\-encoded token\-tuple list. LiquidityInfo \(defined just below\) is the runtime\-decoded twin with TokenTuples expanded to typed values.
 
 ```go
 type LiquidityInfoVariable struct {
@@ -2560,7 +2622,7 @@ type LiquidityInfoVariable struct {
 ```
 
 <a name="EncodeLiquidityInfo"></a>
-### func [EncodeLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L225>)
+### func [EncodeLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L259>)
 
 ```go
 func EncodeLiquidityInfo(liquidityInfo *LiquidityInfo) (*LiquidityInfoVariable, error)
@@ -2569,7 +2631,7 @@ func EncodeLiquidityInfo(liquidityInfo *LiquidityInfo) (*LiquidityInfoVariable, 
 
 
 <a name="LiquidityInfoVariable.Save"></a>
-### func \(\*LiquidityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L168>)
+### func \(\*LiquidityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L202>)
 
 ```go
 func (liq *LiquidityInfoVariable) Save(context db.DB) error
@@ -2578,7 +2640,7 @@ func (liq *LiquidityInfoVariable) Save(context db.DB) error
 
 
 <a name="LiquidityStakeByExpirationTime"></a>
-## type [LiquidityStakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L496>)
+## type [LiquidityStakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L530>)
 
 
 
@@ -2587,7 +2649,7 @@ type LiquidityStakeByExpirationTime []*LiquidityStakeEntry
 ```
 
 <a name="LiquidityStakeByExpirationTime.Len"></a>
-### func \(LiquidityStakeByExpirationTime\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L498>)
+### func \(LiquidityStakeByExpirationTime\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L532>)
 
 ```go
 func (a LiquidityStakeByExpirationTime) Len() int
@@ -2596,7 +2658,7 @@ func (a LiquidityStakeByExpirationTime) Len() int
 
 
 <a name="LiquidityStakeByExpirationTime.Less"></a>
-### func \(LiquidityStakeByExpirationTime\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L500>)
+### func \(LiquidityStakeByExpirationTime\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L534>)
 
 ```go
 func (a LiquidityStakeByExpirationTime) Less(i, j int) bool
@@ -2605,7 +2667,7 @@ func (a LiquidityStakeByExpirationTime) Less(i, j int) bool
 
 
 <a name="LiquidityStakeByExpirationTime.Swap"></a>
-### func \(LiquidityStakeByExpirationTime\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L499>)
+### func \(LiquidityStakeByExpirationTime\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L533>)
 
 ```go
 func (a LiquidityStakeByExpirationTime) Swap(i, j int)
@@ -2614,7 +2676,7 @@ func (a LiquidityStakeByExpirationTime) Swap(i, j int)
 
 
 <a name="LiquidityStakeEntry"></a>
-## type [LiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L307-L316>)
+## type [LiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L341-L350>)
 
 
 
@@ -2632,7 +2694,7 @@ type LiquidityStakeEntry struct {
 ```
 
 <a name="GetAllLiquidityStakeEntries"></a>
-### func [GetAllLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L477>)
+### func [GetAllLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L511>)
 
 ```go
 func GetAllLiquidityStakeEntries(context db.DB) []*LiquidityStakeEntry
@@ -2641,7 +2703,7 @@ func GetAllLiquidityStakeEntries(context db.DB) []*LiquidityStakeEntry
 
 
 <a name="GetLiquidityStakeEntry"></a>
-### func [GetLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L378>)
+### func [GetLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L412>)
 
 ```go
 func GetLiquidityStakeEntry(context db.DB, id types.Hash, address types.Address) (*LiquidityStakeEntry, error)
@@ -2650,7 +2712,7 @@ func GetLiquidityStakeEntry(context db.DB, id types.Hash, address types.Address)
 
 
 <a name="GetLiquidityStakeListByAddress"></a>
-### func [GetLiquidityStakeListByAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L457>)
+### func [GetLiquidityStakeListByAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L491>)
 
 ```go
 func GetLiquidityStakeListByAddress(context db.DB, address types.Address) ([]*LiquidityStakeEntry, *big.Int, *big.Int, error)
@@ -2659,7 +2721,7 @@ func GetLiquidityStakeListByAddress(context db.DB, address types.Address) ([]*Li
 Returns all \*active\* stake entries for an address
 
 <a name="parseLiquidityStakeEntry"></a>
-### func [parseLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L359>)
+### func [parseLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L393>)
 
 ```go
 func parseLiquidityStakeEntry(key []byte, data []byte) (*LiquidityStakeEntry, error)
@@ -2668,7 +2730,7 @@ func parseLiquidityStakeEntry(key []byte, data []byte) (*LiquidityStakeEntry, er
 
 
 <a name="LiquidityStakeEntry.Delete"></a>
-### func \(\*LiquidityStakeEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L331>)
+### func \(\*LiquidityStakeEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L365>)
 
 ```go
 func (stake *LiquidityStakeEntry) Delete(context db.DB) error
@@ -2677,7 +2739,7 @@ func (stake *LiquidityStakeEntry) Delete(context db.DB) error
 
 
 <a name="LiquidityStakeEntry.MarshalJSON"></a>
-### func \(\*LiquidityStakeEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L436>)
+### func \(\*LiquidityStakeEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L470>)
 
 ```go
 func (stake *LiquidityStakeEntry) MarshalJSON() ([]byte, error)
@@ -2686,7 +2748,7 @@ func (stake *LiquidityStakeEntry) MarshalJSON() ([]byte, error)
 
 
 <a name="LiquidityStakeEntry.Save"></a>
-### func \(\*LiquidityStakeEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L318>)
+### func \(\*LiquidityStakeEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L352>)
 
 ```go
 func (stake *LiquidityStakeEntry) Save(context db.DB) error
@@ -2695,7 +2757,7 @@ func (stake *LiquidityStakeEntry) Save(context db.DB) error
 
 
 <a name="LiquidityStakeEntry.ToLiquidityStakeEntry"></a>
-### func \(\*LiquidityStakeEntry\) [ToLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L422>)
+### func \(\*LiquidityStakeEntry\) [ToLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L456>)
 
 ```go
 func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMarshal
@@ -2704,7 +2766,7 @@ func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMa
 
 
 <a name="LiquidityStakeEntry.UnmarshalJSON"></a>
-### func \(\*LiquidityStakeEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L440>)
+### func \(\*LiquidityStakeEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L474>)
 
 ```go
 func (stake *LiquidityStakeEntry) UnmarshalJSON(data []byte) error
@@ -2713,7 +2775,7 @@ func (stake *LiquidityStakeEntry) UnmarshalJSON(data []byte) error
 
 
 <a name="LiquidityStakeEntryMarshal"></a>
-## type [LiquidityStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L411-L420>)
+## type [LiquidityStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L445-L454>)
 
 
 
@@ -2945,7 +3007,7 @@ type ParamRetrieveAssets struct {
 ```
 
 <a name="Phase"></a>
-## type [Phase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L167-L178>)
+## type [Phase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L189-L200>)
 
 
 
@@ -2965,7 +3027,7 @@ type Phase struct {
 ```
 
 <a name="GetPhaseEntry"></a>
-### func [GetPhaseEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L289>)
+### func [GetPhaseEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L311>)
 
 ```go
 func GetPhaseEntry(context db.DB, id types.Hash) (*Phase, error)
@@ -2974,7 +3036,7 @@ func GetPhaseEntry(context db.DB, id types.Hash) (*Phase, error)
 
 
 <a name="parsePhase"></a>
-### func [parsePhase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L256>)
+### func [parsePhase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L278>)
 
 ```go
 func parsePhase(data []byte) *Phase
@@ -2983,7 +3045,7 @@ func parsePhase(data []byte) *Phase
 
 
 <a name="Phase.Data"></a>
-### func \(\*Phase\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L240>)
+### func \(\*Phase\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L262>)
 
 ```go
 func (phase *Phase) Data() []byte
@@ -2992,7 +3054,7 @@ func (phase *Phase) Data() []byte
 
 
 <a name="Phase.Delete"></a>
-### func \(\*Phase\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L234>)
+### func \(\*Phase\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L256>)
 
 ```go
 func (phase *Phase) Delete(context db.DB)
@@ -3001,7 +3063,7 @@ func (phase *Phase) Delete(context db.DB)
 
 
 <a name="Phase.Key"></a>
-### func \(\*Phase\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L237>)
+### func \(\*Phase\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L259>)
 
 ```go
 func (phase *Phase) Key() []byte
@@ -3010,7 +3072,7 @@ func (phase *Phase) Key() []byte
 
 
 <a name="Phase.MarshalJSON"></a>
-### func \(\*Phase\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L209>)
+### func \(\*Phase\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L231>)
 
 ```go
 func (phase *Phase) MarshalJSON() ([]byte, error)
@@ -3019,7 +3081,7 @@ func (phase *Phase) MarshalJSON() ([]byte, error)
 
 
 <a name="Phase.Save"></a>
-### func \(\*Phase\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L231>)
+### func \(\*Phase\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L253>)
 
 ```go
 func (phase *Phase) Save(context db.DB)
@@ -3028,7 +3090,7 @@ func (phase *Phase) Save(context db.DB)
 
 
 <a name="Phase.ToProjectMarshal"></a>
-### func \(\*Phase\) [ToProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L193>)
+### func \(\*Phase\) [ToProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L215>)
 
 ```go
 func (phase *Phase) ToProjectMarshal() *PhaseMarshal
@@ -3037,7 +3099,7 @@ func (phase *Phase) ToProjectMarshal() *PhaseMarshal
 
 
 <a name="Phase.UnmarshalJSON"></a>
-### func \(\*Phase\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L213>)
+### func \(\*Phase\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L235>)
 
 ```go
 func (phase *Phase) UnmarshalJSON(data []byte) error
@@ -3046,7 +3108,7 @@ func (phase *Phase) UnmarshalJSON(data []byte) error
 
 
 <a name="PhaseMarshal"></a>
-## type [PhaseMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L180-L191>)
+## type [PhaseMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L202-L213>)
 
 
 
@@ -3066,9 +3128,9 @@ type PhaseMarshal struct {
 ```
 
 <a name="PillarEpochHistory"></a>
-## type [PillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L432-L440>)
+## type [PillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L496-L504>)
 
-
+PillarEpochHistory is the per\-\(pillar, epoch\) historical record: the reward\-split percentages active at the time of the epoch, the produced/expected block counts, and the weighted stake. Persisted at reward\-distribution time so that after\-the\-fact rewards calculations remain stable even when pillar metadata changes later.
 
 ```go
 type PillarEpochHistory struct {
@@ -3083,7 +3145,7 @@ type PillarEpochHistory struct {
 ```
 
 <a name="GetPillarEpochHistoryList"></a>
-### func [GetPillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L492>)
+### func [GetPillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L556>)
 
 ```go
 func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHistory, error)
@@ -3092,7 +3154,7 @@ func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHisto
 
 
 <a name="parsePillarEpochHistoryEntry"></a>
-### func [parsePillarEpochHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L475>)
+### func [parsePillarEpochHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L539>)
 
 ```go
 func parsePillarEpochHistoryEntry(key, data []byte) (*PillarEpochHistory, error)
@@ -3101,7 +3163,7 @@ func parsePillarEpochHistoryEntry(key, data []byte) (*PillarEpochHistory, error)
 
 
 <a name="PillarEpochHistory.MarshalJSON"></a>
-### func \(\*PillarEpochHistory\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L537>)
+### func \(\*PillarEpochHistory\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L604>)
 
 ```go
 func (g *PillarEpochHistory) MarshalJSON() ([]byte, error)
@@ -3110,7 +3172,7 @@ func (g *PillarEpochHistory) MarshalJSON() ([]byte, error)
 
 
 <a name="PillarEpochHistory.Save"></a>
-### func \(\*PillarEpochHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L442>)
+### func \(\*PillarEpochHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L506>)
 
 ```go
 func (peh *PillarEpochHistory) Save(context db.DB) error
@@ -3119,7 +3181,7 @@ func (peh *PillarEpochHistory) Save(context db.DB) error
 
 
 <a name="PillarEpochHistory.ToPillarEpochHistoryMarshal"></a>
-### func \(\*PillarEpochHistory\) [ToPillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L524>)
+### func \(\*PillarEpochHistory\) [ToPillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L591>)
 
 ```go
 func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMarshal
@@ -3128,7 +3190,7 @@ func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMa
 
 
 <a name="PillarEpochHistory.UnmarshalJSON"></a>
-### func \(\*PillarEpochHistory\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L541>)
+### func \(\*PillarEpochHistory\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L608>)
 
 ```go
 func (g *PillarEpochHistory) UnmarshalJSON(data []byte) error
@@ -3137,9 +3199,9 @@ func (g *PillarEpochHistory) UnmarshalJSON(data []byte) error
 
 
 <a name="PillarEpochHistoryMarshal"></a>
-## type [PillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L514-L522>)
+## type [PillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L581-L589>)
 
-
+PillarEpochHistoryMarshal is the JSON\-friendly twin of [PillarEpochHistory](<#PillarEpochHistory>) \(Weight as a string so it round\-trips through clients without big\-integer support\).
 
 ```go
 type PillarEpochHistoryMarshal struct {
@@ -3154,9 +3216,9 @@ type PillarEpochHistoryMarshal struct {
 ```
 
 <a name="PillarInfo"></a>
-## type [PillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L125-L136>)
+## type [PillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L170-L181>)
 
-
+PillarInfo is the on\-chain registration of one pillar: identifying name, the producing\-key address used to sign momentums, the address rewards withdraw to, the staking \(registration\) address, the locked ZNN amount, the registration / revoke timestamps, the reward split percentages, and the [LegacyPillarType](<#ABIPillars>) / [NormalPillarType](<#ABIPillars>) discriminator.
 
 ```go
 type PillarInfo struct {
@@ -3174,7 +3236,7 @@ type PillarInfo struct {
 ```
 
 <a name="GetPillarInfo"></a>
-### func [GetPillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L175>)
+### func [GetPillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L222>)
 
 ```go
 func GetPillarInfo(context db.DB, name string) (*PillarInfo, error)
@@ -3183,7 +3245,7 @@ func GetPillarInfo(context db.DB, name string) (*PillarInfo, error)
 
 
 <a name="GetPillarsList"></a>
-### func [GetPillarsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L183>)
+### func [GetPillarsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L230>)
 
 ```go
 func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*PillarInfo, error)
@@ -3192,7 +3254,7 @@ func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*Pillar
 
 
 <a name="parsePillarInfo"></a>
-### func [parsePillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L164>)
+### func [parsePillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L211>)
 
 ```go
 func parsePillarInfo(data []byte) (*PillarInfo, error)
@@ -3201,16 +3263,16 @@ func parsePillarInfo(data []byte) (*PillarInfo, error)
 
 
 <a name="PillarInfo.IsActive"></a>
-### func \(\*PillarInfo\) [IsActive](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L138>)
+### func \(\*PillarInfo\) [IsActive](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L185>)
 
 ```go
 func (pillar *PillarInfo) IsActive() bool
 ```
 
-
+IsActive reports whether the pillar is still operational \(i.e., RevokeTime has not been set\).
 
 <a name="PillarInfo.Save"></a>
-### func \(\*PillarInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L141>)
+### func \(\*PillarInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L188>)
 
 ```go
 func (pillar *PillarInfo) Save(context db.DB) error
@@ -3295,9 +3357,9 @@ func (vote *PillarVote) Save(context db.DB)
 
 
 <a name="ProducingPillar"></a>
-## type [ProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L208-L211>)
+## type [ProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L258-L261>)
 
-
+ProducingPillar is the reverse\-index record from producing\-key address to pillar name. Lets the consensus layer resolve a momentum's signer to a registered pillar in O\(1\).
 
 ```go
 type ProducingPillar struct {
@@ -3307,7 +3369,7 @@ type ProducingPillar struct {
 ```
 
 <a name="GetProducingPillarName"></a>
-### func [GetProducingPillarName](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L257>)
+### func [GetProducingPillarName](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L307>)
 
 ```go
 func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPillar, error)
@@ -3316,7 +3378,7 @@ func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPil
 
 
 <a name="parseProducingPillar"></a>
-### func [parseProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L240>)
+### func [parseProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L290>)
 
 ```go
 func parseProducingPillar(key []byte, data []byte) (*ProducingPillar, error)
@@ -3325,7 +3387,7 @@ func parseProducingPillar(key []byte, data []byte) (*ProducingPillar, error)
 
 
 <a name="ProducingPillar.Save"></a>
-### func \(\*ProducingPillar\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L213>)
+### func \(\*ProducingPillar\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L263>)
 
 ```go
 func (ppName *ProducingPillar) Save(context db.DB) error
@@ -3334,7 +3396,7 @@ func (ppName *ProducingPillar) Save(context db.DB) error
 
 
 <a name="Project"></a>
-## type [Project](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L104-L116>)
+## type [Project](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L126-L138>)
 
 
 
@@ -3355,7 +3417,7 @@ type Project struct {
 ```
 
 <a name="GetProjectEntry"></a>
-### func [GetProjectEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L278>)
+### func [GetProjectEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L300>)
 
 ```go
 func GetProjectEntry(context db.DB, id types.Hash) (*Project, error)
@@ -3364,7 +3426,7 @@ func GetProjectEntry(context db.DB, id types.Hash) (*Project, error)
 
 
 <a name="GetProjectList"></a>
-### func [GetProjectList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L262>)
+### func [GetProjectList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L284>)
 
 ```go
 func GetProjectList(context db.DB) ([]*Project, error)
@@ -3373,7 +3435,7 @@ func GetProjectList(context db.DB) ([]*Project, error)
 
 
 <a name="parseProject"></a>
-### func [parseProject](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L161>)
+### func [parseProject](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L183>)
 
 ```go
 func parseProject(data []byte) *Project
@@ -3382,7 +3444,7 @@ func parseProject(data []byte) *Project
 
 
 <a name="Project.Data"></a>
-### func \(\*Project\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L136>)
+### func \(\*Project\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L158>)
 
 ```go
 func (project *Project) Data() []byte
@@ -3391,7 +3453,7 @@ func (project *Project) Data() []byte
 
 
 <a name="Project.Delete"></a>
-### func \(\*Project\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L130>)
+### func \(\*Project\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L152>)
 
 ```go
 func (project *Project) Delete(context db.DB)
@@ -3400,7 +3462,7 @@ func (project *Project) Delete(context db.DB)
 
 
 <a name="Project.GetCurrentPhase"></a>
-### func \(\*Project\) [GetCurrentPhase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L152>)
+### func \(\*Project\) [GetCurrentPhase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L174>)
 
 ```go
 func (project *Project) GetCurrentPhase(context db.DB) (*Phase, error)
@@ -3409,7 +3471,7 @@ func (project *Project) GetCurrentPhase(context db.DB) (*Phase, error)
 
 
 <a name="Project.Key"></a>
-### func \(\*Project\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L133>)
+### func \(\*Project\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L155>)
 
 ```go
 func (project *Project) Key() []byte
@@ -3418,7 +3480,7 @@ func (project *Project) Key() []byte
 
 
 <a name="Project.Save"></a>
-### func \(\*Project\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L127>)
+### func \(\*Project\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L149>)
 
 ```go
 func (project *Project) Save(context db.DB)
@@ -3496,9 +3558,9 @@ type RedeemParam struct {
 ```
 
 <a name="RegisterParam"></a>
-## type [RegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L112-L118>)
+## type [RegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L146-L152>)
 
-
+RegisterParam is the call\-shape for [RegisterMethodName](<#jsonPillars>) — the pillar's display name, its producing\-key \(block authoring\) address, the reward\-withdrawal address, and the two split percentages \(block reward vs delegation reward\).
 
 ```go
 type RegisterParam struct {
@@ -3844,7 +3906,7 @@ func (sentinel *SentinelInfoKey) Key() []byte
 Key returns the database key for this sentinel \(\`sentinelInfoPrefix || owner\`\).
 
 <a name="SetAdditionalRewardParam"></a>
-## type [SetAdditionalRewardParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L302-L305>)
+## type [SetAdditionalRewardParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L336-L339>)
 
 
 
@@ -4328,7 +4390,7 @@ func (p *TokenPairParam) Hash() []byte
 
 
 <a name="TokenTuple"></a>
-## type [TokenTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L245-L250>)
+## type [TokenTuple](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L279-L284>)
 
 
 
@@ -4342,7 +4404,7 @@ type TokenTuple struct {
 ```
 
 <a name="TokenTuple.MarshalJSON"></a>
-### func \(\*TokenTuple\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L269>)
+### func \(\*TokenTuple\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L303>)
 
 ```go
 func (s *TokenTuple) MarshalJSON() ([]byte, error)
@@ -4351,7 +4413,7 @@ func (s *TokenTuple) MarshalJSON() ([]byte, error)
 
 
 <a name="TokenTuple.ToTokenTupleMarshal"></a>
-### func \(\*TokenTuple\) [ToTokenTupleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L259>)
+### func \(\*TokenTuple\) [ToTokenTupleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L293>)
 
 ```go
 func (s *TokenTuple) ToTokenTupleMarshal() *TokenTupleMarshal
@@ -4360,7 +4422,7 @@ func (s *TokenTuple) ToTokenTupleMarshal() *TokenTupleMarshal
 
 
 <a name="TokenTuple.UnmarshalJSON"></a>
-### func \(\*TokenTuple\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L273>)
+### func \(\*TokenTuple\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L307>)
 
 ```go
 func (s *TokenTuple) UnmarshalJSON(data []byte) error
@@ -4369,7 +4431,7 @@ func (s *TokenTuple) UnmarshalJSON(data []byte) error
 
 
 <a name="TokenTupleMarshal"></a>
-## type [TokenTupleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L252-L257>)
+## type [TokenTupleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L286-L291>)
 
 
 
@@ -4383,7 +4445,7 @@ type TokenTupleMarshal struct {
 ```
 
 <a name="TokenTuplesParam"></a>
-## type [TokenTuplesParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L295-L300>)
+## type [TokenTuplesParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L329-L334>)
 
 
 
@@ -4397,7 +4459,7 @@ type TokenTuplesParam struct {
 ```
 
 <a name="UnlockHtlcParam"></a>
-## type [UnlockHtlcParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L114-L117>)
+## type [UnlockHtlcParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L141-L144>)
 
 
 

@@ -15,6 +15,12 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// jsonPillars is the canonical Solidity-shaped ABI for the Pillar
+// contract: registration (Register, RegisterLegacy), updates
+// (UpdatePillar, Update), revocation (Revoke), delegation
+// (Delegate, Undelegate), QSR deposit/withdraw, reward collection,
+// plus the storage record shapes (pillarInfo, producingPillarName,
+// LegacyPillarEntry, delegationInfo, pillarEpochHistory).
 const (
 	jsonPillars = `
 	[
@@ -79,13 +85,22 @@ const (
 		]}
 	]`
 
-	RegisterMethodName       = "Register"
+	// RegisterMethodName names the standard pillar-registration
+	// method.
+	RegisterMethodName = "Register"
+	// LegacyRegisterMethodName names the legacy-claim-backed
+	// registration method (consumes a legacy-pillar slot via a
+	// secp256k1 signature).
 	LegacyRegisterMethodName = "RegisterLegacy"
 
+	// UpdatePillarMethodName names the pillar-metadata-update method.
 	UpdatePillarMethodName = "UpdatePillar"
-	RevokeMethodName       = "Revoke"
-	DelegateMethodName     = "Delegate"
-	UndelegateMethodName   = "Undelegate"
+	// RevokeMethodName names the pillar-revocation method.
+	RevokeMethodName = "Revoke"
+	// DelegateMethodName names the delegate-to-pillar method.
+	DelegateMethodName = "Delegate"
+	// UndelegateMethodName names the un-delegate method.
+	UndelegateMethodName = "Undelegate"
 
 	pillarInfoVariableName          = "pillarInfo"
 	producingPillarNameVariableName = "producingPillarName"
@@ -94,8 +109,17 @@ const (
 	pillarEpochHistoryVariableName  = "pillarEpochHistory"
 )
 
+// ABIPillars is the parsed [abi.ABIContract] for the Pillar
+// contract. The per-prefix key namespaces follow:
+// 1=pillarInfo, 2=producingPillarName (reverse index by producer),
+// 3=LegacyPillarEntry, 4=delegationInfo, 5=pillarEpochHistory.
+//
+// Pillar-type discriminators tag each pillar with how it was
+// registered ([LegacyPillarType] consumed a legacy slot;
+// [NormalPillarType] paid the QSR-burn price). [AnyPillarType] is
+// the wildcard for queries.
 var (
-	// ABIPillars is abi definition of pillar contract
+	// ABIPillars is abi definition of pillar contract.
 	ABIPillars = abi.JSONToABIContract(strings.NewReader(jsonPillars))
 
 	pillarInfoKeyPrefix          = []byte{1}
@@ -104,11 +128,21 @@ var (
 	delegationInfoKeyPrefix      = []byte{4}
 	pillarEpochHistoryKeyPrefix  = []byte{5}
 
-	AnyPillarType    = uint8(0)
+	// AnyPillarType is the wildcard used by queries that should
+	// match either pillar kind.
+	AnyPillarType = uint8(0)
+	// LegacyPillarType marks pillars registered via
+	// [LegacyRegisterMethodName] (consumed a legacy claim slot).
 	LegacyPillarType = uint8(1)
+	// NormalPillarType marks pillars registered via the standard
+	// [RegisterMethodName] (paid the QSR-burn price).
 	NormalPillarType = uint8(2)
 )
 
+// RegisterParam is the call-shape for [RegisterMethodName] — the
+// pillar's display name, its producing-key (block authoring)
+// address, the reward-withdrawal address, and the two split
+// percentages (block reward vs delegation reward).
 type RegisterParam struct {
 	Name                         string
 	ProducerAddress              types.Address
@@ -116,12 +150,23 @@ type RegisterParam struct {
 	GiveBlockRewardPercentage    uint8
 	GiveDelegateRewardPercentage uint8
 }
+
+// LegacyRegisterParam is the call-shape for
+// [LegacyRegisterMethodName] — adds the legacy-chain public key and
+// secp256k1 signature proving the legacy holder's authority.
 type LegacyRegisterParam struct {
 	RegisterParam
 	PublicKey string
 	Signature string
 }
 
+// PillarInfo is the on-chain registration of one pillar:
+// identifying name, the producing-key address used to sign
+// momentums, the address rewards withdraw to, the staking
+// (registration) address, the locked ZNN amount, the
+// registration / revoke timestamps, the reward split
+// percentages, and the [LegacyPillarType] / [NormalPillarType]
+// discriminator.
 type PillarInfo struct {
 	Name                         string
 	BlockProducingAddress        types.Address
@@ -135,6 +180,8 @@ type PillarInfo struct {
 	PillarType                   uint8
 }
 
+// IsActive reports whether the pillar is still operational
+// (i.e., RevokeTime has not been set).
 func (pillar *PillarInfo) IsActive() bool {
 	return pillar.RevokeTime == 0
 }
@@ -205,6 +252,9 @@ func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*Pillar
 	return list, nil
 }
 
+// ProducingPillar is the reverse-index record from
+// producing-key address to pillar name. Lets the consensus layer
+// resolve a momentum's signer to a registered pillar in O(1).
 type ProducingPillar struct {
 	Producing *types.Address
 	Name      string
@@ -263,6 +313,10 @@ func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPil
 	}
 }
 
+// DelegationInfo is one delegation record: a backer address
+// directing its weight to a named pillar. One record per backer
+// (delegations are exclusive — a backer cannot split across
+// pillars).
 type DelegationInfo struct {
 	Backer types.Address
 	Name   string
@@ -346,6 +400,10 @@ func GetDelegationsList(context db.DB) ([]*DelegationInfo, error) {
 	return list, nil
 }
 
+// LegacyPillarEntry is the on-chain claim of one legacy holder's
+// pillar slot pool. PillarCount is decremented every time a
+// legacy registration consumes a slot; the entry is deleted when
+// it reaches zero.
 type LegacyPillarEntry struct {
 	PillarCount uint8      `json:"pillarCount"`
 	KeyIdHash   types.Hash `json:"keyIdHash"`
@@ -429,6 +487,12 @@ func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error) {
 	return list, nil
 }
 
+// PillarEpochHistory is the per-(pillar, epoch) historical
+// record: the reward-split percentages active at the time of the
+// epoch, the produced/expected block counts, and the weighted
+// stake. Persisted at reward-distribution time so that
+// after-the-fact rewards calculations remain stable even when
+// pillar metadata changes later.
 type PillarEpochHistory struct {
 	Name                         string   `json:"name"`
 	Epoch                        uint64   `json:"epoch"`
@@ -511,6 +575,9 @@ func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHisto
 	return list, nil
 }
 
+// PillarEpochHistoryMarshal is the JSON-friendly twin of
+// [PillarEpochHistory] (Weight as a string so it round-trips
+// through clients without big-integer support).
 type PillarEpochHistoryMarshal struct {
 	Name                         string `json:"name"`
 	Epoch                        uint64 `json:"epoch"`

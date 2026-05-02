@@ -16,6 +16,12 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// jsonHtlc is the canonical Solidity-shaped ABI for the HTLC
+// (Hashed Time-Lock Contract) contract: Create / Reclaim / Unlock
+// for the per-entry lifecycle, and DenyProxyUnlock /
+// AllowProxyUnlock for the per-account proxy-unlock toggle. Stored
+// records: htlcInfo (one per HTLC) and htlcProxyUnlockInfo (one
+// per address).
 const (
 	jsonHtlc = `
 	[
@@ -53,11 +59,23 @@ const (
 		]}
 	]`
 
-	CreateHtlcMethodName  = "Create"
+	// CreateHtlcMethodName names the HTLC-creation method:
+	// caller locks tokens behind a hash + expiration time.
+	CreateHtlcMethodName = "Create"
+	// ReclaimHtlcMethodName names the post-expiration reclaim
+	// method (sender retrieves their tokens once expirationTime is
+	// reached without a successful unlock).
 	ReclaimHtlcMethodName = "Reclaim"
-	UnlockHtlcMethodName  = "Unlock"
+	// UnlockHtlcMethodName names the preimage-redeem method (the
+	// hash-locked address claims the tokens by revealing the
+	// preimage, before expiration).
+	UnlockHtlcMethodName = "Unlock"
 
-	DenyHtlcProxyUnlockMethodName  = "DenyProxyUnlock"
+	// DenyHtlcProxyUnlockMethodName names the per-account
+	// proxy-unlock-deny toggle.
+	DenyHtlcProxyUnlockMethodName = "DenyProxyUnlock"
+	// AllowHtlcProxyUnlockMethodName names the per-account
+	// proxy-unlock-allow toggle.
 	AllowHtlcProxyUnlockMethodName = "AllowProxyUnlock"
 
 	// re: reclaim vs revoke
@@ -70,16 +88,25 @@ const (
 	variableNameHtlcProxyUnlockInfo = "htlcProxyUnlockInfo"
 )
 
+// Hash-type discriminators selecting the digest algorithm used by
+// an HTLC entry's hash lock.
 const (
+	// HashTypeSHA3 selects SHA3-256.
 	HashTypeSHA3 uint8 = iota
+	// HashTypeSHA256 selects SHA-256.
 	HashTypeSHA256
 )
 
+// HashTypeDigestSizes maps each hash-type discriminator to its
+// canonical digest length in bytes (used to validate hashLock
+// length on Create).
 var HashTypeDigestSizes = map[uint8]uint8{
 	HashTypeSHA3:   32,
 	HashTypeSHA256: 32,
 }
 
+// ABIHtlc is the parsed [abi.ABIContract] for the HTLC contract.
+// 1=htlcInfo (per-HTLC), 2=htlcProxyUnlockInfo (per-address).
 var (
 	ABIHtlc = abi.JSONToABIContract(strings.NewReader(jsonHtlc))
 

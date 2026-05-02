@@ -17,6 +17,7 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// pillarLog is the per-contract logger; tagged with `contract=pillar`.
 var (
 	pillarLog = common.EmbeddedLogger.New("contract", "pillar")
 )
@@ -108,7 +109,12 @@ func checkAndRegisterPillar(context vm_context.AccountVmContext, param *definiti
 	return nil
 }
 
-// GetQsrCostForNextPillar returns PillarQsrStakeBaseAmount * PillarQsrStakeIncreaseAmount * len(definition.NormalPillarType)
+// GetQsrCostForNextPillar returns the QSR amount the next normal
+// pillar must burn to register: a base of
+// [constants.PillarQsrStakeBaseAmount] plus
+// [constants.PillarQsrStakeIncreaseAmount] times the current count
+// of [definition.NormalPillarType] pillars. Each successive normal
+// pillar costs more.
 func GetQsrCostForNextPillar(context vm_context.AccountVmContext) (*big.Int, error) {
 	pillarsList, err := definition.GetPillarsList(context.Storage(), true, definition.NormalPillarType)
 	if err != nil {
@@ -123,11 +129,14 @@ func GetQsrCostForNextPillar(context vm_context.AccountVmContext) (*big.Int, err
 	return currentCost, nil
 }
 
-// PillarGetRevokeStatus returns status and cooldown.
-// If Pillar *can* be revoked, returns
-// - true, timeWhileCanRevoke
-// If Pillar *can't* be revoked, returns
-// - false, timeUntilCanRevoke
+// PillarGetRevokeStatus reports whether old can be revoked at
+// momentum m, plus a cooldown delta. Pillars follow a repeating
+// (lock, revoke-window) cycle of length
+// [constants.PillarEpochLockTime] +
+// [constants.PillarEpochRevokeTime].
+//
+// If Pillar *can* be revoked, returns true, timeWhileCanRevoke.
+// If Pillar *can't* be revoked, returns false, timeUntilCanRevoke.
 func PillarGetRevokeStatus(old *definition.PillarInfo, m *nom.Momentum) (bool, int64) {
 	epochTime := (m.Timestamp.Unix() - old.RegistrationTime) % (constants.PillarEpochLockTime + constants.PillarEpochRevokeTime)
 	if epochTime < constants.PillarEpochLockTime {
@@ -137,6 +146,10 @@ func PillarGetRevokeStatus(old *definition.PillarInfo, m *nom.Momentum) (bool, i
 	}
 }
 
+// RegisterMethod implements normal pillar registration: locks the
+// configured ZNN amount sent with the call, burns the per-pillar
+// QSR price (computed dynamically by [GetQsrCostForNextPillar]),
+// and persists a [definition.PillarInfo] with [definition.NormalPillarType].
 type RegisterMethod struct {
 	MethodName string
 }
@@ -199,6 +212,11 @@ func (p *RegisterMethod) ReceiveBlock(context vm_context.AccountVmContext, sendB
 	}, nil
 }
 
+// LegacyRegisterMethod implements legacy-claim-backed pillar
+// registration: consumes a slot from a [definition.LegacyPillarEntry],
+// requires a secp256k1 signature proving authority, and pays only
+// the [constants.PillarQsrStakeBaseAmount] (the legacy-pillar
+// flat rate) instead of the dynamic ramp.
 type LegacyRegisterMethod struct {
 	MethodName string
 }
@@ -284,6 +302,10 @@ func (p *LegacyRegisterMethod) ReceiveBlock(context vm_context.AccountVmContext,
 	}, nil
 }
 
+// RevokeMethod implements pillar revocation: refunds the locked
+// ZNN once the lock window has elapsed (per
+// [PillarGetRevokeStatus]). QSR is not refunded — pillar
+// registration permanently consumes its QSR cost.
 type RevokeMethod struct {
 	MethodName string
 }
@@ -353,7 +375,10 @@ func (p *RevokeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 	}, nil
 }
 
-// Reward defines momentum reward details
+// pillarEpochReward bundles the breakdown of one pillar's reward
+// for one epoch: the delegation share, the block-production
+// share, the total, and the produced/expected counters that drive
+// it. Internal type used by [computeDetailedPillarReward].
 type pillarEpochReward struct {
 	DelegationReward *big.Int
 	BlockReward      *big.Int
@@ -575,6 +600,11 @@ func updatePillarRewards(context vm_context.AccountVmContext) error {
 	}
 }
 
+// UpdatePillarMethod implements pillar metadata rotation: lets
+// the staker rotate the producing address, the reward-withdraw
+// address, and the reward split percentages. Producing-address
+// rotation goes through [checkAvailableProducingAddress] to keep
+// the reverse index consistent.
 type UpdatePillarMethod struct {
 	MethodName string
 }
@@ -660,6 +690,10 @@ func (p *UpdatePillarMethod) ReceiveBlock(context vm_context.AccountVmContext, s
 	return nil, nil
 }
 
+// DelegateMethod implements delegation: records the caller as a
+// backer of the named pillar. Replaces any existing delegation
+// (delegations are exclusive). The pillar must exist and be
+// active.
 type DelegateMethod struct {
 	MethodName string
 }
@@ -717,6 +751,9 @@ func (p *DelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendB
 	return nil, nil
 }
 
+// UndelegateMethod implements un-delegation: removes the caller's
+// delegation record so they can re-delegate elsewhere or stop
+// directing weight altogether.
 type UndelegateMethod struct {
 	MethodName string
 }
@@ -756,6 +793,9 @@ func (p *UndelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	return nil, nil
 }
 
+// UpdateEmbeddedPillarMethod is the periodic-update entry point
+// for the pillar contract: advances the per-epoch reward
+// computation via [updatePillarRewards].
 type UpdateEmbeddedPillarMethod struct {
 	MethodName string
 }

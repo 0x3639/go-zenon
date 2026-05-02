@@ -13,6 +13,17 @@ import (
 	"github.com/zenon-network/go-zenon/vm/abi"
 )
 
+// jsonLiquidity is the canonical Solidity-shaped ABI for the
+// Liquidity contract: liquidity-program funding (Fund, BurnZnn),
+// administered configuration (SetTokenTuple, SetAdditionalReward,
+// SetIsHalted), governance (ChangeAdministrator,
+// ProposeAdministrator, NominateGuardians, Emergency), staking
+// (LiquidityStake, CancelLiquidityStake, UnlockLiquidityStakeEntries),
+// and the periodic Update / Donate / CollectReward methods.
+//
+// Storage records: liquidityInfo (singleton), tokenTuple
+// (per-token configuration), liquidityStakeEntry (per-stake),
+// securityInfo (guardian / delay configuration).
 const (
 	jsonLiquidity = `
 	[
@@ -86,20 +97,38 @@ const (
 		]}
 	]`
 
-	FundMethodName                        = "Fund"
-	BurnZnnMethodName                     = "BurnZnn"
-	SetTokenTupleMethodName               = "SetTokenTuple"
-	LiquidityStakeMethodName              = "LiquidityStake"
-	CancelLiquidityStakeMethodName        = "CancelLiquidityStake"
+	// FundMethodName credits the liquidity reward pool from a
+	// caller-supplied transfer.
+	FundMethodName = "Fund"
+	// BurnZnnMethodName burns a portion of the liquidity reward
+	// pool via the Token contract.
+	BurnZnnMethodName = "BurnZnn"
+	// SetTokenTupleMethodName configures the per-token reward
+	// shares (administrator-only).
+	SetTokenTupleMethodName = "SetTokenTuple"
+	// LiquidityStakeMethodName locks tokens for liquidity rewards.
+	LiquidityStakeMethodName = "LiquidityStake"
+	// CancelLiquidityStakeMethodName begins unlocking a stake
+	// (refund follows after the lock window).
+	CancelLiquidityStakeMethodName = "CancelLiquidityStake"
+	// UnlockLiquidityStakeEntriesMethodName completes the unlock
+	// flow once the lock window has elapsed.
 	UnlockLiquidityStakeEntriesMethodName = "UnlockLiquidityStakeEntries"
-	SetAdditionalRewardMethodName         = "SetAdditionalReward"
-	SetIsHaltedMethodName                 = "SetIsHalted"
+	// SetAdditionalRewardMethodName credits extra rewards into
+	// the pool (administrator-only).
+	SetAdditionalRewardMethodName = "SetAdditionalReward"
+	// SetIsHaltedMethodName toggles the halted flag (no further
+	// staking when halted).
+	SetIsHaltedMethodName = "SetIsHalted"
 
 	liquidityInfoVariableName       = "liquidityInfo"
 	tokenTupleVariableName          = "tokenTuple"
 	liquidityStakeEntryVariableName = "liquidityStakeEntry"
 )
 
+// ABILiquidity is the parsed [abi.ABIContract] for the Liquidity
+// contract. 1=liquidityInfo (singleton config),
+// 2=liquidityStakeEntry (per-stake records).
 var (
 	ABILiquidity = abi.JSONToABIContract(strings.NewReader(jsonLiquidity))
 
@@ -107,6 +136,11 @@ var (
 	LiquidityStakeEntryKeyPrefix = []byte{2}
 )
 
+// LiquidityInfoVariable is the on-disk storage shape of the
+// liquidity-info singleton: administrator, halted flag,
+// accumulated rewards, and the byte-encoded token-tuple list.
+// LiquidityInfo (defined just below) is the runtime-decoded
+// twin with TokenTuples expanded to typed values.
 type LiquidityInfoVariable struct {
 	Administrator types.Address `json:"administrator"`
 	IsHalted      bool          `json:"isHalted"`

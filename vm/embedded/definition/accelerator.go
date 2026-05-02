@@ -12,11 +12,29 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// Project / phase status codes used by the Accelerator state
+// machine. Values progress: Voting → Active → Paid → Completed,
+// or to Closed if voting / payment fails. The discriminator is
+// stored in the project / phase records.
+//
+// jsonAccelerator is the canonical Solidity-shaped ABI for the
+// Accelerator contract: project lifecycle (CreateProject, AddPhase,
+// UpdatePhase, Update), pillar voting (VoteByName, VoteByProdAddress),
+// donations (Donate), and the per-project / per-phase storage
+// records.
 const (
+	// VotingStatus marks an entry that has been created and is in
+	// its voting window.
 	VotingStatus uint8 = iota
+	// ActiveStatus marks a project / phase whose vote passed; it
+	// is awaiting payout.
 	ActiveStatus
+	// PaidStatus marks a phase that has been funded.
 	PaidStatus
+	// ClosedStatus marks an entry that did not pass voting.
 	ClosedStatus
+	// CompletedStatus marks a project whose every phase has been
+	// paid.
 	CompletedStatus
 
 	jsonAccelerator = `
@@ -85,9 +103,13 @@ const (
 		]}
 	]`
 
+	// CreateProjectMethodName names the project-creation method
+	// (caller pays [constants.ProjectCreationAmount] ZNN).
 	CreateProjectMethodName = "CreateProject"
-	AddPhaseMethodName      = "AddPhase"
-	UpdatePhaseMethodName   = "UpdatePhase"
+	// AddPhaseMethodName names the add-phase-to-project method.
+	AddPhaseMethodName = "AddPhase"
+	// UpdatePhaseMethodName names the phase-metadata-update method.
+	UpdatePhaseMethodName = "UpdatePhase"
 
 	ProjectVariableName = "project"
 	PhaseVariableName   = "phase"

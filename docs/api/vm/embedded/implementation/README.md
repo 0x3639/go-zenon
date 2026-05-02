@@ -436,7 +436,7 @@ var (
 )
 ```
 
-<a name="pillarLog"></a>
+<a name="pillarLog"></a>pillarLog is the per\-contract logger; tagged with \`contract=pillar\`.
 
 ```go
 var (
@@ -638,13 +638,13 @@ func GetMessageToSignEvm(data []byte) ([]byte, error)
 
 
 <a name="GetQsrCostForNextPillar"></a>
-## func [GetQsrCostForNextPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L112>)
+## func [GetQsrCostForNextPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L118>)
 
 ```go
 func GetQsrCostForNextPillar(context vm_context.AccountVmContext) (*big.Int, error)
 ```
 
-GetQsrCostForNextPillar returns PillarQsrStakeBaseAmount \* PillarQsrStakeIncreaseAmount \* len\(definition.NormalPillarType\)
+GetQsrCostForNextPillar returns the QSR amount the next normal pillar must burn to register: a base of [constants.PillarQsrStakeBaseAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PillarQsrStakeBaseAmount>) plus [constants.PillarQsrStakeIncreaseAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PillarQsrStakeIncreaseAmount>) times the current count of [definition.NormalPillarType](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#NormalPillarType>) pillars. Each successive normal pillar costs more.
 
 <a name="GetSentinelRevokeStatus"></a>
 ## func [GetSentinelRevokeStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/sentinel.go#L35>)
@@ -719,13 +719,15 @@ func IsJSON(s string) bool
 
 
 <a name="PillarGetRevokeStatus"></a>
-## func [PillarGetRevokeStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L131>)
+## func [PillarGetRevokeStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L140>)
 
 ```go
 func PillarGetRevokeStatus(old *definition.PillarInfo, m *nom.Momentum) (bool, int64)
 ```
 
-PillarGetRevokeStatus returns status and cooldown. If Pillar \*can\* be revoked, returns \- true, timeWhileCanRevoke If Pillar \*can't\* be revoked, returns \- false, timeUntilCanRevoke
+PillarGetRevokeStatus reports whether old can be revoked at momentum m, plus a cooldown delta. Pillars follow a repeating \(lock, revoke\-window\) cycle of length [constants.PillarEpochLockTime](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PillarEpochLockTime>) \+ [constants.PillarEpochRevokeTime](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PillarEpochRevokeTime>).
+
+If Pillar \*can\* be revoked, returns true, timeWhileCanRevoke. If Pillar \*can't\* be revoked, returns false, timeUntilCanRevoke.
 
 <a name="PubKeyToKeyId"></a>
 ## func [PubKeyToKeyId](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/swap_utils.go#L51>)
@@ -827,7 +829,7 @@ Generic function to check if epoch can be updated, if true, update it and save
 - returns util.EpochUpdateNotDue if not due
 
 <a name="checkAndRegisterPillar"></a>
-## func [checkAndRegisterPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L66>)
+## func [checkAndRegisterPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L67>)
 
 ```go
 func checkAndRegisterPillar(context vm_context.AccountVmContext, param *definition.RegisterParam, ownerAddress types.Address, pillarType uint8) error
@@ -836,7 +838,7 @@ func checkAndRegisterPillar(context vm_context.AccountVmContext, param *definiti
 Used for registration \- checks the validity of pillar information \- registers pillar and producing address in DB
 
 <a name="checkAvailableProducingAddress"></a>
-## func [checkAvailableProducingAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L37>)
+## func [checkAvailableProducingAddress](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L38>)
 
 ```go
 func checkAvailableProducingAddress(context vm_context.AccountVmContext, producing types.Address, name string) error
@@ -881,7 +883,7 @@ func checkPhaseFunds(context vm_context.AccountVmContext, project *definition.Pr
 
 
 <a name="checkPillarNameStatic"></a>
-## func [checkPillarNameStatic](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L25>)
+## func [checkPillarNameStatic](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L26>)
 
 ```go
 func checkPillarNameStatic(name string) error
@@ -890,7 +892,7 @@ func checkPillarNameStatic(name string) error
 Performs basic static checks to determine if a pillar name is valid
 
 <a name="checkPillarPercentages"></a>
-## func [checkPillarPercentages](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L53>)
+## func [checkPillarPercentages](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L54>)
 
 ```go
 func checkPillarPercentages(param *definition.RegisterParam) error
@@ -935,7 +937,7 @@ func checkUnwrapMetadataStatic(param *definition.UnwrapTokenParam) error
 
 
 <a name="computeDetailedPillarReward"></a>
-## func [computeDetailedPillarReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L367>)
+## func [computeDetailedPillarReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L392>)
 
 ```go
 func computeDetailedPillarReward(context vm_context.AccountVmContext, epoch uint64) error
@@ -962,7 +964,7 @@ func computeLiquidityStakeRewardsForEpoch(context vm_context.AccountVmContext, e
 
 
 <a name="computePillarsRewardForEpoch"></a>
-## func [computePillarsRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L489>)
+## func [computePillarsRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L514>)
 
 ```go
 func computePillarsRewardForEpoch(context vm_context.AccountVmContext, epoch uint64) (m map[string]*pillarEpochReward, err error)
@@ -1081,7 +1083,7 @@ func updateLiquidityStakeRewards(context vm_context.AccountVmContext) ([]*nom.Ac
 
 
 <a name="updatePillarRewards"></a>
-## func [updatePillarRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L559>)
+## func [updatePillarRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L584>)
 
 ```go
 func updatePillarRewards(context vm_context.AccountVmContext) error
@@ -1697,9 +1699,9 @@ func (p *CreateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock checks the caller is the configured spork address or the community address, the call carries no value, and the encoded name/description satisfy \[checkSporkMetaDataStatic\]. Repacks block.Data into canonical form so descendants see a stable encoding.
 
 <a name="DelegateMethod"></a>
-## type [DelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L663-L665>)
+## type [DelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L697-L699>)
 
-
+DelegateMethod implements delegation: records the caller as a backer of the named pillar. Replaces any existing delegation \(delegations are exclusive\). The pillar must exist and be active.
 
 ```go
 type DelegateMethod struct {
@@ -1708,7 +1710,7 @@ type DelegateMethod struct {
 ```
 
 <a name="DelegateMethod.GetPlasma"></a>
-### func \(\*DelegateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L667>)
+### func \(\*DelegateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L701>)
 
 ```go
 func (p *DelegateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1717,7 +1719,7 @@ func (p *DelegateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, 
 
 
 <a name="DelegateMethod.ReceiveBlock"></a>
-### func \(\*DelegateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L688>)
+### func \(\*DelegateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L722>)
 
 ```go
 func (p *DelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1726,7 +1728,7 @@ func (p *DelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendB
 
 
 <a name="DelegateMethod.ValidateSendBlock"></a>
-### func \(\*DelegateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L670>)
+### func \(\*DelegateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L704>)
 
 ```go
 func (p *DelegateMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2086,9 +2088,9 @@ func (p *IssueMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock requires exactly [constants.TokenIssueAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#TokenIssueAmount>) ZNN as the issuance fee and checks the parameters via \[checkToken\].
 
 <a name="LegacyRegisterMethod"></a>
-## type [LegacyRegisterMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L202-L204>)
+## type [LegacyRegisterMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L220-L222>)
 
-
+LegacyRegisterMethod implements legacy\-claim\-backed pillar registration: consumes a slot from a [definition.LegacyPillarEntry](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#LegacyPillarEntry>), requires a secp256k1 signature proving authority, and pays only the [constants.PillarQsrStakeBaseAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PillarQsrStakeBaseAmount>) \(the legacy\-pillar flat rate\) instead of the dynamic ramp.
 
 ```go
 type LegacyRegisterMethod struct {
@@ -2097,7 +2099,7 @@ type LegacyRegisterMethod struct {
 ```
 
 <a name="LegacyRegisterMethod.GetPlasma"></a>
-### func \(\*LegacyRegisterMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L206>)
+### func \(\*LegacyRegisterMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L224>)
 
 ```go
 func (p *LegacyRegisterMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2106,7 +2108,7 @@ func (p *LegacyRegisterMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (ui
 
 
 <a name="LegacyRegisterMethod.ReceiveBlock"></a>
-### func \(\*LegacyRegisterMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L237>)
+### func \(\*LegacyRegisterMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L255>)
 
 ```go
 func (p *LegacyRegisterMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2115,7 +2117,7 @@ func (p *LegacyRegisterMethod) ReceiveBlock(context vm_context.AccountVmContext,
 
 
 <a name="LegacyRegisterMethod.ValidateSendBlock"></a>
-### func \(\*LegacyRegisterMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L210>)
+### func \(\*LegacyRegisterMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L228>)
 
 ```go
 func (p *LegacyRegisterMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2428,9 +2430,9 @@ func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="RegisterMethod"></a>
-## type [RegisterMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L140-L142>)
+## type [RegisterMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L153-L155>)
 
-
+RegisterMethod implements normal pillar registration: locks the configured ZNN amount sent with the call, burns the per\-pillar QSR price \(computed dynamically by [GetQsrCostForNextPillar](<#GetQsrCostForNextPillar>)\), and persists a [definition.PillarInfo](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#PillarInfo>) with [definition.NormalPillarType](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#NormalPillarType>).
 
 ```go
 type RegisterMethod struct {
@@ -2439,7 +2441,7 @@ type RegisterMethod struct {
 ```
 
 <a name="RegisterMethod.GetPlasma"></a>
-### func \(\*RegisterMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L144>)
+### func \(\*RegisterMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L157>)
 
 ```go
 func (p *RegisterMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2448,7 +2450,7 @@ func (p *RegisterMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, 
 
 
 <a name="RegisterMethod.ReceiveBlock"></a>
-### func \(\*RegisterMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L171>)
+### func \(\*RegisterMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L184>)
 
 ```go
 func (p *RegisterMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2457,7 +2459,7 @@ func (p *RegisterMethod) ReceiveBlock(context vm_context.AccountVmContext, sendB
 
 
 <a name="RegisterMethod.ValidateSendBlock"></a>
-### func \(\*RegisterMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L148>)
+### func \(\*RegisterMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L161>)
 
 ```go
 func (p *RegisterMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2580,9 +2582,9 @@ func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="RevokeMethod"></a>
-## type [RevokeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L287-L289>)
+## type [RevokeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L309-L311>)
 
-
+RevokeMethod implements pillar revocation: refunds the locked ZNN once the lock window has elapsed \(per [PillarGetRevokeStatus](<#PillarGetRevokeStatus>)\). QSR is not refunded — pillar registration permanently consumes its QSR cost.
 
 ```go
 type RevokeMethod struct {
@@ -2591,7 +2593,7 @@ type RevokeMethod struct {
 ```
 
 <a name="RevokeMethod.GetPlasma"></a>
-### func \(\*RevokeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L291>)
+### func \(\*RevokeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L313>)
 
 ```go
 func (p *RevokeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2600,7 +2602,7 @@ func (p *RevokeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, er
 
 
 <a name="RevokeMethod.ReceiveBlock"></a>
-### func \(\*RevokeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L312>)
+### func \(\*RevokeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L334>)
 
 ```go
 func (p *RevokeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2609,7 +2611,7 @@ func (p *RevokeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 
 
 <a name="RevokeMethod.ValidateSendBlock"></a>
-### func \(\*RevokeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L294>)
+### func \(\*RevokeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L316>)
 
 ```go
 func (p *RevokeMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3112,9 +3114,9 @@ func (p *SwapRetrieveAssetsMethod) ValidateSendBlock(block *nom.AccountBlock) er
 ValidateSendBlock decodes the \(publicKey, signature\) pair, verifies the signature against the canonical swap message, and rejects calls that carry value.
 
 <a name="UndelegateMethod"></a>
-## type [UndelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L720-L722>)
+## type [UndelegateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L757-L759>)
 
-
+UndelegateMethod implements un\-delegation: removes the caller's delegation record so they can re\-delegate elsewhere or stop directing weight altogether.
 
 ```go
 type UndelegateMethod struct {
@@ -3123,7 +3125,7 @@ type UndelegateMethod struct {
 ```
 
 <a name="UndelegateMethod.GetPlasma"></a>
-### func \(\*UndelegateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L724>)
+### func \(\*UndelegateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L761>)
 
 ```go
 func (p *UndelegateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3132,7 +3134,7 @@ func (p *UndelegateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 
 
 <a name="UndelegateMethod.ReceiveBlock"></a>
-### func \(\*UndelegateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L741>)
+### func \(\*UndelegateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L778>)
 
 ```go
 func (p *UndelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3141,7 +3143,7 @@ func (p *UndelegateMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 
 
 <a name="UndelegateMethod.ValidateSendBlock"></a>
-### func \(\*UndelegateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L727>)
+### func \(\*UndelegateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L764>)
 
 ```go
 func (p *UndelegateMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3378,9 +3380,9 @@ func (method *UpdateEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.Accoun
 
 
 <a name="UpdateEmbeddedPillarMethod"></a>
-## type [UpdateEmbeddedPillarMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L759-L761>)
+## type [UpdateEmbeddedPillarMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L799-L801>)
 
-
+UpdateEmbeddedPillarMethod is the periodic\-update entry point for the pillar contract: advances the per\-epoch reward computation via \[updatePillarRewards\].
 
 ```go
 type UpdateEmbeddedPillarMethod struct {
@@ -3389,7 +3391,7 @@ type UpdateEmbeddedPillarMethod struct {
 ```
 
 <a name="UpdateEmbeddedPillarMethod.GetPlasma"></a>
-### func \(\*UpdateEmbeddedPillarMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L763>)
+### func \(\*UpdateEmbeddedPillarMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L803>)
 
 ```go
 func (p *UpdateEmbeddedPillarMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3398,7 +3400,7 @@ func (p *UpdateEmbeddedPillarMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 
 
 <a name="UpdateEmbeddedPillarMethod.ReceiveBlock"></a>
-### func \(\*UpdateEmbeddedPillarMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L780>)
+### func \(\*UpdateEmbeddedPillarMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L820>)
 
 ```go
 func (p *UpdateEmbeddedPillarMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3407,7 +3409,7 @@ func (p *UpdateEmbeddedPillarMethod) ReceiveBlock(context vm_context.AccountVmCo
 
 
 <a name="UpdateEmbeddedPillarMethod.ValidateSendBlock"></a>
-### func \(\*UpdateEmbeddedPillarMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L766>)
+### func \(\*UpdateEmbeddedPillarMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L806>)
 
 ```go
 func (p *UpdateEmbeddedPillarMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3530,9 +3532,9 @@ func (p *UpdatePhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="UpdatePillarMethod"></a>
-## type [UpdatePillarMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L578-L580>)
+## type [UpdatePillarMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L608-L610>)
 
-
+UpdatePillarMethod implements pillar metadata rotation: lets the staker rotate the producing address, the reward\-withdraw address, and the reward split percentages. Producing\-address rotation goes through \[checkAvailableProducingAddress\] to keep the reverse index consistent.
 
 ```go
 type UpdatePillarMethod struct {
@@ -3541,7 +3543,7 @@ type UpdatePillarMethod struct {
 ```
 
 <a name="UpdatePillarMethod.GetPlasma"></a>
-### func \(\*UpdatePillarMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L582>)
+### func \(\*UpdatePillarMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L612>)
 
 ```go
 func (p *UpdatePillarMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3550,7 +3552,7 @@ func (p *UpdatePillarMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint
 
 
 <a name="UpdatePillarMethod.ReceiveBlock"></a>
-### func \(\*UpdatePillarMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L606>)
+### func \(\*UpdatePillarMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L636>)
 
 ```go
 func (p *UpdatePillarMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3559,7 +3561,7 @@ func (p *UpdatePillarMethod) ReceiveBlock(context vm_context.AccountVmContext, s
 
 
 <a name="UpdatePillarMethod.ValidateSendBlock"></a>
-### func \(\*UpdatePillarMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L585>)
+### func \(\*UpdatePillarMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L615>)
 
 ```go
 func (p *UpdatePillarMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3852,9 +3854,9 @@ func (p *WrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="pillarEpochReward"></a>
-## type [pillarEpochReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L357-L364>)
+## type [pillarEpochReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L382-L389>)
 
-Reward defines momentum reward details
+pillarEpochReward bundles the breakdown of one pillar's reward for one epoch: the delegation share, the block\-production share, the total, and the produced/expected counters that drive it. Internal type used by \[computeDetailedPillarReward\].
 
 ```go
 type pillarEpochReward struct {
@@ -3868,7 +3870,7 @@ type pillarEpochReward struct {
 ```
 
 <a name="computePillarRewardForEpoch"></a>
-### func [computePillarRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L510>)
+### func [computePillarRewardForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L535>)
 
 ```go
 func computePillarRewardForEpoch(detail *api.EpochStats, name string) *pillarEpochReward
