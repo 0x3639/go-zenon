@@ -120,9 +120,11 @@ const (
 )
 
 var (
+	// ABIAccelerator is part of the package's public API.
 	ABIAccelerator = abi.JSONToABIContract(strings.NewReader(jsonAccelerator))
 )
 
+// Project is part of the package's public API; see the surrounding code for usage.
 type Project struct {
 	Id                  types.Hash    `json:"id"`
 	Owner               types.Address `json:"owner"`
@@ -137,6 +139,7 @@ type Project struct {
 	PhaseIds            []types.Hash
 }
 
+// AcceleratorParam is part of the package's public API; see the surrounding code for usage.
 type AcceleratorParam struct {
 	Id             types.Hash
 	Name           string
@@ -146,15 +149,22 @@ type AcceleratorParam struct {
 	QsrFundsNeeded *big.Int
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (project *Project) Save(context db.DB) {
 	common.DealWithErr(context.Put(project.Key(), project.Data()))
 }
+
+// Delete removes the receiver's record from storage.
 func (project *Project) Delete(context db.DB) {
 	common.DealWithErr(context.Delete(project.Key()))
 }
+
+// Key returns the storage key for the receiver.
 func (project *Project) Key() []byte {
 	return common.JoinBytes([]byte{projectKeyPrefix}, project.Id.Bytes())
 }
+
+// Data is part of the receiver's public API.
 func (project *Project) Data() []byte {
 	return ABIAccelerator.PackVariablePanic(
 		ProjectVariableName,
@@ -171,6 +181,8 @@ func (project *Project) Data() []byte {
 		project.PhaseIds,
 	)
 }
+
+// GetCurrentPhase loads the CurrentPhase record from storage.
 func (project *Project) GetCurrentPhase(context db.DB) (*Phase, error) {
 	if len(project.PhaseIds) > 0 {
 		currentActivePhaseId := project.PhaseIds[len(project.PhaseIds)-1]
@@ -186,6 +198,7 @@ func parseProject(data []byte) *Project {
 	return project
 }
 
+// Phase is part of the package's public API; see the surrounding code for usage.
 type Phase struct {
 	Id                types.Hash `json:"id"`
 	ProjectId         types.Hash `json:"projectID"`
@@ -199,6 +212,7 @@ type Phase struct {
 	Status            uint8      `json:"status"`
 }
 
+// PhaseMarshal is part of the package's public API; see the surrounding code for usage.
 type PhaseMarshal struct {
 	Id                types.Hash `json:"id"`
 	ProjectId         types.Hash `json:"projectID"`
@@ -212,6 +226,7 @@ type PhaseMarshal struct {
 	Status            uint8      `json:"status"`
 }
 
+// ToProjectMarshal projects the receiver to its JSON-friendly ProjectMarshal twin.
 func (phase *Phase) ToProjectMarshal() *PhaseMarshal {
 	aux := &PhaseMarshal{
 		Id:                phase.Id,
@@ -228,10 +243,12 @@ func (phase *Phase) ToProjectMarshal() *PhaseMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (phase *Phase) MarshalJSON() ([]byte, error) {
 	return json.Marshal(phase.ToProjectMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (phase *Phase) UnmarshalJSON(data []byte) error {
 	aux := new(PhaseMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -250,15 +267,22 @@ func (phase *Phase) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (phase *Phase) Save(context db.DB) {
 	common.DealWithErr(context.Put(phase.Key(), phase.Data()))
 }
+
+// Delete removes the receiver's record from storage.
 func (phase *Phase) Delete(context db.DB) {
 	common.DealWithErr(context.Delete(phase.Key()))
 }
+
+// Key returns the storage key for the receiver.
 func (phase *Phase) Key() []byte {
 	return common.JoinBytes([]byte{phaseKeyPrefix}, phase.Id.Bytes())
 }
+
+// Data is part of the receiver's public API.
 func (phase *Phase) Data() []byte {
 	return ABIAccelerator.PackVariablePanic(
 		PhaseVariableName,
@@ -281,6 +305,7 @@ func parsePhase(data []byte) *Phase {
 	return phase
 }
 
+// GetProjectList loads the ProjectList record from storage.
 func GetProjectList(context db.DB) ([]*Project, error) {
 	iterator := context.NewIterator([]byte{projectKeyPrefix})
 	defer iterator.Release()
@@ -297,6 +322,7 @@ func GetProjectList(context db.DB) ([]*Project, error) {
 	return projectList, nil
 }
 
+// GetProjectEntry loads the ProjectEntry record from storage.
 func GetProjectEntry(context db.DB, id types.Hash) (*Project, error) {
 	key := (&Project{Id: id}).Key()
 	data, err := context.Get(key)
@@ -308,6 +334,7 @@ func GetProjectEntry(context db.DB, id types.Hash) (*Project, error) {
 	}
 }
 
+// GetPhaseEntry loads the PhaseEntry record from storage.
 func GetPhaseEntry(context db.DB, id types.Hash) (*Phase, error) {
 	key := (&Phase{Id: id}).Key()
 	data, err := context.Get(key)

@@ -37,9 +37,12 @@ func NewStakeApi(z zenon.Zenon) *StakeApi {
 
 // === Shared RPCs ===
 
+// GetUncollectedReward loads the UncollectedReward record from storage.
 func (a *StakeApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.StakeContract, address)
 }
+
+// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 func (a *StakeApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -47,6 +50,7 @@ func (a *StakeApi) GetFrontierRewardByPage(address types.Address, pageIndex, pag
 	return getFrontierRewardByPage(a.chain, types.StakeContract, address, pageIndex, pageSize)
 }
 
+// StakeEntry is part of the package's public API; see the surrounding code for usage.
 type StakeEntry struct {
 	Amount              *big.Int      `json:"amount"`
 	WeightedAmount      *big.Int      `json:"weightedAmount"`
@@ -56,6 +60,7 @@ type StakeEntry struct {
 	Id                  types.Hash    `json:"id"`
 }
 
+// StakeEntryMarshal is part of the package's public API; see the surrounding code for usage.
 type StakeEntryMarshal struct {
 	Amount              string        `json:"amount"`
 	WeightedAmount      string        `json:"weightedAmount"`
@@ -65,6 +70,7 @@ type StakeEntryMarshal struct {
 	Id                  types.Hash    `json:"id"`
 }
 
+// ToStakeEntryMarshal projects the receiver to its JSON-friendly StakeEntryMarshal twin.
 func (s *StakeEntry) ToStakeEntryMarshal() *StakeEntryMarshal {
 	aux := &StakeEntryMarshal{
 		Amount:              s.Amount.String(),
@@ -77,10 +83,12 @@ func (s *StakeEntry) ToStakeEntryMarshal() *StakeEntryMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (s *StakeEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToStakeEntryMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (s *StakeEntry) UnmarshalJSON(data []byte) error {
 	aux := new(StakeEntryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -95,6 +103,7 @@ func (s *StakeEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// StakeList is part of the package's public API; see the surrounding code for usage.
 type StakeList struct {
 	TotalAmount         *big.Int      `json:"totalAmount"`
 	TotalWeightedAmount *big.Int      `json:"totalWeightedAmount"`
@@ -102,6 +111,7 @@ type StakeList struct {
 	Entries             []*StakeEntry `json:"list"`
 }
 
+// StakeListMarshal is part of the package's public API; see the surrounding code for usage.
 type StakeListMarshal struct {
 	TotalAmount         string        `json:"totalAmount"`
 	TotalWeightedAmount string        `json:"totalWeightedAmount"`
@@ -109,6 +119,7 @@ type StakeListMarshal struct {
 	Entries             []*StakeEntry `json:"list"`
 }
 
+// ToStakeEntryMarshal projects the receiver to its JSON-friendly StakeEntryMarshal twin.
 func (s *StakeList) ToStakeEntryMarshal() *StakeListMarshal {
 	aux := &StakeListMarshal{
 		TotalAmount:         s.TotalAmount.String(),
@@ -122,10 +133,12 @@ func (s *StakeList) ToStakeEntryMarshal() *StakeListMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (s *StakeList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToStakeEntryMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (s *StakeList) UnmarshalJSON(data []byte) error {
 	aux := new(StakeListMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -141,6 +154,7 @@ func (s *StakeList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEntriesByAddress loads the EntriesByAddress record from storage.
 func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*StakeList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

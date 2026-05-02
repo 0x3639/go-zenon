@@ -1,59 +1,61 @@
-# Configuration for golangci-lint, scoped to documentation rules.
+# Configuration for golangci-lint v2, scoped to documentation rules.
 #
 # This file backs the `make doc-lint` target and the `doc-lint` GitHub Actions
-# workflow. The full Phase 0 rollout uses warn-only mode so legacy gaps don't
-# block per-package documentation PRs. Once every package has been documented
-# through the per-package PR sequence, flip `severity` to `error` and remove
-# `issues.exclude-use-default`.
+# workflow. The full Phase 0–13 rollout has documented every package; this
+# config enforces the result with severity = error so future PRs that
+# introduce new exported symbols without godoc fail CI.
 #
 # Configured rules:
-#   - revive `exported`         — warns on exported symbols missing godoc.
-#   - revive `package-comments` — warns on packages missing a doc.go comment.
+#   - revive `exported`         — exported symbols must have godoc.
+#   - revive `package-comments` — every package needs a doc.go comment.
 #
-# Both rules respect the `Code generated .* DO NOT EDIT.` marker, so generated
-# protobuf files (.pb.go) are skipped automatically.
-
+# Both rules respect the `Code generated .* DO NOT EDIT.` marker, so
+# generated protobuf files (.pb.go) are skipped automatically. Test mocks
+# under /mock/ are also excluded.
+version: "2"
 run:
-  timeout: 5m
-  tests: false
   go: "1.20"
-
+  tests: false
 linters:
-  disable-all: true
+  default: none
   enable:
     - revive
-
-linters-settings:
-  revive:
-    severity: warning
-    confidence: 0.8
+  settings:
+    revive:
+      confidence: 0.8
+      severity: error
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
+          severity: error
+          disabled: false
+        - name: package-comments
+          severity: error
+          disabled: false
+  exclusions:
+    generated: lax
     rules:
-      - name: exported
-        severity: warning
-        disabled: false
-        arguments:
-          - "checkPrivateReceivers"
-          - "disableStutteringCheck"
-      - name: package-comments
-        severity: warning
-        disabled: false
-
+      - linters:
+          - revive
+        path: \.pb\.go$
+      - linters:
+          - revive
+        path: /mock/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  # Phase 0: warn-only. Don't fail on legacy gaps; show them in CI logs so each
-  # per-package PR can drive its package's count to zero.
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Skip the embedded protobuf-generated files even though they should already
-    # be skipped by the generated-file marker — defence in depth.
-    - path: '\.pb\.go$'
-      linters:
-        - revive
-    # Skip the test mock packages from doc enforcement.
-    - path: '/mock/'
-      linters:
-        - revive
-
 severity:
-  default-severity: warning
+  default: error
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

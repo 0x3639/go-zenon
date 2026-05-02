@@ -135,10 +135,12 @@ func (err *jsonError) Error() string {
 	return err.Message
 }
 
+// ErrorCode is part of the receiver's public API.
 func (err *jsonError) ErrorCode() int {
 	return err.Code
 }
 
+// ErrorData is part of the receiver's public API.
 func (err *jsonError) ErrorData() interface{} {
 	return err.Data
 }

@@ -41,6 +41,7 @@ func NewPillar(chain chain.Chain, consensus consensus.Consensus, broadcaster pro
 	}
 }
 
+// Init prepares the receiver for use.
 func (m *manager) Init() error {
 	m.log.Info("initializing ...")
 	defer m.log.Info("initialized")
@@ -51,6 +52,8 @@ func (m *manager) Init() error {
 
 	return nil
 }
+
+// Start begins the receiver's background work.
 func (m *manager) Start() error {
 	m.log.Info("starting ...")
 	defer m.log.Info("started")
@@ -62,6 +65,8 @@ func (m *manager) Start() error {
 
 	return nil
 }
+
+// Stop tears down the receiver.
 func (m *manager) Stop() error {
 	m.log.Info("stopping ...")
 	defer m.log.Info("stopped")

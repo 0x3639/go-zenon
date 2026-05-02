@@ -68,11 +68,13 @@ func (a *AcceleratorApi) toProject(context vm_context.AccountVmContext, abiProje
 	return project
 }
 
+// Phase is part of the package's public API; see the surrounding code for usage.
 type Phase struct {
 	Phase *definition.Phase         `json:"phase"`
 	Votes *definition.VoteBreakdown `json:"votes"`
 }
 
+// Project is part of the package's public API; see the surrounding code for usage.
 type Project struct {
 	Id                  types.Hash                `json:"id"`
 	Owner               types.Address             `json:"owner"`
@@ -89,6 +91,7 @@ type Project struct {
 	Phases              []*Phase                  `json:"phases"`
 }
 
+// ProjectMarshal is part of the package's public API; see the surrounding code for usage.
 type ProjectMarshal struct {
 	Id                  types.Hash                `json:"id"`
 	Owner               types.Address             `json:"owner"`
@@ -105,6 +108,7 @@ type ProjectMarshal struct {
 	Phases              []*Phase                  `json:"phases"`
 }
 
+// ToProjectMarshal projects the receiver to its JSON-friendly ProjectMarshal twin.
 func (p *Project) ToProjectMarshal() *ProjectMarshal {
 	aux := &ProjectMarshal{
 		Id:                  p.Id,
@@ -133,10 +137,12 @@ func (p *Project) ToProjectMarshal() *ProjectMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (p *Project) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.ToProjectMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (p *Project) UnmarshalJSON(data []byte) error {
 	aux := new(ProjectMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -164,6 +170,7 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ProjectList is part of the package's public API; see the surrounding code for usage.
 type ProjectList struct {
 	Count int        `json:"count"`
 	List  []*Project `json:"list"`
@@ -171,6 +178,7 @@ type ProjectList struct {
 
 // === Getters for projects ===
 
+// GetAll loads the All record from storage.
 func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -200,6 +208,8 @@ func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error
 
 	return result, nil
 }
+
+// GetProjectById loads the ProjectById record from storage.
 func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -212,6 +222,8 @@ func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	}
 	return a.toProject(context, project), nil
 }
+
+// GetPhaseById loads the PhaseById record from storage.
 func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -227,6 +239,8 @@ func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 		Votes: definition.GetVoteBreakdown(context.Storage(), phase.Id),
 	}, nil
 }
+
+// GetVoteBreakdown loads the VoteBreakdown record from storage.
 func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakdown, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -238,6 +252,8 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 	}
 	return voteBreakdown, nil
 }
+
+// GetPillarVotes loads the PillarVotes record from storage.
 func (a *AcceleratorApi) GetPillarVotes(name string, hashes []types.Hash) ([]*definition.PillarVote, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {

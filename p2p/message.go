@@ -73,6 +73,7 @@ type MsgReader interface {
 	ReadMsg() (Msg, error)
 }
 
+// MsgWriter is part of the package's public API; see the surrounding code for usage.
 type MsgWriter interface {
 	// WriteMsg sends a message. It will block until the message's
 	// Payload has been consumed by the other end.
@@ -124,6 +125,7 @@ type netWrapper struct {
 	wrapped            MsgReadWriter
 }
 
+// ReadMsg is part of the receiver's public API.
 func (rw *netWrapper) ReadMsg() (Msg, error) {
 	rw.rmu.Lock()
 	defer rw.rmu.Unlock()
@@ -131,6 +133,7 @@ func (rw *netWrapper) ReadMsg() (Msg, error) {
 	return rw.wrapped.ReadMsg()
 }
 
+// WriteMsg is part of the receiver's public API.
 func (rw *netWrapper) WriteMsg(msg Msg) error {
 	rw.wmu.Lock()
 	defer rw.wmu.Unlock()

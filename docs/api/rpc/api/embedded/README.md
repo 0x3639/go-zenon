@@ -289,49 +289,49 @@ func NewAcceleratorApi(z zenon.Zenon) *AcceleratorApi
 NewAcceleratorApi constructs the accelerator namespace handler.
 
 <a name="AcceleratorApi.GetAll"></a>
-### func \(\*AcceleratorApi\) [GetAll](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L174>)
+### func \(\*AcceleratorApi\) [GetAll](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L182>)
 
 ```go
 func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error)
 ```
 
-
+GetAll loads the All record from storage.
 
 <a name="AcceleratorApi.GetPhaseById"></a>
-### func \(\*AcceleratorApi\) [GetPhaseById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L215>)
+### func \(\*AcceleratorApi\) [GetPhaseById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L227>)
 
 ```go
 func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error)
 ```
 
-
+GetPhaseById loads the PhaseById record from storage.
 
 <a name="AcceleratorApi.GetPillarVotes"></a>
-### func \(\*AcceleratorApi\) [GetPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L241>)
+### func \(\*AcceleratorApi\) [GetPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L257>)
 
 ```go
 func (a *AcceleratorApi) GetPillarVotes(name string, hashes []types.Hash) ([]*definition.PillarVote, error)
 ```
 
-
+GetPillarVotes loads the PillarVotes record from storage.
 
 <a name="AcceleratorApi.GetProjectById"></a>
-### func \(\*AcceleratorApi\) [GetProjectById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L203>)
+### func \(\*AcceleratorApi\) [GetProjectById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L213>)
 
 ```go
 func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error)
 ```
 
-
+GetProjectById loads the ProjectById record from storage.
 
 <a name="AcceleratorApi.GetVoteBreakdown"></a>
-### func \(\*AcceleratorApi\) [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L230>)
+### func \(\*AcceleratorApi\) [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L244>)
 
 ```go
 func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakdown, error)
 ```
 
-
+GetVoteBreakdown loads the VoteBreakdown record from storage.
 
 <a name="AcceleratorApi.toProject"></a>
 ### func \(\*AcceleratorApi\) [toProject](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L40>)
@@ -364,67 +364,67 @@ func NewBridgeApi(z zenon.Zenon) *BridgeApi
 NewBridgeApi constructs the bridge namespace handler.
 
 <a name="BridgeApi.GetAllNetworks"></a>
-### func \(\*BridgeApi\) [GetAllNetworks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L128>)
+### func \(\*BridgeApi\) [GetAllNetworks](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L133>)
 
 ```go
 func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList, error)
 ```
 
-
+GetAllNetworks loads the AllNetworks record from storage.
 
 <a name="BridgeApi.GetAllUnsignedWrapTokenRequests"></a>
-### func \(\*BridgeApi\) [GetAllUnsignedWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L451>)
+### func \(\*BridgeApi\) [GetAllUnsignedWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L466>)
 
 ```go
 func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error)
 ```
 
-
+GetAllUnsignedWrapTokenRequests loads the AllUnsignedWrapTokenRequests record from storage.
 
 <a name="BridgeApi.GetAllUnwrapTokenRequests"></a>
-### func \(\*BridgeApi\) [GetAllUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L589>)
+### func \(\*BridgeApi\) [GetAllUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L610>)
 
 ```go
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error)
 ```
 
-
+GetAllUnwrapTokenRequests loads the AllUnwrapTokenRequests record from storage.
 
 <a name="BridgeApi.GetAllUnwrapTokenRequestsByToAddress"></a>
-### func \(\*BridgeApi\) [GetAllUnwrapTokenRequestsByToAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L628>)
+### func \(\*BridgeApi\) [GetAllUnwrapTokenRequestsByToAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L650>)
 
 ```go
 func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error)
 ```
 
-
+GetAllUnwrapTokenRequestsByToAddress loads the AllUnwrapTokenRequestsByToAddress record from storage.
 
 <a name="BridgeApi.GetAllWrapTokenRequests"></a>
-### func \(\*BridgeApi\) [GetAllWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L311>)
+### func \(\*BridgeApi\) [GetAllWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L323>)
 
 ```go
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error)
 ```
 
-
+GetAllWrapTokenRequests loads the AllWrapTokenRequests record from storage.
 
 <a name="BridgeApi.GetAllWrapTokenRequestsByToAddress"></a>
-### func \(\*BridgeApi\) [GetAllWrapTokenRequestsByToAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L352>)
+### func \(\*BridgeApi\) [GetAllWrapTokenRequestsByToAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L365>)
 
 ```go
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*WrapTokenRequestList, error)
 ```
 
-
+GetAllWrapTokenRequestsByToAddress loads the AllWrapTokenRequestsByToAddress record from storage.
 
 <a name="BridgeApi.GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId"></a>
-### func \(\*BridgeApi\) [GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L403>)
+### func \(\*BridgeApi\) [GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L417>)
 
 ```go
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toAddress string, networkClass, chainId uint32, pageIndex, pageSize uint32) (*WrapTokenRequestList, error)
 ```
 
-
+GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId loads the AllWrapTokenRequestsByToAddressNetworkClassAndChainId record from storage.
 
 <a name="BridgeApi.GetBridgeInfo"></a>
 ### func \(\*BridgeApi\) [GetBridgeInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L40>)
@@ -436,31 +436,31 @@ func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error)
 GetBridgeInfo returns the global bridge configuration variable \(orchestrator address, halted flag, etc.\).
 
 <a name="BridgeApi.GetFeeTokenPair"></a>
-### func \(\*BridgeApi\) [GetFeeTokenPair](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L680>)
+### func \(\*BridgeApi\) [GetFeeTokenPair](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L703>)
 
 ```go
 func (a *BridgeApi) GetFeeTokenPair(zts types.ZenonTokenStandard) (*definition.ZtsFeesInfo, error)
 ```
 
-
+GetFeeTokenPair loads the FeeTokenPair record from storage.
 
 <a name="BridgeApi.GetNetworkInfo"></a>
-### func \(\*BridgeApi\) [GetNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L114>)
+### func \(\*BridgeApi\) [GetNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L118>)
 
 ```go
 func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*definition.NetworkInfo, error)
 ```
 
-
+GetNetworkInfo loads the NetworkInfo record from storage.
 
 <a name="BridgeApi.GetOrchestratorInfo"></a>
-### func \(\*BridgeApi\) [GetOrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L70>)
+### func \(\*BridgeApi\) [GetOrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L71>)
 
 ```go
 func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error)
 ```
 
-
+GetOrchestratorInfo loads the OrchestratorInfo record from storage.
 
 <a name="BridgeApi.GetSecurityInfo"></a>
 ### func \(\*BridgeApi\) [GetSecurityInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L56>)
@@ -472,34 +472,34 @@ func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error)
 GetSecurityInfo returns the bridge's security parameters \(administrator addresses, soft / hard delays, time\-challenges\).
 
 <a name="BridgeApi.GetTimeChallengesInfo"></a>
-### func \(\*BridgeApi\) [GetTimeChallengesInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L89>)
+### func \(\*BridgeApi\) [GetTimeChallengesInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L92>)
 
 ```go
 func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error)
 ```
 
-
+GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
 
 <a name="BridgeApi.GetUnwrapTokenRequestByHashAndLog"></a>
-### func \(\*BridgeApi\) [GetUnwrapTokenRequestByHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L559>)
+### func \(\*BridgeApi\) [GetUnwrapTokenRequestByHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L579>)
 
 ```go
 func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error)
 ```
 
-
+GetUnwrapTokenRequestByHashAndLog loads the UnwrapTokenRequestByHashAndLog record from storage.
 
 <a name="BridgeApi.GetWrapTokenRequestById"></a>
-### func \(\*BridgeApi\) [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L274>)
+### func \(\*BridgeApi\) [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L284>)
 
 ```go
 func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, error)
 ```
 
-
+GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
 
 <a name="BridgeApi.getConfirmationsToFinality"></a>
-### func \(\*BridgeApi\) [getConfirmationsToFinality](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L264>)
+### func \(\*BridgeApi\) [getConfirmationsToFinality](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L273>)
 
 ```go
 func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapTokenRequest, confirmationsToFinality uint32, momentum nom.Momentum) (uint64, error)
@@ -508,7 +508,7 @@ func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapT
 
 
 <a name="BridgeApi.getRedeemableIn"></a>
-### func \(\*BridgeApi\) [getRedeemableIn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L254>)
+### func \(\*BridgeApi\) [getRedeemableIn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L263>)
 
 ```go
 func (a *BridgeApi) getRedeemableIn(unwrapTokenRequest definition.UnwrapTokenRequest, tokenPair definition.TokenPair, momentum nom.Momentum) uint64
@@ -517,7 +517,7 @@ func (a *BridgeApi) getRedeemableIn(unwrapTokenRequest definition.UnwrapTokenReq
 
 
 <a name="BridgeApi.getToken"></a>
-### func \(\*BridgeApi\) [getToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L236>)
+### func \(\*BridgeApi\) [getToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L245>)
 
 ```go
 func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error)
@@ -526,7 +526,7 @@ func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error)
 
 
 <a name="BridgeApi.toRequest"></a>
-### func \(\*BridgeApi\) [toRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L156>)
+### func \(\*BridgeApi\) [toRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L162>)
 
 ```go
 func (a *BridgeApi) toRequest(context vm_context.AccountVmContext, abiRequest *definition.WrapTokenRequest) *definition.WrapTokenRequest
@@ -555,9 +555,9 @@ func NewConsensusCache(z zenon.Zenon, testing bool) ConsensusCache
 NewConsensusCache constructs the production cache. testing=true runs every Get refresh synchronously and skips the 5\-minute staleness window \(useful in unit tests\).
 
 <a name="FusionEntry"></a>
-## type [FusionEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L77-L82>)
+## type [FusionEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L84-L89>)
 
-
+FusionEntry is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type FusionEntry struct {
@@ -569,36 +569,36 @@ type FusionEntry struct {
 ```
 
 <a name="FusionEntry.MarshalJSON"></a>
-### func \(\*FusionEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L101>)
+### func \(\*FusionEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L112>)
 
 ```go
 func (r *FusionEntry) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="FusionEntry.ToFusionEntryMarshal"></a>
-### func \(\*FusionEntry\) [ToFusionEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L90>)
+### func \(\*FusionEntry\) [ToFusionEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L100>)
 
 ```go
 func (r *FusionEntry) ToFusionEntryMarshal() *FusionEntryMarshal
 ```
 
-
+ToFusionEntryMarshal projects the receiver to its JSON\-friendly FusionEntryMarshal twin.
 
 <a name="FusionEntry.UnmarshalJSON"></a>
-### func \(\*FusionEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L105>)
+### func \(\*FusionEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L117>)
 
 ```go
 func (r *FusionEntry) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="FusionEntryList"></a>
-## type [FusionEntryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L117-L121>)
+## type [FusionEntryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L130-L134>)
 
-
+FusionEntryList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type FusionEntryList struct {
@@ -609,36 +609,36 @@ type FusionEntryList struct {
 ```
 
 <a name="FusionEntryList.MarshalJSON"></a>
-### func \(\*FusionEntryList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L141>)
+### func \(\*FusionEntryList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L158>)
 
 ```go
 func (r *FusionEntryList) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="FusionEntryList.ToFusionEntryListMarshal"></a>
-### func \(\*FusionEntryList\) [ToFusionEntryListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L128>)
+### func \(\*FusionEntryList\) [ToFusionEntryListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L144>)
 
 ```go
 func (r *FusionEntryList) ToFusionEntryListMarshal() *FusionEntryListMarshal
 ```
 
-
+ToFusionEntryListMarshal projects the receiver to its JSON\-friendly FusionEntryListMarshal twin.
 
 <a name="FusionEntryList.UnmarshalJSON"></a>
-### func \(\*FusionEntryList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L145>)
+### func \(\*FusionEntryList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L163>)
 
 ```go
 func (r *FusionEntryList) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="FusionEntryListMarshal"></a>
-## type [FusionEntryListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L122-L126>)
+## type [FusionEntryListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L137-L141>)
 
-
+FusionEntryListMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type FusionEntryListMarshal struct {
@@ -649,9 +649,9 @@ type FusionEntryListMarshal struct {
 ```
 
 <a name="FusionEntryMarshal"></a>
-## type [FusionEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L83-L88>)
+## type [FusionEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L92-L97>)
 
-
+FusionEntryMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type FusionEntryMarshal struct {
@@ -663,9 +663,9 @@ type FusionEntryMarshal struct {
 ```
 
 <a name="GetDelegatedPillarResponse"></a>
-## type [GetDelegatedPillarResponse](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L312-L316>)
+## type [GetDelegatedPillarResponse](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L332-L336>)
 
-User delegation
+GetDelegatedPillarResponse loads the DelegatedPillarResponse record from storage.
 
 ```go
 type GetDelegatedPillarResponse struct {
@@ -676,36 +676,36 @@ type GetDelegatedPillarResponse struct {
 ```
 
 <a name="GetDelegatedPillarResponse.MarshalJSON"></a>
-### func \(\*GetDelegatedPillarResponse\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L333>)
+### func \(\*GetDelegatedPillarResponse\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L356>)
 
 ```go
 func (g *GetDelegatedPillarResponse) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="GetDelegatedPillarResponse.ToGetDelegatedPillarResponse"></a>
-### func \(\*GetDelegatedPillarResponse\) [ToGetDelegatedPillarResponse](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L324>)
+### func \(\*GetDelegatedPillarResponse\) [ToGetDelegatedPillarResponse](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L346>)
 
 ```go
 func (g *GetDelegatedPillarResponse) ToGetDelegatedPillarResponse() *GetDelegatedPillarResponseMarshal
 ```
 
-
+ToGetDelegatedPillarResponse is part of the receiver's public API.
 
 <a name="GetDelegatedPillarResponse.UnmarshalJSON"></a>
-### func \(\*GetDelegatedPillarResponse\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L337>)
+### func \(\*GetDelegatedPillarResponse\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L361>)
 
 ```go
 func (g *GetDelegatedPillarResponse) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="GetDelegatedPillarResponseMarshal"></a>
-## type [GetDelegatedPillarResponseMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L318-L322>)
+## type [GetDelegatedPillarResponseMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L339-L343>)
 
-
+GetDelegatedPillarResponseMarshal loads the DelegatedPillarResponseMarshal record from storage.
 
 ```go
 type GetDelegatedPillarResponseMarshal struct {
@@ -716,9 +716,9 @@ type GetDelegatedPillarResponseMarshal struct {
 ```
 
 <a name="GetRequiredParam"></a>
-## type [GetRequiredParam](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L223-L228>)
+## type [GetRequiredParam](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L246-L251>)
 
-
+GetRequiredParam loads the RequiredParam record from storage.
 
 ```go
 type GetRequiredParam struct {
@@ -730,9 +730,9 @@ type GetRequiredParam struct {
 ```
 
 <a name="GetRequiredResult"></a>
-## type [GetRequiredResult](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L229-L233>)
+## type [GetRequiredResult](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L254-L258>)
 
-
+GetRequiredResult loads the RequiredResult record from storage.
 
 ```go
 type GetRequiredResult struct {
@@ -805,13 +805,13 @@ func NewLiquidityApi(z zenon.Zenon) *LiquidityApi
 NewLiquidityApi constructs the liquidity namespace handler.
 
 <a name="LiquidityApi.GetFrontierRewardByPage"></a>
-### func \(\*LiquidityApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L139>)
+### func \(\*LiquidityApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L148>)
 
 ```go
 func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
 ```
 
-
+GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 
 <a name="LiquidityApi.GetLiquidityInfo"></a>
 ### func \(\*LiquidityApi\) [GetLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L33>)
@@ -823,13 +823,13 @@ func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error)
 GetLiquidityInfo returns the global liquidity configuration \(administrator, ZNN/QSR reward percentages, accepted token list\).
 
 <a name="LiquidityApi.GetLiquidityStakeEntriesByAddress"></a>
-### func \(\*LiquidityApi\) [GetLiquidityStakeEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L109>)
+### func \(\*LiquidityApi\) [GetLiquidityStakeEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L115>)
 
 ```go
 func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*LiquidityStakeList, error)
 ```
 
-
+GetLiquidityStakeEntriesByAddress loads the LiquidityStakeEntriesByAddress record from storage.
 
 <a name="LiquidityApi.GetSecurityInfo"></a>
 ### func \(\*LiquidityApi\) [GetSecurityInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L49>)
@@ -841,27 +841,27 @@ func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, erro
 GetSecurityInfo returns the liquidity contract's security parameters \(administrator addresses, time\-challenges\).
 
 <a name="LiquidityApi.GetTimeChallengesInfo"></a>
-### func \(\*LiquidityApi\) [GetTimeChallengesInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L146>)
+### func \(\*LiquidityApi\) [GetTimeChallengesInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L156>)
 
 ```go
 func (a *LiquidityApi) GetTimeChallengesInfo() (*TimeChallengesList, error)
 ```
 
-
+GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
 
 <a name="LiquidityApi.GetUncollectedReward"></a>
-### func \(\*LiquidityApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L136>)
+### func \(\*LiquidityApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L143>)
 
 ```go
 func (a *LiquidityApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error)
 ```
 
-
+GetUncollectedReward loads the UncollectedReward record from storage.
 
 <a name="LiquidityStakeList"></a>
-## type [LiquidityStakeList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L63-L68>)
+## type [LiquidityStakeList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L64-L69>)
 
-
+LiquidityStakeList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type LiquidityStakeList struct {
@@ -873,36 +873,36 @@ type LiquidityStakeList struct {
 ```
 
 <a name="LiquidityStakeList.MarshalJSON"></a>
-### func \(\*LiquidityStakeList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L90>)
+### func \(\*LiquidityStakeList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L94>)
 
 ```go
 func (stake *LiquidityStakeList) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="LiquidityStakeList.ToLiquidityStakeListMarshal"></a>
-### func \(\*LiquidityStakeList\) [ToLiquidityStakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L77>)
+### func \(\*LiquidityStakeList\) [ToLiquidityStakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L80>)
 
 ```go
 func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeListMarshal
 ```
 
-
+ToLiquidityStakeListMarshal projects the receiver to its JSON\-friendly LiquidityStakeListMarshal twin.
 
 <a name="LiquidityStakeList.UnmarshalJSON"></a>
-### func \(\*LiquidityStakeList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L94>)
+### func \(\*LiquidityStakeList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L99>)
 
 ```go
 func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="LiquidityStakeListMarshal"></a>
-## type [LiquidityStakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L70-L75>)
+## type [LiquidityStakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/liquidity.go#L72-L77>)
 
-
+LiquidityStakeListMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type LiquidityStakeListMarshal struct {
@@ -914,9 +914,9 @@ type LiquidityStakeListMarshal struct {
 ```
 
 <a name="NetworkInfoList"></a>
-## type [NetworkInfoList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L151-L154>)
+## type [NetworkInfoList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L157-L160>)
 
-
+NetworkInfoList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type NetworkInfoList struct {
@@ -926,9 +926,9 @@ type NetworkInfoList struct {
 ```
 
 <a name="Phase"></a>
-## type [Phase](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L71-L74>)
+## type [Phase](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L72-L75>)
 
-
+Phase is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type Phase struct {
@@ -960,108 +960,108 @@ func NewPillarApi(z zenon.Zenon, testing bool) *PillarApi
 NewPillarApi constructs the pillar namespace handler. testing=true configures the consensus cache for unit\-test usage \(smaller window, no momentum store dependency\).
 
 <a name="PillarApi.CheckNameAvailability"></a>
-### func \(\*PillarApi\) [CheckNameAvailability](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L291>)
+### func \(\*PillarApi\) [CheckNameAvailability](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L311>)
 
 ```go
 func (a *PillarApi) CheckNameAvailability(name string) (bool, error)
 ```
 
-
+CheckNameAvailability is part of the receiver's public API.
 
 <a name="PillarApi.GetAll"></a>
-### func \(\*PillarApi\) [GetAll](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L187>)
+### func \(\*PillarApi\) [GetAll](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L202>)
 
 ```go
 func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error)
 ```
 
-
+GetAll loads the All record from storage.
 
 <a name="PillarApi.GetByName"></a>
-### func \(\*PillarApi\) [GetByName](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L277>)
+### func \(\*PillarApi\) [GetByName](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L296>)
 
 ```go
 func (a *PillarApi) GetByName(name string) (*PillarInfo, error)
 ```
 
-
+GetByName loads the ByName record from storage.
 
 <a name="PillarApi.GetByOwner"></a>
-### func \(\*PillarApi\) [GetByOwner](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L263>)
+### func \(\*PillarApi\) [GetByOwner](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L280>)
 
 ```go
 func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error)
 ```
 
-
+GetByOwner loads the ByOwner record from storage.
 
 <a name="PillarApi.GetDelegatedPillar"></a>
-### func \(\*PillarApi\) [GetDelegatedPillar](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L348>)
+### func \(\*PillarApi\) [GetDelegatedPillar](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L373>)
 
 ```go
 func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarResponse, error)
 ```
 
-
+GetDelegatedPillar loads the DelegatedPillar record from storage.
 
 <a name="PillarApi.GetDepositedQsr"></a>
-### func \(\*PillarApi\) [GetDepositedQsr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L51>)
+### func \(\*PillarApi\) [GetDepositedQsr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L52>)
 
 ```go
 func (a *PillarApi) GetDepositedQsr(address types.Address) (string, error)
 ```
 
-
+GetDepositedQsr loads the DepositedQsr record from storage.
 
 <a name="PillarApi.GetFrontierRewardByPage"></a>
-### func \(\*PillarApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L58>)
+### func \(\*PillarApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L63>)
 
 ```go
 func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
 ```
 
-
+GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 
 <a name="PillarApi.GetPillarEpochHistory"></a>
-### func \(\*PillarApi\) [GetPillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L389>)
+### func \(\*PillarApi\) [GetPillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L416>)
 
 ```go
 func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error)
 ```
 
-
+GetPillarEpochHistory loads the PillarEpochHistory record from storage.
 
 <a name="PillarApi.GetPillarsHistoryByEpoch"></a>
-### func \(\*PillarApi\) [GetPillarsHistoryByEpoch](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L444>)
+### func \(\*PillarApi\) [GetPillarsHistoryByEpoch](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L472>)
 
 ```go
 func (a *PillarApi) GetPillarsHistoryByEpoch(epoch uint64, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error)
 ```
 
-
+GetPillarsHistoryByEpoch loads the PillarsHistoryByEpoch record from storage.
 
 <a name="PillarApi.GetQsrRegistrationCost"></a>
-### func \(\*PillarApi\) [GetQsrRegistrationCost](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L65>)
+### func \(\*PillarApi\) [GetQsrRegistrationCost](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L71>)
 
 ```go
 func (a *PillarApi) GetQsrRegistrationCost() (string, error)
 ```
 
-
+GetQsrRegistrationCost loads the QsrRegistrationCost record from storage.
 
 <a name="PillarApi.GetUncollectedReward"></a>
-### func \(\*PillarApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L55>)
+### func \(\*PillarApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L58>)
 
 ```go
 func (a *PillarApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error)
 ```
 
-
+GetUncollectedReward loads the UncollectedReward record from storage.
 
 <a name="PillarEpochHistoryList"></a>
-## type [PillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L384-L387>)
+## type [PillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L410-L413>)
 
-
+PillarEpochHistoryList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PillarEpochHistoryList struct {
@@ -1071,9 +1071,9 @@ type PillarEpochHistoryList struct {
 ```
 
 <a name="PillarInfo"></a>
-## type [PillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L80-L98>)
+## type [PillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L86-L104>)
 
-Pillar details
+PillarInfo captures the corresponding contract state.
 
 ```go
 type PillarInfo struct {
@@ -1098,43 +1098,43 @@ type PillarInfo struct {
 ```
 
 <a name="PillarInfo.MarshalJSON"></a>
-### func \(\*PillarInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L140>)
+### func \(\*PillarInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L149>)
 
 ```go
 func (p *PillarInfo) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="PillarInfo.ToPillarInfoMarshal"></a>
-### func \(\*PillarInfo\) [ToPillarInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L120>)
+### func \(\*PillarInfo\) [ToPillarInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L128>)
 
 ```go
 func (p *PillarInfo) ToPillarInfoMarshal() *PillarInfoMarshal
 ```
 
-
+ToPillarInfoMarshal projects the receiver to its JSON\-friendly PillarInfoMarshal twin.
 
 <a name="PillarInfo.UnmarshalJSON"></a>
-### func \(\*PillarInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L144>)
+### func \(\*PillarInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L154>)
 
 ```go
 func (p *PillarInfo) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="PillarInfoByWeight"></a>
-## type [PillarInfoByWeight](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L174>)
+## type [PillarInfoByWeight](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L188>)
 
-
+PillarInfoByWeight is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PillarInfoByWeight []*PillarInfo
 ```
 
 <a name="PillarInfoByWeight.Len"></a>
-### func \(PillarInfoByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L176>)
+### func \(PillarInfoByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L190>)
 
 ```go
 func (a PillarInfoByWeight) Len() int
@@ -1143,7 +1143,7 @@ func (a PillarInfoByWeight) Len() int
 
 
 <a name="PillarInfoByWeight.Less"></a>
-### func \(PillarInfoByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L178>)
+### func \(PillarInfoByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L192>)
 
 ```go
 func (a PillarInfoByWeight) Less(i, j int) bool
@@ -1152,7 +1152,7 @@ func (a PillarInfoByWeight) Less(i, j int) bool
 
 
 <a name="PillarInfoByWeight.Swap"></a>
-### func \(PillarInfoByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L177>)
+### func \(PillarInfoByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L191>)
 
 ```go
 func (a PillarInfoByWeight) Swap(i, j int)
@@ -1161,9 +1161,9 @@ func (a PillarInfoByWeight) Swap(i, j int)
 
 
 <a name="PillarInfoList"></a>
-## type [PillarInfoList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L165-L168>)
+## type [PillarInfoList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L176-L179>)
 
-
+PillarInfoList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PillarInfoList struct {
@@ -1173,9 +1173,9 @@ type PillarInfoList struct {
 ```
 
 <a name="PillarInfoMarshal"></a>
-## type [PillarInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L100-L118>)
+## type [PillarInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L107-L125>)
 
-
+PillarInfoMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PillarInfoMarshal struct {
@@ -1200,9 +1200,9 @@ type PillarInfoMarshal struct {
 ```
 
 <a name="PillarStats"></a>
-## type [PillarStats](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L169-L172>)
+## type [PillarStats](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/pillar.go#L182-L185>)
 
-
+PillarStats is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PillarStats struct {
@@ -1235,36 +1235,36 @@ func NewPlasmaApi(z zenon.Zenon) *PlasmaApi
 NewPlasmaApi constructs the plasma namespace handler.
 
 <a name="PlasmaApi.Get"></a>
-### func \(\*PlasmaApi\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L171>)
+### func \(\*PlasmaApi\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L191>)
 
 ```go
 func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error)
 ```
 
-
+Get is part of the receiver's public API.
 
 <a name="PlasmaApi.GetEntriesByAddress"></a>
-### func \(\*PlasmaApi\) [GetEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L193>)
+### func \(\*PlasmaApi\) [GetEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L215>)
 
 ```go
 func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*FusionEntryList, error)
 ```
 
-
+GetEntriesByAddress loads the EntriesByAddress record from storage.
 
 <a name="PlasmaApi.GetRequiredPoWForAccountBlock"></a>
-### func \(\*PlasmaApi\) [GetRequiredPoWForAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L235>)
+### func \(\*PlasmaApi\) [GetRequiredPoWForAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L261>)
 
 ```go
 func (a *PlasmaApi) GetRequiredPoWForAccountBlock(param GetRequiredParam) (*GetRequiredResult, error)
 ```
 
-
+GetRequiredPoWForAccountBlock loads the RequiredPoWForAccountBlock record from storage.
 
 <a name="PlasmaInfo"></a>
-## type [PlasmaInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L41-L45>)
+## type [PlasmaInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L42-L46>)
 
-
+PlasmaInfo is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PlasmaInfo struct {
@@ -1275,36 +1275,36 @@ type PlasmaInfo struct {
 ```
 
 <a name="PlasmaInfo.MarshalJSON"></a>
-### func \(\*PlasmaInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L62>)
+### func \(\*PlasmaInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L67>)
 
 ```go
 func (r *PlasmaInfo) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="PlasmaInfo.ToPlasmaInfoMarshal"></a>
-### func \(\*PlasmaInfo\) [ToPlasmaInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L52>)
+### func \(\*PlasmaInfo\) [ToPlasmaInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L56>)
 
 ```go
 func (r *PlasmaInfo) ToPlasmaInfoMarshal() *PlasmaInfoMarshal
 ```
 
-
+ToPlasmaInfoMarshal projects the receiver to its JSON\-friendly PlasmaInfoMarshal twin.
 
 <a name="PlasmaInfo.UnmarshalJSON"></a>
-### func \(\*PlasmaInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L66>)
+### func \(\*PlasmaInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L72>)
 
 ```go
 func (r *PlasmaInfo) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="PlasmaInfoMarshal"></a>
-## type [PlasmaInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L46-L50>)
+## type [PlasmaInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L49-L53>)
 
-
+PlasmaInfoMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type PlasmaInfoMarshal struct {
@@ -1315,9 +1315,9 @@ type PlasmaInfoMarshal struct {
 ```
 
 <a name="Project"></a>
-## type [Project](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L76-L90>)
+## type [Project](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L78-L92>)
 
-
+Project is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type Project struct {
@@ -1338,36 +1338,36 @@ type Project struct {
 ```
 
 <a name="Project.MarshalJSON"></a>
-### func \(\*Project\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L136>)
+### func \(\*Project\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L141>)
 
 ```go
 func (p *Project) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="Project.ToProjectMarshal"></a>
-### func \(\*Project\) [ToProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L108>)
+### func \(\*Project\) [ToProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L112>)
 
 ```go
 func (p *Project) ToProjectMarshal() *ProjectMarshal
 ```
 
-
+ToProjectMarshal projects the receiver to its JSON\-friendly ProjectMarshal twin.
 
 <a name="Project.UnmarshalJSON"></a>
-### func \(\*Project\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L140>)
+### func \(\*Project\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L146>)
 
 ```go
 func (p *Project) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="ProjectList"></a>
-## type [ProjectList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L167-L170>)
+## type [ProjectList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L174-L177>)
 
-
+ProjectList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type ProjectList struct {
@@ -1377,9 +1377,9 @@ type ProjectList struct {
 ```
 
 <a name="ProjectMarshal"></a>
-## type [ProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L92-L106>)
+## type [ProjectMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L95-L109>)
 
-
+ProjectMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type ProjectMarshal struct {
@@ -1413,31 +1413,31 @@ type RewardHistoryEntry struct {
 ```
 
 <a name="RewardHistoryEntry.MarshalJSON"></a>
-### func \(\*RewardHistoryEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L68>)
+### func \(\*RewardHistoryEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L70>)
 
 ```go
 func (r *RewardHistoryEntry) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="RewardHistoryEntry.ToRewardDepositMarshal"></a>
-### func \(\*RewardHistoryEntry\) [ToRewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L58>)
+### func \(\*RewardHistoryEntry\) [ToRewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L59>)
 
 ```go
 func (r *RewardHistoryEntry) ToRewardDepositMarshal() *RewardHistoryEntryMarshal
 ```
 
-
+ToRewardDepositMarshal projects the receiver to its JSON\-friendly RewardDepositMarshal twin.
 
 <a name="RewardHistoryEntry.UnmarshalJSON"></a>
-### func \(\*RewardHistoryEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L72>)
+### func \(\*RewardHistoryEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L75>)
 
 ```go
 func (r *RewardHistoryEntry) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="RewardHistoryEntryMarshal"></a>
 ## type [RewardHistoryEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L52-L56>)
@@ -1453,7 +1453,7 @@ type RewardHistoryEntryMarshal struct {
 ```
 
 <a name="RewardHistoryList"></a>
-## type [RewardHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L85-L88>)
+## type [RewardHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L88-L91>)
 
 RewardHistoryList is the paginated response shape for reward\-history queries.
 
@@ -1465,7 +1465,7 @@ type RewardHistoryList struct {
 ```
 
 <a name="getFrontierRewardByPage"></a>
-### func [getFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L94>)
+### func [getFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L97>)
 
 ```go
 func getFrontierRewardByPage(chain chain.Chain, contract types.Address, address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
@@ -1495,49 +1495,49 @@ func NewSentinelApi(z zenon.Zenon) *SentinelApi
 NewSentinelApi constructs the sentinel namespace handler.
 
 <a name="SentinelApi.GetAllActive"></a>
-### func \(\*SentinelApi\) [GetAllActive](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L73>)
+### func \(\*SentinelApi\) [GetAllActive](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L76>)
 
 ```go
 func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoList, error)
 ```
 
-
+GetAllActive loads the AllActive record from storage.
 
 <a name="SentinelApi.GetByOwner"></a>
-### func \(\*SentinelApi\) [GetByOwner](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L61>)
+### func \(\*SentinelApi\) [GetByOwner](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L62>)
 
 ```go
 func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error)
 ```
 
-
+GetByOwner loads the ByOwner record from storage.
 
 <a name="SentinelApi.GetDepositedQsr"></a>
-### func \(\*SentinelApi\) [GetDepositedQsr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L100>)
+### func \(\*SentinelApi\) [GetDepositedQsr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L104>)
 
 ```go
 func (api *SentinelApi) GetDepositedQsr(address types.Address) (string, error)
 ```
 
-
+GetDepositedQsr loads the DepositedQsr record from storage.
 
 <a name="SentinelApi.GetFrontierRewardByPage"></a>
-### func \(\*SentinelApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L107>)
+### func \(\*SentinelApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L115>)
 
 ```go
 func (api *SentinelApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
 ```
 
-
+GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 
 <a name="SentinelApi.GetUncollectedReward"></a>
-### func \(\*SentinelApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L104>)
+### func \(\*SentinelApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L110>)
 
 ```go
 func (api *SentinelApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error)
 ```
 
-
+GetUncollectedReward loads the UncollectedReward record from storage.
 
 <a name="SentinelApi.toSentinelInfo"></a>
 ### func \(\*SentinelApi\) [toSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L45>)
@@ -1576,16 +1576,16 @@ type SentinelInfoList struct {
 ```
 
 <a name="SortFusionEntryByHeight"></a>
-## type [SortFusionEntryByHeight](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L160>)
+## type [SortFusionEntryByHeight](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L179>)
 
-
+SortFusionEntryByHeight is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type SortFusionEntryByHeight []*definition.FusionInfo
 ```
 
 <a name="SortFusionEntryByHeight.Len"></a>
-### func \(SortFusionEntryByHeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L162>)
+### func \(SortFusionEntryByHeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L181>)
 
 ```go
 func (a SortFusionEntryByHeight) Len() int
@@ -1594,7 +1594,7 @@ func (a SortFusionEntryByHeight) Len() int
 
 
 <a name="SortFusionEntryByHeight.Less"></a>
-### func \(SortFusionEntryByHeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L164>)
+### func \(SortFusionEntryByHeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L183>)
 
 ```go
 func (a SortFusionEntryByHeight) Less(i, j int) bool
@@ -1603,7 +1603,7 @@ func (a SortFusionEntryByHeight) Less(i, j int) bool
 
 
 <a name="SortFusionEntryByHeight.Swap"></a>
-### func \(SortFusionEntryByHeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L163>)
+### func \(SortFusionEntryByHeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/plasma.go#L182>)
 
 ```go
 func (a SortFusionEntryByHeight) Swap(i, j int)
@@ -1679,36 +1679,36 @@ func NewStakeApi(z zenon.Zenon) *StakeApi
 NewStakeApi constructs the stake namespace handler.
 
 <a name="StakeApi.GetEntriesByAddress"></a>
-### func \(\*StakeApi\) [GetEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L144>)
+### func \(\*StakeApi\) [GetEntriesByAddress](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L158>)
 
 ```go
 func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*StakeList, error)
 ```
 
-
+GetEntriesByAddress loads the EntriesByAddress record from storage.
 
 <a name="StakeApi.GetFrontierRewardByPage"></a>
-### func \(\*StakeApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L43>)
+### func \(\*StakeApi\) [GetFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L46>)
 
 ```go
 func (a *StakeApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
 ```
 
-
+GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 
 <a name="StakeApi.GetUncollectedReward"></a>
-### func \(\*StakeApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L40>)
+### func \(\*StakeApi\) [GetUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L41>)
 
 ```go
 func (a *StakeApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error)
 ```
 
-
+GetUncollectedReward loads the UncollectedReward record from storage.
 
 <a name="StakeEntry"></a>
-## type [StakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L50-L57>)
+## type [StakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L54-L61>)
 
-
+StakeEntry is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type StakeEntry struct {
@@ -1722,36 +1722,36 @@ type StakeEntry struct {
 ```
 
 <a name="StakeEntry.MarshalJSON"></a>
-### func \(\*StakeEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L80>)
+### func \(\*StakeEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L87>)
 
 ```go
 func (s *StakeEntry) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="StakeEntry.ToStakeEntryMarshal"></a>
-### func \(\*StakeEntry\) [ToStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L68>)
+### func \(\*StakeEntry\) [ToStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L74>)
 
 ```go
 func (s *StakeEntry) ToStakeEntryMarshal() *StakeEntryMarshal
 ```
 
-
+ToStakeEntryMarshal projects the receiver to its JSON\-friendly StakeEntryMarshal twin.
 
 <a name="StakeEntry.UnmarshalJSON"></a>
-### func \(\*StakeEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L84>)
+### func \(\*StakeEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L92>)
 
 ```go
 func (s *StakeEntry) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="StakeEntryMarshal"></a>
-## type [StakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L59-L66>)
+## type [StakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L64-L71>)
 
-
+StakeEntryMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type StakeEntryMarshal struct {
@@ -1765,9 +1765,9 @@ type StakeEntryMarshal struct {
 ```
 
 <a name="StakeList"></a>
-## type [StakeList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L98-L103>)
+## type [StakeList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L107-L112>)
 
-
+StakeList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type StakeList struct {
@@ -1779,36 +1779,36 @@ type StakeList struct {
 ```
 
 <a name="StakeList.MarshalJSON"></a>
-### func \(\*StakeList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L125>)
+### func \(\*StakeList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L137>)
 
 ```go
 func (s *StakeList) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="StakeList.ToStakeEntryMarshal"></a>
-### func \(\*StakeList\) [ToStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L112>)
+### func \(\*StakeList\) [ToStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L123>)
 
 ```go
 func (s *StakeList) ToStakeEntryMarshal() *StakeListMarshal
 ```
 
-
+ToStakeEntryMarshal projects the receiver to its JSON\-friendly StakeEntryMarshal twin.
 
 <a name="StakeList.UnmarshalJSON"></a>
-### func \(\*StakeList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L129>)
+### func \(\*StakeList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L142>)
 
 ```go
 func (s *StakeList) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="StakeListMarshal"></a>
-## type [StakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L105-L110>)
+## type [StakeListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/stake.go#L115-L120>)
 
-
+StakeListMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type StakeListMarshal struct {
@@ -1842,31 +1842,31 @@ func NewSwapApi(z zenon.Zenon) *SwapApi
 NewSwapApi constructs the swap namespace handler.
 
 <a name="SwapApi.GetAssets"></a>
-### func \(\*SwapApi\) [GetAssets](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L148>)
+### func \(\*SwapApi\) [GetAssets](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L160>)
 
 ```go
 func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error)
 ```
 
-
+GetAssets loads the Assets record from storage.
 
 <a name="SwapApi.GetAssetsByKeyIdHash"></a>
-### func \(\*SwapApi\) [GetAssetsByKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L120>)
+### func \(\*SwapApi\) [GetAssetsByKeyIdHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L130>)
 
 ```go
 func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, error)
 ```
 
-
+GetAssetsByKeyIdHash loads the AssetsByKeyIdHash record from storage.
 
 <a name="SwapApi.GetLegacyPillars"></a>
-### func \(\*SwapApi\) [GetLegacyPillars](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L176>)
+### func \(\*SwapApi\) [GetLegacyPillars](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L189>)
 
 ```go
 func (p *SwapApi) GetLegacyPillars() ([]*SwapLegacyPillarEntry, error)
 ```
 
-
+GetLegacyPillars loads the LegacyPillars record from storage.
 
 <a name="SwapAssetEntry"></a>
 ## type [SwapAssetEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L41-L45>)
@@ -1882,31 +1882,31 @@ type SwapAssetEntry struct {
 ```
 
 <a name="SwapAssetEntry.MarshalJSON"></a>
-### func \(\*SwapAssetEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L65>)
+### func \(\*SwapAssetEntry\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L67>)
 
 ```go
 func (s *SwapAssetEntry) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="SwapAssetEntry.ToSwapAssetEntryMarshal"></a>
-### func \(\*SwapAssetEntry\) [ToSwapAssetEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L55>)
+### func \(\*SwapAssetEntry\) [ToSwapAssetEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L56>)
 
 ```go
 func (s *SwapAssetEntry) ToSwapAssetEntryMarshal() *SwapAssetEntryMarshal
 ```
 
-
+ToSwapAssetEntryMarshal projects the receiver to its JSON\-friendly SwapAssetEntryMarshal twin.
 
 <a name="SwapAssetEntry.UnmarshalJSON"></a>
-### func \(\*SwapAssetEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L69>)
+### func \(\*SwapAssetEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L72>)
 
 ```go
 func (s *SwapAssetEntry) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="SwapAssetEntryMarshal"></a>
 ## type [SwapAssetEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L49-L53>)
@@ -1922,9 +1922,9 @@ type SwapAssetEntryMarshal struct {
 ```
 
 <a name="SwapAssetEntrySimple"></a>
-## type [SwapAssetEntrySimple](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L80-L83>)
+## type [SwapAssetEntrySimple](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L84-L87>)
 
-
+SwapAssetEntrySimple is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type SwapAssetEntrySimple struct {
@@ -1934,36 +1934,36 @@ type SwapAssetEntrySimple struct {
 ```
 
 <a name="SwapAssetEntrySimple.MarshalJSON"></a>
-### func \(\*SwapAssetEntrySimple\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L99>)
+### func \(\*SwapAssetEntrySimple\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L106>)
 
 ```go
 func (s *SwapAssetEntrySimple) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="SwapAssetEntrySimple.ToSwapAssetEntrySimpleMarshal"></a>
-### func \(\*SwapAssetEntrySimple\) [ToSwapAssetEntrySimpleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L90>)
+### func \(\*SwapAssetEntrySimple\) [ToSwapAssetEntrySimpleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L96>)
 
 ```go
 func (s *SwapAssetEntrySimple) ToSwapAssetEntrySimpleMarshal() *SwapAssetEntrySimpleMarshal
 ```
 
-
+ToSwapAssetEntrySimpleMarshal projects the receiver to its JSON\-friendly SwapAssetEntrySimpleMarshal twin.
 
 <a name="SwapAssetEntrySimple.UnmarshalJSON"></a>
-### func \(\*SwapAssetEntrySimple\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L103>)
+### func \(\*SwapAssetEntrySimple\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L111>)
 
 ```go
 func (s *SwapAssetEntrySimple) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="SwapAssetEntrySimpleMarshal"></a>
-## type [SwapAssetEntrySimpleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L85-L88>)
+## type [SwapAssetEntrySimpleMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L90-L93>)
 
-
+SwapAssetEntrySimpleMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type SwapAssetEntrySimpleMarshal struct {
@@ -1973,9 +1973,9 @@ type SwapAssetEntrySimpleMarshal struct {
 ```
 
 <a name="SwapLegacyPillarEntry"></a>
-## type [SwapLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L113-L116>)
+## type [SwapLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/swap.go#L122-L125>)
 
-
+SwapLegacyPillarEntry is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type SwapLegacyPillarEntry struct {
@@ -1985,9 +1985,9 @@ type SwapLegacyPillarEntry struct {
 ```
 
 <a name="TimeChallengesList"></a>
-## type [TimeChallengesList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L84-L87>)
+## type [TimeChallengesList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L86-L89>)
 
-
+TimeChallengesList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type TimeChallengesList struct {
@@ -2059,9 +2059,9 @@ type TokenList struct {
 ```
 
 <a name="UnwrapTokenRequest"></a>
-## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L501-L505>)
+## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L517-L521>)
 
-
+UnwrapTokenRequest is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type UnwrapTokenRequest struct {
@@ -2072,27 +2072,27 @@ type UnwrapTokenRequest struct {
 ```
 
 <a name="UnwrapTokenRequest.MarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L507>)
+### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L524>)
 
 ```go
 func (u *UnwrapTokenRequest) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="UnwrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L522>)
+### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L540>)
 
 ```go
 func (u *UnwrapTokenRequest) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="UnwrapTokenRequestList"></a>
-## type [UnwrapTokenRequestList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L554-L557>)
+## type [UnwrapTokenRequestList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L573-L576>)
 
-
+UnwrapTokenRequestList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type UnwrapTokenRequestList struct {
@@ -2102,9 +2102,9 @@ type UnwrapTokenRequestList struct {
 ```
 
 <a name="WrapTokenRequest"></a>
-## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L185-L189>)
+## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L192-L196>)
 
-
+WrapTokenRequest is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type WrapTokenRequest struct {
@@ -2115,27 +2115,27 @@ type WrapTokenRequest struct {
 ```
 
 <a name="WrapTokenRequest.MarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L191>)
+### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L199>)
 
 ```go
 func (w *WrapTokenRequest) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="WrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L207>)
+### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L216>)
 
 ```go
 func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="WrapTokenRequestList"></a>
-## type [WrapTokenRequestList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L306-L309>)
+## type [WrapTokenRequestList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L317-L320>)
 
-
+WrapTokenRequestList is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type WrapTokenRequestList struct {

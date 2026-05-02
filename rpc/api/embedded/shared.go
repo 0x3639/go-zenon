@@ -55,6 +55,7 @@ type RewardHistoryEntryMarshal struct {
 	Qsr   string `json:"qsrAmount"`
 }
 
+// ToRewardDepositMarshal projects the receiver to its JSON-friendly RewardDepositMarshal twin.
 func (r *RewardHistoryEntry) ToRewardDepositMarshal() *RewardHistoryEntryMarshal {
 	aux := &RewardHistoryEntryMarshal{
 		Epoch: r.Epoch,
@@ -65,10 +66,12 @@ func (r *RewardHistoryEntry) ToRewardDepositMarshal() *RewardHistoryEntryMarshal
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (r *RewardHistoryEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.ToRewardDepositMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (r *RewardHistoryEntry) UnmarshalJSON(data []byte) error {
 	aux := new(RewardHistoryEntryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {

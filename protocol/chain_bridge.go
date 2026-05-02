@@ -70,15 +70,20 @@ func (c chainBridge) AddAccountBlocks(blocks []*nom.AccountBlock) error {
 	}
 	return nil
 }
+
+// GetTransactions loads the Transactions record from storage.
 func (c chainBridge) GetTransactions() []*nom.AccountBlock {
 	blocks := c.chain.GetAllUncommittedAccountBlocks()
 	return blocks
 }
 
+// HasBlock is part of the receiver's public API.
 func (c chainBridge) HasBlock(hash types.Hash) bool {
 	m, _ := c.chain.GetFrontierMomentumStore().GetMomentumByHash(hash)
 	return m != nil
 }
+
+// GetBlockHashesFromHash loads the BlockHashesFromHash record from storage.
 func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]types.Hash, error) {
 	momentums, err := c.chain.GetFrontierMomentumStore().GetMomentumsByHash(hash, false, amount)
 	if err != nil {
@@ -90,6 +95,8 @@ func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]t
 	}
 	return hashes, nil
 }
+
+// GetBlock loads the Block record from storage.
 func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum {
 	store := c.chain.GetFrontierMomentumStore()
 	momentum, _ := store.GetMomentumByHash(hash)
@@ -108,6 +115,8 @@ func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum {
 		AccountBlocks: prefetched,
 	}
 }
+
+// CurrentBlock is part of the receiver's public API.
 func (c chainBridge) CurrentBlock() *nom.Momentum {
 	store := c.chain.GetFrontierMomentumStore()
 	momentum, err := store.GetFrontierMomentum()
@@ -115,10 +124,14 @@ func (c chainBridge) CurrentBlock() *nom.Momentum {
 
 	return momentum
 }
+
+// GetBlockByNumber loads the BlockByNumber record from storage.
 func (c chainBridge) GetBlockByNumber(num uint64) (*nom.Momentum, error) {
 	store := c.chain.GetFrontierMomentumStore()
 	return store.GetMomentumByHeight(num)
 }
+
+// Status is part of the receiver's public API.
 func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash) {
 	store := c.chain.GetFrontierMomentumStore()
 	frontier, err := store.GetFrontierMomentum()

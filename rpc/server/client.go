@@ -33,8 +33,12 @@ import (
 )
 
 var (
-	ErrClientQuit                = errors.New("client is closed")
-	ErrNoResult                  = errors.New("no result in JSON-RPC response")
+	// ErrClientQuit is part of the package's public API.
+	ErrClientQuit = errors.New("client is closed")
+	// ErrNoResult is part of the package's public API.
+	ErrNoResult = errors.New("no result in JSON-RPC response")
+	// ErrSubscriptionQueueOverflow is returned when a subscription's
+	// per-client buffer fills faster than the client drains it.
 	ErrSubscriptionQueueOverflow = errors.New("subscription queue overflow")
 	errClientReconnected         = errors.New("client reconnected")
 	errDead                      = errors.New("connection lost")
@@ -188,7 +192,7 @@ func DialContext(ctx context.Context, rawurl string) (*Client, error) {
 	}
 }
 
-// Client retrieves the client from the context, if any. This can be used to perform
+// ClientFromContext retrieves the [Client] value stored in ctx, if any.
 // 'reverse calls' in a handler method.
 func ClientFromContext(ctx context.Context) (*Client, bool) {
 	client, ok := ctx.Value(clientContextKey{}).(*Client)
@@ -335,7 +339,7 @@ func (c *Client) BatchCall(b []BatchElem) error {
 	return c.BatchCallContext(ctx, b)
 }
 
-// BatchCall sends all given requests as a single batch and waits for the server
+// BatchCallContext sends the requests as a single batch and waits for all responses.
 // to return a response for all of them. The wait duration is bounded by the
 // context's deadline.
 //

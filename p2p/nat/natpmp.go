@@ -37,6 +37,7 @@ func (n *pmp) String() string {
 	return fmt.Sprintf("NAT-PMP(%v)", n.gw)
 }
 
+// ExternalIP is part of the receiver's public API.
 func (n *pmp) ExternalIP() (net.IP, error) {
 	response, err := n.c.GetExternalAddress()
 	if err != nil {
@@ -45,6 +46,7 @@ func (n *pmp) ExternalIP() (net.IP, error) {
 	return response.ExternalIPAddress[:], nil
 }
 
+// AddMapping is part of the receiver's public API.
 func (n *pmp) AddMapping(protocol string, extport, intport int, name string, lifetime time.Duration) error {
 	if lifetime <= 0 {
 		return fmt.Errorf("lifetime must not be <= 0")
@@ -55,6 +57,7 @@ func (n *pmp) AddMapping(protocol string, extport, intport int, name string, lif
 	return err
 }
 
+// DeleteMapping is part of the receiver's public API.
 func (n *pmp) DeleteMapping(protocol string, extport, intport int) (err error) {
 	// To destroy a mapping, send an add-port with an internalPort of
 	// the internal port to destroy, an external port of zero and a

@@ -185,6 +185,8 @@ type PillarInfo struct {
 func (pillar *PillarInfo) IsActive() bool {
 	return pillar.RevokeTime == 0
 }
+
+// Save persists the receiver under its keyed slot in storage.
 func (pillar *PillarInfo) Save(context db.DB) error {
 	data, err := ABIPillars.PackVariable(
 		pillarInfoVariableName,
@@ -205,6 +207,7 @@ func (pillar *PillarInfo) Save(context db.DB) error {
 	return context.Put(GetPillarInfoKey(pillar.Name), data)
 }
 
+// GetPillarInfoKey loads the PillarInfoKey record from storage.
 func GetPillarInfoKey(name string) []byte {
 	return common.JoinBytes(pillarInfoKeyPrefix, types.NewHash([]byte(name)).Bytes())
 }
@@ -219,6 +222,8 @@ func parsePillarInfo(data []byte) (*PillarInfo, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetPillarInfo loads the PillarInfo record from storage.
 func GetPillarInfo(context db.DB, name string) (*PillarInfo, error) {
 	key := GetPillarInfoKey(name)
 	if data, err := context.Get(key); err != nil {
@@ -227,6 +232,8 @@ func GetPillarInfo(context db.DB, name string) (*PillarInfo, error) {
 		return parsePillarInfo(data)
 	}
 }
+
+// GetPillarsList loads the PillarsList record from storage.
 func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*PillarInfo, error) {
 	iterator := context.NewIterator(pillarInfoKeyPrefix)
 	defer iterator.Release()
@@ -260,6 +267,7 @@ type ProducingPillar struct {
 	Name      string
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (ppName *ProducingPillar) Save(context db.DB) error {
 	data, err := ABIPillars.PackVariable(
 		producingPillarNameVariableName,
@@ -271,6 +279,7 @@ func (ppName *ProducingPillar) Save(context db.DB) error {
 	return context.Put(GetProducingPillarKey(*ppName.Producing), data)
 }
 
+// GetProducingPillarKey loads the ProducingPillarKey record from storage.
 func GetProducingPillarKey(producing types.Address) []byte {
 	return common.JoinBytes(producingPillarNameKeyPrefix, producing.Bytes())
 }
@@ -304,6 +313,8 @@ func parseProducingPillar(key []byte, data []byte) (*ProducingPillar, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetProducingPillarName loads the ProducingPillarName record from storage.
 func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPillar, error) {
 	key := GetProducingPillarKey(address)
 	if data, err := context.Get(key); err != nil {
@@ -322,6 +333,7 @@ type DelegationInfo struct {
 	Name   string
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (delegation *DelegationInfo) Save(context db.DB) error {
 	data, err := ABIPillars.PackVariable(
 		delegationInfoVariableName,
@@ -332,6 +344,8 @@ func (delegation *DelegationInfo) Save(context db.DB) error {
 	}
 	return context.Put(getDelegationInfoKey(delegation.Backer), data)
 }
+
+// Delete removes the receiver's record from storage.
 func (delegation *DelegationInfo) Delete(context db.DB) error {
 	return context.Delete(getDelegationInfoKey(delegation.Backer))
 }
@@ -369,6 +383,8 @@ func parseDelegationInfo(key, data []byte) (*DelegationInfo, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetDelegationInfo loads the DelegationInfo record from storage.
 func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, error) {
 	key := getDelegationInfoKey(address)
 	if data, err := context.Get(key); err != nil {
@@ -377,6 +393,8 @@ func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, e
 		return parseDelegationInfo(key, data)
 	}
 }
+
+// GetDelegationsList loads the DelegationsList record from storage.
 func GetDelegationsList(context db.DB) ([]*DelegationInfo, error) {
 	iterator := context.NewIterator(delegationInfoKeyPrefix)
 	defer iterator.Release()
@@ -409,6 +427,7 @@ type LegacyPillarEntry struct {
 	KeyIdHash   types.Hash `json:"keyIdHash"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (legacy *LegacyPillarEntry) Save(context db.DB) error {
 	data, err := ABIPillars.PackVariable(
 		legacyPillarEntryVariableName,
@@ -418,6 +437,8 @@ func (legacy *LegacyPillarEntry) Save(context db.DB) error {
 	}
 	return context.Put(getLegacyPillarEntryKey(legacy.KeyIdHash), data)
 }
+
+// Delete removes the receiver's record from storage.
 func (legacy *LegacyPillarEntry) Delete(context db.DB) error {
 	return context.Delete(getLegacyPillarEntryKey(legacy.KeyIdHash))
 }
@@ -454,6 +475,8 @@ func parseLegacyPillarEntry(key, data []byte) (*LegacyPillarEntry, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetLegacyPillarEntry loads the LegacyPillarEntry record from storage.
 func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEntry, error) {
 	key := getLegacyPillarEntryKey(keyIdHash)
 	if data, err := context.Get(key); err != nil {
@@ -462,6 +485,8 @@ func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEnt
 		return parseLegacyPillarEntry(key, data)
 	}
 }
+
+// GetLegacyPillarList loads the LegacyPillarList record from storage.
 func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error) {
 	iterator := context.NewIterator(legacyPillarEntryKeyPrefix)
 	defer iterator.Release()
@@ -503,6 +528,7 @@ type PillarEpochHistory struct {
 	Weight                       *big.Int `json:"weight"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (peh *PillarEpochHistory) Save(context db.DB) error {
 	data, err := ABIPillars.PackVariable(
 		pillarEpochHistoryVariableName,
@@ -553,6 +579,8 @@ func parsePillarEpochHistoryEntry(key, data []byte) (*PillarEpochHistory, error)
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetPillarEpochHistoryList loads the PillarEpochHistoryList record from storage.
 func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHistory, error) {
 	iterator := context.NewIterator(getPillarEpochHistoryPrefixKey(epoch))
 	defer iterator.Release()
@@ -588,6 +616,7 @@ type PillarEpochHistoryMarshal struct {
 	Weight                       string `json:"weight"`
 }
 
+// ToPillarEpochHistoryMarshal projects the receiver to its JSON-friendly PillarEpochHistoryMarshal twin.
 func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMarshal {
 	aux := &PillarEpochHistoryMarshal{
 		Name:                         g.Name,
@@ -601,10 +630,12 @@ func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMa
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (g *PillarEpochHistory) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.ToPillarEpochHistoryMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (g *PillarEpochHistory) UnmarshalJSON(data []byte) error {
 	aux := new(PillarEpochHistoryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {

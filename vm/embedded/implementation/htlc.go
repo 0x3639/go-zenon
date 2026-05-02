@@ -17,7 +17,7 @@ var (
 	htlcLog = common.EmbeddedLogger.New("contract", "htlc")
 )
 
-// Neither the DenyProxyUnlock nor the AllowProxyUnlock methods delete the HtlcProxyUnlockInfo in storage
+// GetHtlcProxyUnlockStatus loads the HtlcProxyUnlockStatus record from storage.
 // This means there are really 3 states: Default, ExplicitDeny, ExplicitAllow
 // And once an address has explicitly denied/allowed proxy unlock, it can no longer go back to using the default
 // This is to ensure that if we ever change the default to deny, addresses that have called the Allow method will still work as expected
@@ -56,9 +56,12 @@ type CreateHtlcMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -87,6 +90,8 @@ func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -129,9 +134,12 @@ type ReclaimHtlcMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(types.Hash)
@@ -147,6 +155,8 @@ func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIHtlc.PackMethod(p.MethodName, param)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid reclaim - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -202,9 +212,12 @@ type UnlockHtlcMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UnlockHtlcParam)
@@ -220,6 +233,8 @@ func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIHtlc.PackMethod(p.MethodName, param.Id, param.Preimage)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid unlock - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -295,10 +310,12 @@ type DenyHtlcProxyUnlockMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
+// ValidateSendBlock is part of the receiver's public API.
 func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -314,6 +331,7 @@ func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	return err
 }
 
+// ReceiveBlock is part of the receiver's public API.
 func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -337,10 +355,12 @@ type AllowHtlcProxyUnlockMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
+// ValidateSendBlock is part of the receiver's public API.
 func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -356,6 +376,7 @@ func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	return err
 }
 
+// ReceiveBlock is part of the receiver's public API.
 func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)

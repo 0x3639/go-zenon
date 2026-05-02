@@ -166,49 +166,49 @@ type eventPrinter struct {
 ```
 
 <a name="eventPrinter.DeleteMomentum"></a>
-### func \(\*eventPrinter\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L61>)
+### func \(\*eventPrinter\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L69>)
 
 ```go
 func (ep *eventPrinter) DeleteMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum is part of the receiver's public API.
 
 <a name="eventPrinter.Init"></a>
-### func \(\*eventPrinter\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L39>)
+### func \(\*eventPrinter\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L40>)
 
 ```go
 func (ep *eventPrinter) Init() error
 ```
 
-
+Init prepares the receiver for use.
 
 <a name="eventPrinter.InsertMomentum"></a>
-### func \(\*eventPrinter\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L51>)
+### func \(\*eventPrinter\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L57>)
 
 ```go
 func (ep *eventPrinter) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+InsertMomentum is part of the receiver's public API.
 
 <a name="eventPrinter.Start"></a>
-### func \(\*eventPrinter\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L42>)
+### func \(\*eventPrinter\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L45>)
 
 ```go
 func (ep *eventPrinter) Start() error
 ```
 
-
+Start begins the receiver's background work.
 
 <a name="eventPrinter.Stop"></a>
-### func \(\*eventPrinter\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L46>)
+### func \(\*eventPrinter\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/zenon/printer.go#L51>)
 
 ```go
 func (ep *eventPrinter) Stop() error
 ```
 
-
+Stop tears down the receiver.
 
 <a name="zenon"></a>
 ## type [zenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/zenon.go#L18-L30>)

@@ -215,7 +215,7 @@ func NewHTTPHandlerStack(srv http.Handler, cors []string, vhosts []string) http.
 NewHTTPHandlerStack returns wrapped http\-related handlers
 
 <a name="RegisterApisFromWhitelist"></a>
-## func [RegisterApisFromWhitelist](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L474>)
+## func [RegisterApisFromWhitelist](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L475>)
 
 ```go
 func RegisterApisFromWhitelist(apis []rpc.API, modules []string, srv *rpc.Server, exposeAll bool) error
@@ -233,7 +233,7 @@ func ReplaceHomeVariable(path string) string
 ReplaceHomeVariable expands a leading \`\~\` in path to the user's home directory. Returns "" for empty input.
 
 <a name="checkModuleAvailability"></a>
-## func [checkModuleAvailability](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L497>)
+## func [checkModuleAvailability](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L498>)
 
 ```go
 func checkModuleAvailability(modules []string, apis []rpc.API) (bad, available []string)
@@ -251,7 +251,7 @@ func checkPath(r *http.Request, path string) bool
 checkPath checks whether a given request URL matches a given path prefix.
 
 <a name="checkTimeouts"></a>
-## func [checkTimeouts](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L514>)
+## func [checkTimeouts](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L515>)
 
 ```go
 func checkTimeouts(timeouts *rpc.HTTPTimeouts)
@@ -305,7 +305,7 @@ func newCorsHandler(srv http.Handler, allowedOrigins []string) http.Handler
 
 
 <a name="newGzipHandler"></a>
-## func [newGzipHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L453>)
+## func [newGzipHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L454>)
 
 ```go
 func newGzipHandler(next http.Handler) http.Handler
@@ -671,7 +671,7 @@ type gzipResponseWriter struct {
 ```
 
 <a name="gzipResponseWriter.Write"></a>
-### func \(\*gzipResponseWriter\) [Write](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L449>)
+### func \(\*gzipResponseWriter\) [Write](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L450>)
 
 ```go
 func (w *gzipResponseWriter) Write(b []byte) (int, error)
@@ -680,13 +680,13 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error)
 
 
 <a name="gzipResponseWriter.WriteHeader"></a>
-### func \(\*gzipResponseWriter\) [WriteHeader](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L444>)
+### func \(\*gzipResponseWriter\) [WriteHeader](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L445>)
 
 ```go
 func (w *gzipResponseWriter) WriteHeader(status int)
 ```
 
-
+WriteHeader implements http.ResponseWriter.
 
 <a name="httpConfig"></a>
 ## type [httpConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L23-L28>)

@@ -28,9 +28,12 @@ type UpdateEmbeddedLiquidityMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (method *UpdateEmbeddedLiquidityMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (method *UpdateEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -45,6 +48,8 @@ func (method *UpdateEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.Accoun
 	block.Data, err = definition.ABILiquidity.PackMethod(method.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (method *UpdateEmbeddedLiquidityMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := method.ValidateSendBlock(sendBlock); err != nil {
 		liquidityLog.Debug("invalid update - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -119,12 +124,17 @@ type FundMethod struct {
 	MethodName string
 }
 
+// Fee is part of the receiver's public API.
 func (p *FundMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
+
+// GetPlasma loads the Plasma record from storage.
 func (p *FundMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *FundMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	if block.Address != *types.SporkAddress {
 		return constants.ErrPermissionDenied
@@ -140,6 +150,8 @@ func (p *FundMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, param.ZnnReward, param.QsrReward)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *FundMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -192,12 +204,17 @@ type BurnZnnMethod struct {
 	MethodName string
 }
 
+// Fee is part of the receiver's public API.
 func (p *BurnZnnMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
+
+// GetPlasma loads the Plasma record from storage.
 func (p *BurnZnnMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *BurnZnnMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	if block.Address != *types.SporkAddress {
 		return constants.ErrPermissionDenied
@@ -213,6 +230,8 @@ func (p *BurnZnnMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, param.BurnAmount)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *BurnZnnMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -255,9 +274,12 @@ type SetTokenTupleMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetTokenTupleMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetTokenTupleMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.TokenTuplesParam)
@@ -306,6 +328,8 @@ func (p *SetTokenTupleMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, param.TokenStandards, param.ZnnPercentages, param.QsrPercentages, param.MinAmounts)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetTokenTupleMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -379,9 +403,12 @@ func getWeightedLiquidityStakeAmount(amount *big.Int, stakingTime int64) *big.In
 	return weighted
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *LiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *LiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	var stakeTime int64
@@ -397,6 +424,8 @@ func (p *LiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error 
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, stakeTime)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *LiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -449,9 +478,12 @@ type CancelLiquidityStakeMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *CancelLiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *CancelLiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	id := new(types.Hash)
@@ -466,6 +498,8 @@ func (p *CancelLiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, id)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *CancelLiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -516,9 +550,12 @@ type UpdateRewardEmbeddedLiquidityMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (method *UpdateRewardEmbeddedLiquidityMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (method *UpdateRewardEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -533,6 +570,8 @@ func (method *UpdateRewardEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.
 	block.Data, err = definition.ABILiquidity.PackMethod(method.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (method *UpdateRewardEmbeddedLiquidityMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := method.ValidateSendBlock(sendBlock); err != nil {
 		liquidityLog.Debug("invalid update - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -772,9 +811,12 @@ type SetIsHalted struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetIsHalted) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetIsHalted) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -790,6 +832,8 @@ func (p *SetIsHalted) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, *param)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetIsHalted) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -823,9 +867,12 @@ type UnlockLiquidityStakeEntries struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UnlockLiquidityStakeEntries) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UnlockLiquidityStakeEntries) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -840,6 +887,8 @@ func (p *UnlockLiquidityStakeEntries) ValidateSendBlock(block *nom.AccountBlock)
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -874,9 +923,12 @@ type SetAdditionalReward struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetAdditionalReward) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetAdditionalReward) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -892,6 +944,8 @@ func (p *SetAdditionalReward) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, param.ZnnReward, param.QsrReward)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -952,9 +1006,12 @@ type ChangeAdministratorLiquidity struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ChangeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ChangeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -978,6 +1035,8 @@ func (p *ChangeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, address)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1036,9 +1095,12 @@ type NominateGuardiansLiquidity struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *NominateGuardiansLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *NominateGuardiansLiquidity) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1067,6 +1129,8 @@ func (p *NominateGuardiansLiquidity) ValidateSendBlock(block *nom.AccountBlock) 
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, guardians)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1129,9 +1193,12 @@ type ProposeAdministratorLiquidity struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ProposeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1155,6 +1222,8 @@ func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBloc
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName, *address)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1233,9 +1302,12 @@ type EmergencyLiquidity struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *EmergencyLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *EmergencyLiquidity) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	if err := definition.ABILiquidity.UnpackEmptyMethod(p.MethodName, block.Data); err != nil {
@@ -1249,6 +1321,8 @@ func (p *EmergencyLiquidity) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABILiquidity.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *EmergencyLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

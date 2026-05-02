@@ -17,6 +17,7 @@ var (
 	acceleratorLog = common.EmbeddedLogger.New("contract", "accelerator")
 )
 
+// IsAcceleratorRunning reports whether the receiver satisfies the AcceleratorRunning predicate.
 func IsAcceleratorRunning(context vm_context.AccountVmContext) error {
 	frontierMomentum, err := context.GetFrontierMomentum()
 	genesisMomentum := context.GetGenesisMomentum()
@@ -109,9 +110,12 @@ type CreateProjectMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *CreateProjectMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *CreateProjectMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.AcceleratorParam)
@@ -132,6 +136,8 @@ func (p *CreateProjectMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIAccelerator.PackMethod(p.MethodName, param.Name, param.Description, param.Url, param.ZnnFundsNeeded, param.QsrFundsNeeded)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *CreateProjectMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -175,12 +181,17 @@ type AddPhaseMethod struct {
 	MethodName string
 }
 
+// Fee is part of the receiver's public API.
 func (p *AddPhaseMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
+
+// GetPlasma loads the Plasma record from storage.
 func (p *AddPhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *AddPhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.AcceleratorParam)
@@ -196,6 +207,8 @@ func (p *AddPhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIAccelerator.PackMethod(p.MethodName, param.Id, param.Name, param.Description, param.Url, param.ZnnFundsNeeded, param.QsrFundsNeeded)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *AddPhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -282,9 +295,12 @@ type UpdateEmbeddedAcceleratorMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UpdateEmbeddedAcceleratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UpdateEmbeddedAcceleratorMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -299,6 +315,8 @@ func (p *UpdateEmbeddedAcceleratorMethod) ValidateSendBlock(block *nom.AccountBl
 	block.Data, err = definition.ABIAccelerator.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UpdateEmbeddedAcceleratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -441,9 +459,12 @@ type UpdatePhaseMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UpdatePhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UpdatePhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.AcceleratorParam)
@@ -459,6 +480,8 @@ func (p *UpdatePhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIAccelerator.PackMethod(p.MethodName, param.Id, param.Name, param.Description, param.Url, param.ZnnFundsNeeded, param.QsrFundsNeeded)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UpdatePhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

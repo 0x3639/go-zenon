@@ -48,15 +48,20 @@ func newWorker(chain chain.Chain, supervisor *vm.Supervisor, broadcaster protoco
 	}
 }
 
+// Init prepares the receiver for use.
 func (w *worker) Init() error {
 	return nil
 }
+
+// Start begins the receiver's background work.
 func (w *worker) Start() error {
 	w.closed = make(chan struct{})
 	w.log.Info("start contract worker")
 
 	return nil
 }
+
+// Stop tears down the receiver.
 func (w *worker) Stop() error {
 	close(w.closed)
 

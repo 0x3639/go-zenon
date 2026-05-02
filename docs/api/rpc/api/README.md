@@ -219,7 +219,7 @@ type AccountBlock struct {
 ```
 
 <a name="ledgerAccountBlockToRpc"></a>
-### func [ledgerAccountBlockToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L506>)
+### func [ledgerAccountBlockToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L524>)
 
 ```go
 func ledgerAccountBlockToRpc(chain chain.Chain, lAb *nom.AccountBlock) (*AccountBlock, error)
@@ -228,7 +228,7 @@ func ledgerAccountBlockToRpc(chain chain.Chain, lAb *nom.AccountBlock) (*Account
 ledgerAccountBlockToRpc projects a chain\-layer account block to the wire form, eagerly resolving the token info, paired block, and confirmation details.
 
 <a name="ledgerAccountBlocksToRpc"></a>
-### func [ledgerAccountBlocksToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L516>)
+### func [ledgerAccountBlocksToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L534>)
 
 ```go
 func ledgerAccountBlocksToRpc(chain chain.Chain, list []*nom.AccountBlock) ([]*AccountBlock, error)
@@ -237,7 +237,7 @@ func ledgerAccountBlocksToRpc(chain chain.Chain, list []*nom.AccountBlock) ([]*A
 
 
 <a name="AccountBlock.ComputeHash"></a>
-### func \(\*AccountBlock\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L337>)
+### func \(\*AccountBlock\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L355>)
 
 ```go
 func (block *AccountBlock) ComputeHash() (*types.Hash, error)
@@ -264,7 +264,7 @@ func (block *AccountBlock) ToAccountBlockMarshal() *AccountBlockMarshal
 ToAccountBlockMarshal projects an in\-memory AccountBlock to its wire\-friendly Marshal twin \(big.Int → string\), recursively covering the paired block and token info.
 
 <a name="AccountBlock.ToLedgerBlock"></a>
-### func \(\*AccountBlock\) [ToLedgerBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L331>)
+### func \(\*AccountBlock\) [ToLedgerBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L349>)
 
 ```go
 func (block *AccountBlock) ToLedgerBlock() (*nom.AccountBlock, error)
@@ -282,7 +282,7 @@ func (block *AccountBlock) UnmarshalJSON(data []byte) error
 UnmarshalJSON is the inverse of MarshalJSON — decodes the wire form back into an in\-memory AccountBlock with native big.Int values.
 
 <a name="AccountBlock.addAllExtraInfo"></a>
-### func \(\*AccountBlock\) [addAllExtraInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L423>)
+### func \(\*AccountBlock\) [addAllExtraInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L441>)
 
 ```go
 func (block *AccountBlock) addAllExtraInfo(chain chain.Chain) error
@@ -291,7 +291,7 @@ func (block *AccountBlock) addAllExtraInfo(chain chain.Chain) error
 
 
 <a name="AccountBlock.addConfirmationInfo"></a>
-### func \(\*AccountBlock\) [addConfirmationInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L401>)
+### func \(\*AccountBlock\) [addConfirmationInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L419>)
 
 ```go
 func (block *AccountBlock) addConfirmationInfo(chain chain.Chain) error
@@ -300,7 +300,7 @@ func (block *AccountBlock) addConfirmationInfo(chain chain.Chain) error
 
 
 <a name="AccountBlock.prefetchPaired"></a>
-### func \(\*AccountBlock\) [prefetchPaired](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L356>)
+### func \(\*AccountBlock\) [prefetchPaired](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L374>)
 
 ```go
 func (block *AccountBlock) prefetchPaired(chain chain.Chain) error
@@ -309,7 +309,7 @@ func (block *AccountBlock) prefetchPaired(chain chain.Chain) error
 
 
 <a name="AccountBlock.prefetchToken"></a>
-### func \(\*AccountBlock\) [prefetchToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L345>)
+### func \(\*AccountBlock\) [prefetchToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L363>)
 
 ```go
 func (block *AccountBlock) prefetchToken(chain chain.Chain) error
@@ -332,7 +332,7 @@ type AccountBlockConfirmationDetail struct {
 ```
 
 <a name="AccountBlockList"></a>
-## type [AccountBlockList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L261-L265>)
+## type [AccountBlockList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L273-L277>)
 
 AccountBlockList is the paginated response shape used by every account\-block list endpoint. Count is the total matching count; More is true when the underlying query was truncated and another page may follow.
 
@@ -345,36 +345,36 @@ type AccountBlockList struct {
 ```
 
 <a name="AccountBlockList.MarshalJSON"></a>
-### func \(\*AccountBlockList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L293>)
+### func \(\*AccountBlockList\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L309>)
 
 ```go
 func (abl *AccountBlockList) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="AccountBlockList.ToAccountBlockListMarshal"></a>
-### func \(\*AccountBlockList\) [ToAccountBlockListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L273>)
+### func \(\*AccountBlockList\) [ToAccountBlockListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L287>)
 
 ```go
 func (abl *AccountBlockList) ToAccountBlockListMarshal() *AccountBlockListMarshal
 ```
 
-
+ToAccountBlockListMarshal projects the receiver to its JSON\-friendly AccountBlockListMarshal twin.
 
 <a name="AccountBlockList.UnmarshalJSON"></a>
-### func \(\*AccountBlockList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L296>)
+### func \(\*AccountBlockList\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L314>)
 
 ```go
 func (abl *AccountBlockList) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="AccountBlockListMarshal"></a>
-## type [AccountBlockListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L267-L271>)
+## type [AccountBlockListMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L280-L284>)
 
-
+AccountBlockListMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type AccountBlockListMarshal struct {
@@ -433,36 +433,36 @@ type BalanceInfo struct {
 ```
 
 <a name="BalanceInfo.MarshalJSON"></a>
-### func \(\*BalanceInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L155>)
+### func \(\*BalanceInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L159>)
 
 ```go
 func (b *BalanceInfo) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="BalanceInfo.ToBalanceInfoMarshal"></a>
-### func \(\*BalanceInfo\) [ToBalanceInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L148>)
+### func \(\*BalanceInfo\) [ToBalanceInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L150>)
 
 ```go
 func (b *BalanceInfo) ToBalanceInfoMarshal() BalanceInfoMarshal
 ```
 
-
+ToBalanceInfoMarshal projects the receiver to its JSON\-friendly BalanceInfoMarshal twin.
 
 <a name="BalanceInfo.UnmarshalJSON"></a>
-### func \(\*BalanceInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L158>)
+### func \(\*BalanceInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L164>)
 
 ```go
 func (b *BalanceInfo) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="BalanceInfoMarshal"></a>
-## type [BalanceInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L143-L146>)
+## type [BalanceInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L144-L147>)
 
-
+BalanceInfoMarshal is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type BalanceInfoMarshal struct {
@@ -484,7 +484,7 @@ type DetailedMomentum struct {
 ```
 
 <a name="DetailedMomentumList"></a>
-## type [DetailedMomentumList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L322-L325>)
+## type [DetailedMomentumList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L340-L343>)
 
 DetailedMomentumList is MomentumList augmented with each momentum's full account\-block content — returned by GetDetailedMomentumsByHeight.
 
@@ -496,7 +496,7 @@ type DetailedMomentumList struct {
 ```
 
 <a name="momentumListToDetailedList"></a>
-### func [momentumListToDetailedList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L440>)
+### func [momentumListToDetailedList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L458>)
 
 ```go
 func momentumListToDetailedList(chain chain.Chain, list *MomentumList) (*DetailedMomentumList, error)
@@ -674,7 +674,7 @@ type Momentum struct {
 ```
 
 <a name="ledgerMomentumToRpc"></a>
-### func [ledgerMomentumToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L468>)
+### func [ledgerMomentumToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L486>)
 
 ```go
 func ledgerMomentumToRpc(m *nom.Momentum) (*Momentum, error)
@@ -683,7 +683,7 @@ func ledgerMomentumToRpc(m *nom.Momentum) (*Momentum, error)
 ledgerMomentumToRpc projects a chain\-layer momentum into the wire\-form Momentum, populating the cached Producer address and substituting empty slices for nil Data / Content so the JSON output is stable.
 
 <a name="ledgerMomentumsToRpc"></a>
-### func [ledgerMomentumsToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L487>)
+### func [ledgerMomentumsToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L505>)
 
 ```go
 func ledgerMomentumsToRpc(list []*nom.Momentum) ([]*Momentum, error)
@@ -705,7 +705,7 @@ type MomentumHeader struct {
 ```
 
 <a name="MomentumList"></a>
-## type [MomentumList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L314-L317>)
+## type [MomentumList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L332-L335>)
 
 MomentumList is the response shape for momentum\-list endpoints. Count is the chain head height at query time.
 
@@ -850,7 +850,7 @@ func (api *StatsApi) SyncInfo() (*protocol.SyncInfo, error)
 SyncInfo reports the broadcaster's view of catch\-up progress \(Unknown / Syncing / SyncDone / NotEnoughPeers \+ heights\).
 
 <a name="Token"></a>
-## type [Token](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L172-L184>)
+## type [Token](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L178-L190>)
 
 Token is the wire\-form token descriptor. Mirrors the token info stored on\-chain by the embedded token contract; supply fields are big.Int and rendered as decimal strings via [TokenMarshal](<#TokenMarshal>).
 
@@ -871,7 +871,7 @@ type Token struct {
 ```
 
 <a name="LedgerTokenInfoToRpc"></a>
-### func [LedgerTokenInfoToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L537>)
+### func [LedgerTokenInfoToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L555>)
 
 ```go
 func LedgerTokenInfoToRpc(tokenInfo *definition.TokenInfo) *Token
@@ -880,7 +880,7 @@ func LedgerTokenInfoToRpc(tokenInfo *definition.TokenInfo) *Token
 LedgerTokenInfoToRpc projects an embedded\-contract TokenInfo to the wire\-form Token. Returns nil when input is nil.
 
 <a name="LedgerTokenInfosToRpc"></a>
-### func [LedgerTokenInfosToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L564>)
+### func [LedgerTokenInfosToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L582>)
 
 ```go
 func LedgerTokenInfosToRpc(list []*definition.TokenInfo) []*Token
@@ -889,34 +889,34 @@ func LedgerTokenInfosToRpc(list []*definition.TokenInfo) []*Token
 LedgerTokenInfosToRpc maps LedgerTokenInfoToRpc over a slice.
 
 <a name="Token.MarshalJSON"></a>
-### func \(\*Token\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L218>)
+### func \(\*Token\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L227>)
 
 ```go
 func (t *Token) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="Token.ToTokenMarshal"></a>
-### func \(\*Token\) [ToTokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L202>)
+### func \(\*Token\) [ToTokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L209>)
 
 ```go
 func (t *Token) ToTokenMarshal() *TokenMarshal
 ```
 
-
+ToTokenMarshal projects the receiver to its JSON\-friendly TokenMarshal twin.
 
 <a name="Token.UnmarshalJSON"></a>
-### func \(\*Token\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L221>)
+### func \(\*Token\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L232>)
 
 ```go
 func (t *Token) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="TokenMarshal"></a>
-## type [TokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L188-L200>)
+## type [TokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L194-L206>)
 
 TokenMarshal is the JSON\-friendly twin of [Token](<#Token>) — supply fields are decimal strings.
 
@@ -937,12 +937,12 @@ type TokenMarshal struct {
 ```
 
 <a name="TokenMarshal.FromTokenMarshal"></a>
-### func \(\*TokenMarshal\) [FromTokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L241>)
+### func \(\*TokenMarshal\) [FromTokenMarshal](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L253>)
 
 ```go
 func (t *TokenMarshal) FromTokenMarshal() *Token
 ```
 
-
+FromTokenMarshal inflates the wire form back into the receiver.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

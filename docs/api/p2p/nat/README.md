@@ -121,7 +121,7 @@ func Map(m Interface, c chan struct{}, protocol string, extport, intport int, na
 Map adds a port mapping on m and keeps it alive until c is closed. This function is typically invoked in its own goroutine.
 
 <a name="discover"></a>
-## func [discover](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L151>)
+## func [discover](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L154>)
 
 ```go
 func discover(out chan<- *upnp, target string, matcher func(*goupnp.RootDevice, goupnp.ServiceClient) *upnp)
@@ -130,7 +130,7 @@ func discover(out chan<- *upnp, target string, matcher func(*goupnp.RootDevice, 
 discover walks every device returned by SSDP for the given target URN, asks matcher to wrap any service it recognises, and writes the first NAT\-enabled match into out \(or a single nil if nothing matches\). Each SOAP call is bounded by soapRequestTimeout.
 
 <a name="potentialGateways"></a>
-## func [potentialGateways](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L114>)
+## func [potentialGateways](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L117>)
 
 ```go
 func potentialGateways() (gws []net.IP)
@@ -141,7 +141,7 @@ potentialGateways returns the .1 host on every RFC1918 \(private\) network the l
 <a name="Interface"></a>
 ## type [Interface](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L34-L50>)
 
-An implementation of nat.Interface can map local ports to ports accessible from the Internet.
+Interface is part of the package's public API. accessible from the Internet.
 
 ```go
 type Interface interface {
@@ -164,7 +164,7 @@ type Interface interface {
 ```
 
 <a name="Any"></a>
-### func [Any](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L157>)
+### func [Any](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L160>)
 
 ```go
 func Any() Interface
@@ -182,7 +182,7 @@ func ExtIP(ip net.IP) Interface
 ExtIP assumes that the local machine is reachable on the given external IP address, and that any required ports were mapped manually. Mapping operations will not return an error but won't actually do anything.
 
 <a name="PMP"></a>
-### func [PMP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L182>)
+### func [PMP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L185>)
 
 ```go
 func PMP(gateway net.IP) Interface
@@ -209,7 +209,7 @@ Parse parses a NAT interface description. The following formats are currently ac
 ```
 
 <a name="UPnP"></a>
-### func [UPnP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L175>)
+### func [UPnP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L178>)
 
 ```go
 func UPnP() Interface
@@ -218,7 +218,7 @@ func UPnP() Interface
 UPnP returns a port mapper that uses UPnP. It will attempt to discover the address of your router using UDP broadcasts.
 
 <a name="discoverPMP"></a>
-### func [discoverPMP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L70>)
+### func [discoverPMP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L73>)
 
 ```go
 func discoverPMP() Interface
@@ -227,7 +227,7 @@ func discoverPMP() Interface
 discoverPMP probes every plausible LAN gateway in parallel and returns the first one to answer a NAT\-PMP GetExternalAddress RPC. Bounded by a 1\-second timeout so unreachable backends do not block startup.
 
 <a name="discoverUPnP"></a>
-### func [discoverUPnP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L115>)
+### func [discoverUPnP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L118>)
 
 ```go
 func discoverUPnP() Interface
@@ -236,7 +236,7 @@ func discoverUPnP() Interface
 discoverUPnP searches for Internet Gateway Devices and returns the first one it can find on the local network.
 
 <a name="startautodisc"></a>
-### func [startautodisc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L209>)
+### func [startautodisc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L212>)
 
 ```go
 func startautodisc(what string, doit func() Interface) Interface
@@ -245,7 +245,7 @@ func startautodisc(what string, doit func() Interface) Interface
 startautodisc kicks off the background discovery goroutine and returns an Interface wrapper that will lazily block on first use until discovery either finds a backend or fails. what is a label used in error messages and the String\(\) form of the wrapper.
 
 <a name="autodisc"></a>
-## type [autodisc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L196-L203>)
+## type [autodisc](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L199-L206>)
 
 autodisc represents a port mapping mechanism that is still being auto\-discovered. Calls to the Interface methods on this type will wait until the discovery is done and then call the method on the discovered mechanism.
 
@@ -263,34 +263,34 @@ type autodisc struct {
 ```
 
 <a name="autodisc.AddMapping"></a>
-### func \(\*autodisc\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L218>)
+### func \(\*autodisc\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L222>)
 
 ```go
 func (n *autodisc) AddMapping(protocol string, extport, intport int, name string, lifetime time.Duration) error
 ```
 
-
+AddMapping is part of the receiver's public API.
 
 <a name="autodisc.DeleteMapping"></a>
-### func \(\*autodisc\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L225>)
+### func \(\*autodisc\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L230>)
 
 ```go
 func (n *autodisc) DeleteMapping(protocol string, extport, intport int) error
 ```
 
-
+DeleteMapping is part of the receiver's public API.
 
 <a name="autodisc.ExternalIP"></a>
-### func \(\*autodisc\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L232>)
+### func \(\*autodisc\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L238>)
 
 ```go
 func (n *autodisc) ExternalIP() (net.IP, error)
 ```
 
-
+ExternalIP is part of the receiver's public API.
 
 <a name="autodisc.String"></a>
-### func \(\*autodisc\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L239>)
+### func \(\*autodisc\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L245>)
 
 ```go
 func (n *autodisc) String() string
@@ -299,7 +299,7 @@ func (n *autodisc) String() string
 
 
 <a name="autodisc.wait"></a>
-### func \(\*autodisc\) [wait](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L250>)
+### func \(\*autodisc\) [wait](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L256>)
 
 ```go
 func (n *autodisc) wait() error
@@ -317,34 +317,34 @@ type extIP net.IP
 ```
 
 <a name="extIP.AddMapping"></a>
-### func \(extIP\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L152>)
+### func \(extIP\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L153>)
 
 ```go
 func (extIP) AddMapping(string, int, int, string, time.Duration) error
 ```
 
-These do nothing.
+AddMapping is part of the receiver's public API.
 
 <a name="extIP.DeleteMapping"></a>
-### func \(extIP\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L153>)
+### func \(extIP\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L156>)
 
 ```go
 func (extIP) DeleteMapping(string, int, int) error
 ```
 
-
+DeleteMapping is part of the receiver's public API.
 
 <a name="extIP.ExternalIP"></a>
-### func \(extIP\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L148>)
+### func \(extIP\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L149>)
 
 ```go
 func (n extIP) ExternalIP() (net.IP, error)
 ```
 
-
+ExternalIP is part of the receiver's public API.
 
 <a name="extIP.String"></a>
-### func \(extIP\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L149>)
+### func \(extIP\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/nat.go#L150>)
 
 ```go
 func (n extIP) String() string
@@ -365,31 +365,31 @@ type pmp struct {
 ```
 
 <a name="pmp.AddMapping"></a>
-### func \(\*pmp\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L48>)
+### func \(\*pmp\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L50>)
 
 ```go
 func (n *pmp) AddMapping(protocol string, extport, intport int, name string, lifetime time.Duration) error
 ```
 
-
+AddMapping is part of the receiver's public API.
 
 <a name="pmp.DeleteMapping"></a>
-### func \(\*pmp\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L58>)
+### func \(\*pmp\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L61>)
 
 ```go
 func (n *pmp) DeleteMapping(protocol string, extport, intport int) (err error)
 ```
 
-
+DeleteMapping is part of the receiver's public API.
 
 <a name="pmp.ExternalIP"></a>
-### func \(\*pmp\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L40>)
+### func \(\*pmp\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L41>)
 
 ```go
 func (n *pmp) ExternalIP() (net.IP, error)
 ```
 
-
+ExternalIP is part of the receiver's public API.
 
 <a name="pmp.String"></a>
 ### func \(\*pmp\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natpmp.go#L36>)
@@ -414,34 +414,34 @@ type upnp struct {
 ```
 
 <a name="upnp.AddMapping"></a>
-### func \(\*upnp\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L66>)
+### func \(\*upnp\) [AddMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L68>)
 
 ```go
 func (n *upnp) AddMapping(protocol string, extport, intport int, desc string, lifetime time.Duration) error
 ```
 
-
+AddMapping is part of the receiver's public API.
 
 <a name="upnp.DeleteMapping"></a>
-### func \(\*upnp\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L105>)
+### func \(\*upnp\) [DeleteMapping](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L108>)
 
 ```go
 func (n *upnp) DeleteMapping(protocol string, extport, intport int) error
 ```
 
-
+DeleteMapping is part of the receiver's public API.
 
 <a name="upnp.ExternalIP"></a>
-### func \(\*upnp\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L54>)
+### func \(\*upnp\) [ExternalIP](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L55>)
 
 ```go
 func (n *upnp) ExternalIP() (addr net.IP, err error)
 ```
 
-
+ExternalIP is part of the receiver's public API.
 
 <a name="upnp.String"></a>
-### func \(\*upnp\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L109>)
+### func \(\*upnp\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L112>)
 
 ```go
 func (n *upnp) String() string
@@ -450,7 +450,7 @@ func (n *upnp) String() string
 
 
 <a name="upnp.internalAddress"></a>
-### func \(\*upnp\) [internalAddress](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L79>)
+### func \(\*upnp\) [internalAddress](<https://github.com/zenon-network/go-zenon/blob/master/p2p/nat/natupnp.go#L81>)
 
 ```go
 func (n *upnp) internalAddress() (net.IP, error)

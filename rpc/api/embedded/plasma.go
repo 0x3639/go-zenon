@@ -38,17 +38,21 @@ func NewPlasmaApi(z zenon.Zenon) *PlasmaApi {
 	}
 }
 
+// PlasmaInfo is part of the package's public API; see the surrounding code for usage.
 type PlasmaInfo struct {
 	CurrentPlasma uint64   `json:"currentPlasma"`
 	MaxPlasma     uint64   `json:"maxPlasma"`
 	QsrAmount     *big.Int `json:"qsrAmount"`
 }
+
+// PlasmaInfoMarshal is part of the package's public API; see the surrounding code for usage.
 type PlasmaInfoMarshal struct {
 	CurrentPlasma uint64 `json:"currentPlasma"`
 	MaxPlasma     uint64 `json:"maxPlasma"`
 	QsrAmount     string `json:"qsrAmount"`
 }
 
+// ToPlasmaInfoMarshal projects the receiver to its JSON-friendly PlasmaInfoMarshal twin.
 func (r *PlasmaInfo) ToPlasmaInfoMarshal() *PlasmaInfoMarshal {
 	aux := &PlasmaInfoMarshal{
 		CurrentPlasma: r.CurrentPlasma,
@@ -59,10 +63,12 @@ func (r *PlasmaInfo) ToPlasmaInfoMarshal() *PlasmaInfoMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (r *PlasmaInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.ToPlasmaInfoMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (r *PlasmaInfo) UnmarshalJSON(data []byte) error {
 	aux := new(PlasmaInfoMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -74,12 +80,15 @@ func (r *PlasmaInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FusionEntry is part of the package's public API; see the surrounding code for usage.
 type FusionEntry struct {
 	QsrAmount        *big.Int      `json:"qsrAmount"`
 	Beneficiary      types.Address `json:"beneficiary"`
 	ExpirationHeight uint64        `json:"expirationHeight"`
 	Id               types.Hash    `json:"id"`
 }
+
+// FusionEntryMarshal is part of the package's public API; see the surrounding code for usage.
 type FusionEntryMarshal struct {
 	QsrAmount        string        `json:"qsrAmount"`
 	Beneficiary      types.Address `json:"beneficiary"`
@@ -87,6 +96,7 @@ type FusionEntryMarshal struct {
 	Id               types.Hash    `json:"id"`
 }
 
+// ToFusionEntryMarshal projects the receiver to its JSON-friendly FusionEntryMarshal twin.
 func (r *FusionEntry) ToFusionEntryMarshal() *FusionEntryMarshal {
 	aux := &FusionEntryMarshal{
 		QsrAmount:        r.QsrAmount.String(),
@@ -98,10 +108,12 @@ func (r *FusionEntry) ToFusionEntryMarshal() *FusionEntryMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (r *FusionEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.ToFusionEntryMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (r *FusionEntry) UnmarshalJSON(data []byte) error {
 	aux := new(FusionEntryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -114,17 +126,21 @@ func (r *FusionEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FusionEntryList is part of the package's public API; see the surrounding code for usage.
 type FusionEntryList struct {
 	QsrAmount *big.Int       `json:"qsrAmount"`
 	Count     int            `json:"count"`
 	Fusions   []*FusionEntry `json:"list"`
 }
+
+// FusionEntryListMarshal is part of the package's public API; see the surrounding code for usage.
 type FusionEntryListMarshal struct {
 	QsrAmount string         `json:"qsrAmount"`
 	Count     int            `json:"count"`
 	Fusions   []*FusionEntry `json:"list"`
 }
 
+// ToFusionEntryListMarshal projects the receiver to its JSON-friendly FusionEntryListMarshal twin.
 func (r *FusionEntryList) ToFusionEntryListMarshal() *FusionEntryListMarshal {
 	aux := &FusionEntryListMarshal{
 		QsrAmount: r.QsrAmount.String(),
@@ -138,10 +154,12 @@ func (r *FusionEntryList) ToFusionEntryListMarshal() *FusionEntryListMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (r *FusionEntryList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.ToFusionEntryListMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (r *FusionEntryList) UnmarshalJSON(data []byte) error {
 	aux := new(FusionEntryListMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -157,6 +175,7 @@ func (r *FusionEntryList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// SortFusionEntryByHeight is part of the package's public API; see the surrounding code for usage.
 type SortFusionEntryByHeight []*definition.FusionInfo
 
 func (a SortFusionEntryByHeight) Len() int      { return len(a) }
@@ -168,6 +187,7 @@ func (a SortFusionEntryByHeight) Less(i, j int) bool {
 	return a[i].ExpirationHeight < a[j].ExpirationHeight
 }
 
+// Get is part of the receiver's public API.
 func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, address)
 	if err != nil {
@@ -190,6 +210,8 @@ func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error) {
 		QsrAmount:     amount,
 	}, nil
 }
+
+// GetEntriesByAddress loads the EntriesByAddress record from storage.
 func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*FusionEntryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -220,18 +242,22 @@ func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSi
 	return &FusionEntryList{amount, listLen, entryList}, nil
 }
 
+// GetRequiredParam loads the RequiredParam record from storage.
 type GetRequiredParam struct {
 	SelfAddr  types.Address  `json:"address"`
 	BlockType uint64         `json:"blockType"`
 	ToAddr    *types.Address `json:"toAddress"`
 	Data      []byte         `json:"data"`
 }
+
+// GetRequiredResult loads the RequiredResult record from storage.
 type GetRequiredResult struct {
 	AvailablePlasma    uint64 `json:"availablePlasma"`
 	BasePlasma         uint64 `json:"basePlasma"`
 	RequiredDifficulty uint64 `json:"requiredDifficulty"`
 }
 
+// GetRequiredPoWForAccountBlock loads the RequiredPoWForAccountBlock record from storage.
 func (a *PlasmaApi) GetRequiredPoWForAccountBlock(param GetRequiredParam) (*GetRequiredResult, error) {
 	_, context, err := api.GetFrontierContext(a.chain, param.SelfAddr)
 	frontierMomentum, err := context.GetFrontierMomentum()

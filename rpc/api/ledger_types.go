@@ -140,11 +140,13 @@ type BalanceInfo struct {
 	Balance   *big.Int `json:"balance"`
 }
 
+// BalanceInfoMarshal is part of the package's public API; see the surrounding code for usage.
 type BalanceInfoMarshal struct {
 	TokenInfo *TokenMarshal `json:"token"`
 	Balance   string        `json:"balance"`
 }
 
+// ToBalanceInfoMarshal projects the receiver to its JSON-friendly BalanceInfoMarshal twin.
 func (b *BalanceInfo) ToBalanceInfoMarshal() BalanceInfoMarshal {
 	aux := BalanceInfoMarshal{
 		TokenInfo: b.TokenInfo.ToTokenMarshal(),
@@ -152,9 +154,13 @@ func (b *BalanceInfo) ToBalanceInfoMarshal() BalanceInfoMarshal {
 	}
 	return aux
 }
+
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (b *BalanceInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(b.ToBalanceInfoMarshal())
 }
+
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (b *BalanceInfo) UnmarshalJSON(data []byte) error {
 	aux := new(BalanceInfoMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -199,6 +205,7 @@ type TokenMarshal struct {
 	IsUtility          bool                     `json:"isUtility"`
 }
 
+// ToTokenMarshal projects the receiver to its JSON-friendly TokenMarshal twin.
 func (t *Token) ToTokenMarshal() *TokenMarshal {
 	aux := &TokenMarshal{
 		TokenName:          t.TokenName,
@@ -215,9 +222,13 @@ func (t *Token) ToTokenMarshal() *TokenMarshal {
 	}
 	return aux
 }
+
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (t *Token) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.ToTokenMarshal())
 }
+
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (t *Token) UnmarshalJSON(data []byte) error {
 	aux := new(TokenMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -238,6 +249,7 @@ func (t *Token) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FromTokenMarshal inflates the wire form back into the receiver.
 func (t *TokenMarshal) FromTokenMarshal() *Token {
 	return &Token{
 		TokenName:          t.TokenName,
@@ -264,12 +276,14 @@ type AccountBlockList struct {
 	More  bool            `json:"more"`
 }
 
+// AccountBlockListMarshal is part of the package's public API; see the surrounding code for usage.
 type AccountBlockListMarshal struct {
 	List  []*AccountBlockMarshal `json:"list"`
 	Count int                    `json:"count"`
 	More  bool                   `json:"more"`
 }
 
+// ToAccountBlockListMarshal projects the receiver to its JSON-friendly AccountBlockListMarshal twin.
 func (abl *AccountBlockList) ToAccountBlockListMarshal() *AccountBlockListMarshal {
 	aux := &AccountBlockListMarshal{
 		Count: abl.Count,
@@ -290,9 +304,13 @@ func (abl *AccountBlockList) ToAccountBlockListMarshal() *AccountBlockListMarsha
 	}
 	return aux
 }
+
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (abl *AccountBlockList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(abl.ToAccountBlockListMarshal())
 }
+
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (abl *AccountBlockList) UnmarshalJSON(data []byte) error {
 	aux := new(AccountBlockListMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {

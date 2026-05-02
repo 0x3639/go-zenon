@@ -58,6 +58,7 @@ func (api *SentinelApi) toSentinelInfo(sentinel *definition.SentinelInfo) *Senti
 	}
 }
 
+// GetByOwner loads the ByOwner record from storage.
 func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 	_, context, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
 	if err != nil {
@@ -70,6 +71,8 @@ func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 		return nil, nil
 	}
 }
+
+// GetAllActive loads the AllActive record from storage.
 func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoList, error) {
 	if pageSize > rpcapi.RpcMaxPageSize {
 		return nil, rpcapi.ErrPageSizeParamTooBig
@@ -97,13 +100,18 @@ func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoL
 
 // === Shared RPCs ===
 
+// GetDepositedQsr loads the DepositedQsr record from storage.
 func (api *SentinelApi) GetDepositedQsr(address types.Address) (string, error) {
 	depositedQsr, err := getDepositedQsr(api.chain, types.SentinelContract, address)
 	return depositedQsr.String(), err
 }
+
+// GetUncollectedReward loads the UncollectedReward record from storage.
 func (api *SentinelApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(api.chain, types.SentinelContract, address)
 }
+
+// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 func (api *SentinelApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > rpcapi.RpcMaxPageSize {
 		return nil, rpcapi.ErrPageSizeParamTooBig

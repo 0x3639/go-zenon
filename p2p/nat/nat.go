@@ -29,7 +29,7 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
-// An implementation of nat.Interface can map local ports to ports
+// Interface is part of the package's public API.
 // accessible from the Internet.
 type Interface interface {
 	// These methods manage a mapping between a port on the local
@@ -53,12 +53,12 @@ type Interface interface {
 // The following formats are currently accepted.
 // Note that mechanism names are not case-sensitive.
 //
-//     "" or "none"         return nil
-//     "extip:77.12.33.4"   will assume the local machine is reachable on the given IP
-//     "any"                uses the first auto-detected mechanism
-//     "upnp"               uses the Universal Plug and Play protocol
-//     "pmp"                uses NAT-PMP with an auto-detected gateway address
-//     "pmp:192.168.0.1"    uses NAT-PMP with the given gateway address
+//	"" or "none"         return nil
+//	"extip:77.12.33.4"   will assume the local machine is reachable on the given IP
+//	"any"                uses the first auto-detected mechanism
+//	"upnp"               uses the Universal Plug and Play protocol
+//	"pmp"                uses NAT-PMP with an auto-detected gateway address
+//	"pmp:192.168.0.1"    uses NAT-PMP with the given gateway address
 func Parse(spec string) (Interface, error) {
 	var (
 		parts = strings.SplitN(spec, ":", 2)
@@ -145,12 +145,15 @@ func ExtIP(ip net.IP) Interface {
 // port forwarding manually.
 type extIP net.IP
 
+// ExternalIP is part of the receiver's public API.
 func (n extIP) ExternalIP() (net.IP, error) { return net.IP(n), nil }
 func (n extIP) String() string              { return fmt.Sprintf("ExtIP(%v)", net.IP(n)) }
 
-// These do nothing.
+// AddMapping is part of the receiver's public API.
 func (extIP) AddMapping(string, int, int, string, time.Duration) error { return nil }
-func (extIP) DeleteMapping(string, int, int) error                     { return nil }
+
+// DeleteMapping is part of the receiver's public API.
+func (extIP) DeleteMapping(string, int, int) error { return nil }
 
 // Any returns a port mapper that tries to discover any supported
 // mechanism on the local network.
@@ -215,6 +218,7 @@ func startautodisc(what string, doit func() Interface) Interface {
 	return ad
 }
 
+// AddMapping is part of the receiver's public API.
 func (n *autodisc) AddMapping(protocol string, extport, intport int, name string, lifetime time.Duration) error {
 	if err := n.wait(); err != nil {
 		return err
@@ -222,6 +226,7 @@ func (n *autodisc) AddMapping(protocol string, extport, intport int, name string
 	return n.found.AddMapping(protocol, extport, intport, name, lifetime)
 }
 
+// DeleteMapping is part of the receiver's public API.
 func (n *autodisc) DeleteMapping(protocol string, extport, intport int) error {
 	if err := n.wait(); err != nil {
 		return err
@@ -229,6 +234,7 @@ func (n *autodisc) DeleteMapping(protocol string, extport, intport int) error {
 	return n.found.DeleteMapping(protocol, extport, intport)
 }
 
+// ExternalIP is part of the receiver's public API.
 func (n *autodisc) ExternalIP() (net.IP, error) {
 	if err := n.wait(); err != nil {
 		return nil, err

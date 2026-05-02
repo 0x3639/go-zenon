@@ -52,6 +52,7 @@ type SwapAssetEntryMarshal struct {
 	Qsr       string `json:"qsr"`
 }
 
+// ToSwapAssetEntryMarshal projects the receiver to its JSON-friendly SwapAssetEntryMarshal twin.
 func (s *SwapAssetEntry) ToSwapAssetEntryMarshal() *SwapAssetEntryMarshal {
 	aux := &SwapAssetEntryMarshal{
 		KeyIdHash: s.KeyIdHash,
@@ -62,10 +63,12 @@ func (s *SwapAssetEntry) ToSwapAssetEntryMarshal() *SwapAssetEntryMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (s *SwapAssetEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToSwapAssetEntryMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (s *SwapAssetEntry) UnmarshalJSON(data []byte) error {
 	aux := new(SwapAssetEntryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -77,16 +80,19 @@ func (s *SwapAssetEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// SwapAssetEntrySimple is part of the package's public API; see the surrounding code for usage.
 type SwapAssetEntrySimple struct {
 	Znn *big.Int `json:"znn"`
 	Qsr *big.Int `json:"qsr"`
 }
 
+// SwapAssetEntrySimpleMarshal is part of the package's public API; see the surrounding code for usage.
 type SwapAssetEntrySimpleMarshal struct {
 	Znn string `json:"znn"`
 	Qsr string `json:"qsr"`
 }
 
+// ToSwapAssetEntrySimpleMarshal projects the receiver to its JSON-friendly SwapAssetEntrySimpleMarshal twin.
 func (s *SwapAssetEntrySimple) ToSwapAssetEntrySimpleMarshal() *SwapAssetEntrySimpleMarshal {
 	aux := &SwapAssetEntrySimpleMarshal{
 		Znn: s.Znn.String(),
@@ -96,10 +102,12 @@ func (s *SwapAssetEntrySimple) ToSwapAssetEntrySimpleMarshal() *SwapAssetEntrySi
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (s *SwapAssetEntrySimple) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToSwapAssetEntrySimpleMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (s *SwapAssetEntrySimple) UnmarshalJSON(data []byte) error {
 	aux := new(SwapAssetEntrySimpleMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -110,6 +118,7 @@ func (s *SwapAssetEntrySimple) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// SwapLegacyPillarEntry is part of the package's public API; see the surrounding code for usage.
 type SwapLegacyPillarEntry struct {
 	KeyIdHash  string `json:"keyIdHash"`
 	NumPillars int    `json:"numPillars"`
@@ -117,6 +126,7 @@ type SwapLegacyPillarEntry struct {
 
 // === Swap Assets ===
 
+// GetAssetsByKeyIdHash loads the AssetsByKeyIdHash record from storage.
 func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, error) {
 	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
 	if err != nil {
@@ -145,6 +155,8 @@ func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, e
 		Qsr:       entry.Qsr,
 	}, nil
 }
+
+// GetAssets loads the Assets record from storage.
 func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
 	if err != nil {
@@ -173,6 +185,7 @@ func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 
 // === Swap Legacy Pillars ===
 
+// GetLegacyPillars loads the LegacyPillars record from storage.
 func (p *SwapApi) GetLegacyPillars() ([]*SwapLegacyPillarEntry, error) {
 	_, context, err := api.GetFrontierContext(p.chain, types.PillarContract)
 	if err != nil {

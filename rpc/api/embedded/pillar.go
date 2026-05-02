@@ -48,13 +48,18 @@ var (
 
 // === Shared RPCs ===
 
+// GetDepositedQsr loads the DepositedQsr record from storage.
 func (a *PillarApi) GetDepositedQsr(address types.Address) (string, error) {
 	depositedQsr, err := getDepositedQsr(a.chain, types.PillarContract, address)
 	return depositedQsr.String(), err
 }
+
+// GetUncollectedReward loads the UncollectedReward record from storage.
 func (a *PillarApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.PillarContract, address)
 }
+
+// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -62,6 +67,7 @@ func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pa
 	return getFrontierRewardByPage(a.chain, types.PillarContract, address, pageIndex, pageSize)
 }
 
+// GetQsrRegistrationCost loads the QsrRegistrationCost record from storage.
 func (a *PillarApi) GetQsrRegistrationCost() (string, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
 	if err != nil {
@@ -76,7 +82,7 @@ func (a *PillarApi) GetQsrRegistrationCost() (string, error) {
 	return currentQsrCost.String(), nil
 }
 
-// Pillar details
+// PillarInfo captures the corresponding contract state.
 type PillarInfo struct {
 	Name string `json:"name"`
 	Rank int    `json:"rank"`
@@ -97,6 +103,7 @@ type PillarInfo struct {
 	Weight       *big.Int     `json:"weight"`
 }
 
+// PillarInfoMarshal is part of the package's public API; see the surrounding code for usage.
 type PillarInfoMarshal struct {
 	Name string `json:"name"`
 	Rank int    `json:"rank"`
@@ -117,6 +124,7 @@ type PillarInfoMarshal struct {
 	Weight       string       `json:"weight"`
 }
 
+// ToPillarInfoMarshal projects the receiver to its JSON-friendly PillarInfoMarshal twin.
 func (p *PillarInfo) ToPillarInfoMarshal() *PillarInfoMarshal {
 	aux := &PillarInfoMarshal{
 		Name:                         p.Name,
@@ -137,10 +145,12 @@ func (p *PillarInfo) ToPillarInfoMarshal() *PillarInfoMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (p *PillarInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.ToPillarInfoMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (p *PillarInfo) UnmarshalJSON(data []byte) error {
 	aux := new(PillarInfoMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -162,15 +172,19 @@ func (p *PillarInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// PillarInfoList is part of the package's public API; see the surrounding code for usage.
 type PillarInfoList struct {
 	Count uint32        `json:"count"`
 	List  []*PillarInfo `json:"list"`
 }
+
+// PillarStats is part of the package's public API; see the surrounding code for usage.
 type PillarStats struct {
 	ProducedMomentums uint64 `json:"producedMomentums"`
 	ExpectedMomentums uint64 `json:"expectedMomentums"`
 }
 
+// PillarInfoByWeight is part of the package's public API; see the surrounding code for usage.
 type PillarInfoByWeight []*PillarInfo
 
 func (a PillarInfoByWeight) Len() int      { return len(a) }
@@ -184,6 +198,7 @@ func (a PillarInfoByWeight) Less(i, j int) bool {
 	}
 }
 
+// GetAll loads the All record from storage.
 func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -260,6 +275,8 @@ func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) 
 		List:  targetList[start:end],
 	}, nil
 }
+
+// GetByOwner loads the ByOwner record from storage.
 func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error) {
 	list, err := a.GetAll(0, api.RpcMaxPageSize)
 	if err != nil {
@@ -274,6 +291,8 @@ func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error
 
 	return targetList, nil
 }
+
+// GetByName loads the ByName record from storage.
 func (a *PillarApi) GetByName(name string) (*PillarInfo, error) {
 	list, err := a.GetAll(0, api.RpcMaxPageSize)
 	if err != nil {
@@ -288,6 +307,7 @@ func (a *PillarApi) GetByName(name string) (*PillarInfo, error) {
 	return nil, nil
 }
 
+// CheckNameAvailability is part of the receiver's public API.
 func (a *PillarApi) CheckNameAvailability(name string) (bool, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
 	if err != nil {
@@ -308,19 +328,21 @@ func (a *PillarApi) CheckNameAvailability(name string) (bool, error) {
 	return true, nil
 }
 
-// User delegation
+// GetDelegatedPillarResponse loads the DelegatedPillarResponse record from storage.
 type GetDelegatedPillarResponse struct {
 	Name       string   `json:"name"`
 	NodeStatus uint8    `json:"status"`
 	Balance    *big.Int `json:"weight"`
 }
 
+// GetDelegatedPillarResponseMarshal loads the DelegatedPillarResponseMarshal record from storage.
 type GetDelegatedPillarResponseMarshal struct {
 	Name       string `json:"name"`
 	NodeStatus uint8  `json:"status"`
 	Balance    string `json:"weight"`
 }
 
+// ToGetDelegatedPillarResponse is part of the receiver's public API.
 func (g *GetDelegatedPillarResponse) ToGetDelegatedPillarResponse() *GetDelegatedPillarResponseMarshal {
 	aux := &GetDelegatedPillarResponseMarshal{
 		Name:       g.Name,
@@ -330,10 +352,12 @@ func (g *GetDelegatedPillarResponse) ToGetDelegatedPillarResponse() *GetDelegate
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (g *GetDelegatedPillarResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(g.ToGetDelegatedPillarResponse())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (g *GetDelegatedPillarResponse) UnmarshalJSON(data []byte) error {
 	aux := new(GetDelegatedPillarResponseMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -345,6 +369,7 @@ func (g *GetDelegatedPillarResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetDelegatedPillar loads the DelegatedPillar record from storage.
 func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarResponse, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
 	if err != nil {
@@ -381,11 +406,13 @@ func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarR
 	return nil, nil
 }
 
+// PillarEpochHistoryList is part of the package's public API; see the surrounding code for usage.
 type PillarEpochHistoryList struct {
 	Count int64                            `json:"count"`
 	List  []*definition.PillarEpochHistory `json:"list"`
 }
 
+// GetPillarEpochHistory loads the PillarEpochHistory record from storage.
 func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -441,6 +468,7 @@ func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize
 	return result, err
 }
 
+// GetPillarsHistoryByEpoch loads the PillarsHistoryByEpoch record from storage.
 func (a *PillarApi) GetPillarsHistoryByEpoch(epoch uint64, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

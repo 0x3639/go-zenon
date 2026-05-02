@@ -60,6 +60,7 @@ func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, erro
 	return security, nil
 }
 
+// LiquidityStakeList is part of the package's public API; see the surrounding code for usage.
 type LiquidityStakeList struct {
 	TotalAmount         *big.Int                          `json:"totalAmount"`
 	TotalWeightedAmount *big.Int                          `json:"totalWeightedAmount"`
@@ -67,6 +68,7 @@ type LiquidityStakeList struct {
 	Entries             []*definition.LiquidityStakeEntry `json:"list"`
 }
 
+// LiquidityStakeListMarshal is part of the package's public API; see the surrounding code for usage.
 type LiquidityStakeListMarshal struct {
 	TotalAmount         string                            `json:"totalAmount"`
 	TotalWeightedAmount string                            `json:"totalWeightedAmount"`
@@ -74,6 +76,7 @@ type LiquidityStakeListMarshal struct {
 	Entries             []*definition.LiquidityStakeEntry `json:"list"`
 }
 
+// ToLiquidityStakeListMarshal projects the receiver to its JSON-friendly LiquidityStakeListMarshal twin.
 func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeListMarshal {
 	aux := &LiquidityStakeListMarshal{
 		TotalAmount:         stake.TotalAmount.String(),
@@ -87,10 +90,12 @@ func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeLi
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (stake *LiquidityStakeList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(stake.ToLiquidityStakeListMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	aux := new(LiquidityStakeListMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -106,6 +111,7 @@ func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetLiquidityStakeEntriesByAddress loads the LiquidityStakeEntriesByAddress record from storage.
 func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*LiquidityStakeList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -133,9 +139,12 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 	}, nil
 }
 
+// GetUncollectedReward loads the UncollectedReward record from storage.
 func (a *LiquidityApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.LiquidityContract, address)
 }
+
+// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
 func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -143,6 +152,7 @@ func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex,
 	return getFrontierRewardByPage(a.chain, types.LiquidityContract, address, pageIndex, pageSize)
 }
 
+// GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
 func (a *LiquidityApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {

@@ -115,6 +115,7 @@ const (
 )
 
 var (
+	// ABICommon is part of the package's public API.
 	ABICommon = abi.JSONToABIContract(strings.NewReader(jsonCommon))
 
 	// common key prefixes are big enough so they don't clash with embedded-specific variables
@@ -125,22 +126,29 @@ var (
 	rewardDepositHistoryKeyPrefix = []byte{132}
 	pillarVoteKeyPrefix           = []byte{133}
 	votableHashKeyPrefix          = []byte{134}
-	TimeChallengeKeyPrefix        = []byte{135}
-	SecurityInfoKeyPrefix         = []byte{136}
+	// TimeChallengeKeyPrefix is part of the package's public API.
+	TimeChallengeKeyPrefix = []byte{135}
+	// SecurityInfoKeyPrefix is the leading byte for security-info
+	// records (administrator addresses, time-challenges, soft/hard
+	// delays).
+	SecurityInfoKeyPrefix = []byte{136}
 )
 
+// RewardDeposit is part of the package's public API; see the surrounding code for usage.
 type RewardDeposit struct {
 	Address *types.Address `json:"address"`
 	Znn     *big.Int       `json:"znnAmount"`
 	Qsr     *big.Int       `json:"qsrAmount"`
 }
 
+// RewardDepositMarshal is part of the package's public API; see the surrounding code for usage.
 type RewardDepositMarshal struct {
 	Address *types.Address `json:"address"`
 	Znn     string         `json:"znnAmount"`
 	Qsr     string         `json:"qsrAmount"`
 }
 
+// ToRewardDepositMarshal projects the receiver to its JSON-friendly RewardDepositMarshal twin.
 func (deposit *RewardDeposit) ToRewardDepositMarshal() *RewardDepositMarshal {
 	aux := &RewardDepositMarshal{
 		Address: deposit.Address,
@@ -151,10 +159,12 @@ func (deposit *RewardDeposit) ToRewardDepositMarshal() *RewardDepositMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (deposit *RewardDeposit) MarshalJSON() ([]byte, error) {
 	return json.Marshal(deposit.ToRewardDepositMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (deposit *RewardDeposit) UnmarshalJSON(data []byte) error {
 	aux := new(RewardDepositMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -166,6 +176,7 @@ func (deposit *RewardDeposit) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (deposit *RewardDeposit) Save(context db.DB) error {
 	return context.Put(
 		getRewardDepositKey(deposit.Address),
@@ -175,6 +186,8 @@ func (deposit *RewardDeposit) Save(context db.DB) error {
 			deposit.Qsr,
 		))
 }
+
+// Delete removes the receiver's record from storage.
 func (deposit *RewardDeposit) Delete(context db.DB) error {
 	return context.Delete(getRewardDepositKey(deposit.Address))
 }
@@ -236,10 +249,12 @@ func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, er
 	}
 }
 
+// LastUpdateVariable is part of the package's public API; see the surrounding code for usage.
 type LastUpdateVariable struct {
 	Height uint64
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (upd *LastUpdateVariable) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		LastUpdateVariableName,
@@ -265,6 +280,8 @@ func parseLastUpdate(data []byte) (*LastUpdateVariable, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetLastUpdate loads the LastUpdate record from storage.
 func GetLastUpdate(context db.DB) (*LastUpdateVariable, error) {
 	if data, err := context.Get(lastUpdateKey); err != nil {
 		return nil, err
@@ -277,11 +294,13 @@ func GetLastUpdate(context db.DB) (*LastUpdateVariable, error) {
 	}
 }
 
+// QsrDeposit is part of the package's public API; see the surrounding code for usage.
 type QsrDeposit struct {
 	Address *types.Address
 	Qsr     *big.Int
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (deposit *QsrDeposit) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		QsrDepositVariableName,
@@ -295,6 +314,8 @@ func (deposit *QsrDeposit) Save(context db.DB) error {
 		data,
 	)
 }
+
+// Delete removes the receiver's record from storage.
 func (deposit *QsrDeposit) Delete(context db.DB) error {
 	return context.Delete(getQsrDepositKey(deposit.Address))
 }
@@ -354,10 +375,12 @@ func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error) {
 	}
 }
 
+// LastEpochUpdate is part of the package's public API; see the surrounding code for usage.
 type LastEpochUpdate struct {
 	LastEpoch int64
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (epoch *LastEpochUpdate) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		LastEpochUpdateVariableName,
@@ -372,6 +395,7 @@ func (epoch *LastEpochUpdate) Save(context db.DB) error {
 	)
 }
 
+// GetLastEpochUpdate loads the LastEpochUpdate record from storage.
 func GetLastEpochUpdate(context db.DB) (*LastEpochUpdate, error) {
 	latestData, err := context.Get(lastEpochUpdateKey)
 	if err != nil {
@@ -388,6 +412,7 @@ func GetLastEpochUpdate(context db.DB) (*LastEpochUpdate, error) {
 	return lastEpoch, err
 }
 
+// RewardDepositHistory is part of the package's public API; see the surrounding code for usage.
 type RewardDepositHistory struct {
 	Epoch   uint64
 	Address *types.Address `json:"address"`
@@ -395,6 +420,7 @@ type RewardDepositHistory struct {
 	Qsr     *big.Int       `json:"qsrAmount"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (rdh *RewardDepositHistory) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		RewardDepositHistoryVariableName,
@@ -445,6 +471,8 @@ func parseRewardDepositHistoryEntry(key, data []byte) (*RewardDepositHistory, er
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetRewardDepositHistory loads the RewardDepositHistory record from storage.
 func GetRewardDepositHistory(context db.DB, epoch uint64, address *types.Address) (*RewardDepositHistory, error) {
 	key := getRewardDepositHistoryEntryKey(epoch, address)
 	if data, err := context.Get(key); err != nil {
@@ -463,22 +491,30 @@ func GetRewardDepositHistory(context db.DB, epoch uint64, address *types.Address
 	}
 }
 
+// PillarVote is part of the package's public API; see the surrounding code for usage.
 type PillarVote struct {
 	Id   types.Hash `json:"id"`
 	Name string     `json:"name"`
 	Vote uint8      `json:"vote"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (vote *PillarVote) Save(context db.DB) {
 	common.DealWithErr(context.Put(vote.Key(), vote.Data()))
 }
+
+// Delete removes the receiver's record from storage.
 func (vote *PillarVote) Delete(context db.DB) {
 	common.DealWithErr(context.Delete(vote.Key()))
 }
+
+// Key returns the storage key for the receiver.
 func (vote *PillarVote) Key() []byte {
 	nameHash := crypto.Hash([]byte(vote.Name))[:20]
 	return common.JoinBytes(pillarVoteKeyPrefix, vote.Id.Bytes(), nameHash)
 }
+
+// Data is part of the receiver's public API.
 func (vote *PillarVote) Data() []byte {
 	return ABICommon.PackVariablePanic(
 		PillarVoteVariableName,
@@ -498,6 +534,7 @@ func parsePillarVote(data []byte) (*PillarVote, error) {
 	}
 }
 
+// GetAllPillarVotes loads the AllPillarVotes record from storage.
 func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote {
 	iterator := context.NewIterator(pillarVoteKeyPrefix)
 	defer iterator.Release()
@@ -519,6 +556,7 @@ func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote {
 	return pillarVoteList
 }
 
+// GetPillarVote loads the PillarVote record from storage.
 func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, error) {
 	key := (&PillarVote{Id: id, Name: name}).Key()
 	if data, err := context.Get(key); err != nil {
@@ -528,20 +566,28 @@ func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, erro
 	}
 }
 
+// VotableHash is part of the package's public API; see the surrounding code for usage.
 type VotableHash struct {
 	Id     types.Hash
 	Exists bool
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (votable *VotableHash) Save(context db.DB) {
 	common.DealWithErr(context.Put(votable.Key(), votable.Data()))
 }
+
+// Delete removes the receiver's record from storage.
 func (votable *VotableHash) Delete(context db.DB) {
 	common.DealWithErr(context.Delete(votable.Key()))
 }
+
+// Key returns the storage key for the receiver.
 func (votable *VotableHash) Key() []byte {
 	return common.JoinBytes(votableHashKeyPrefix, votable.Id.Bytes())
 }
+
+// Data is part of the receiver's public API.
 func (votable *VotableHash) Data() []byte {
 	return ABICommon.PackVariablePanic(
 		VotableHashVariableName,
@@ -574,6 +620,7 @@ func parseVotableHash(data []byte, key []byte) (*VotableHash, error) {
 	}
 }
 
+// GetVotableHash loads the VotableHash record from storage.
 func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error) {
 	key := (&VotableHash{Id: id}).Key()
 	if data, err := context.Get(key); err != nil {
@@ -583,6 +630,7 @@ func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error) {
 	}
 }
 
+// VoteBreakdown is part of the package's public API; see the surrounding code for usage.
 type VoteBreakdown struct {
 	Id    types.Hash `json:"id"`
 	Total uint32     `json:"total"`
@@ -590,6 +638,7 @@ type VoteBreakdown struct {
 	No    uint32     `json:"no"`
 }
 
+// GetVoteBreakdown loads the VoteBreakdown record from storage.
 func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown {
 	votes := GetAllPillarVotes(context, id)
 	voteBreakdown := &VoteBreakdown{
@@ -609,12 +658,14 @@ func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown {
 	return voteBreakdown
 }
 
+// TimeChallengeInfo is part of the package's public API; see the surrounding code for usage.
 type TimeChallengeInfo struct {
 	MethodName           string
 	ParamsHash           types.Hash
 	ChallengeStartHeight uint64
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (t *TimeChallengeInfo) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		timeChallengeInfoVariableName,
@@ -646,6 +697,7 @@ func timeChallengeKey(methodName string) []byte {
 	return common.JoinBytes(TimeChallengeKeyPrefix, crypto.Hash([]byte(methodName)))
 }
 
+// GetTimeChallengeInfoVariable loads the TimeChallengeInfoVariable record from storage.
 func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChallengeInfo, error) {
 	if data, err := context.Get(timeChallengeKey(methodName)); err != nil {
 		return nil, err
@@ -657,9 +709,13 @@ func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChalle
 		return upd, err
 	}
 }
+
+// Key returns the storage key for the receiver.
 func (t *TimeChallengeInfo) Key() []byte {
 	return common.JoinBytes(TimeChallengeKeyPrefix, crypto.Hash([]byte(t.MethodName)))
 }
+
+// Delete removes the receiver's record from storage.
 func (t *TimeChallengeInfo) Delete(context db.DB) error {
 	return context.Delete(t.Key())
 }
@@ -676,6 +732,7 @@ type SecurityInfoVariable struct {
 	SoftDelay uint64 `json:"softDelay"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (s *SecurityInfoVariable) Save(context db.DB) error {
 	data, err := ABICommon.PackVariable(
 		securityInfoVariableName,
@@ -708,6 +765,8 @@ func parseSecurityInfoVariable(data []byte) (*SecurityInfoVariable, error) {
 		}, nil
 	}
 }
+
+// GetSecurityInfoVariable loads the SecurityInfoVariable record from storage.
 func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error) {
 	if data, err := context.Get(SecurityInfoKeyPrefix); err != nil {
 		return nil, err

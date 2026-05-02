@@ -165,7 +165,7 @@ type manager struct {
 ```
 
 <a name="manager.GetCoinBase"></a>
-### func \(\*manager\) [GetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L164>)
+### func \(\*manager\) [GetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L169>)
 
 ```go
 func (m *manager) GetCoinBase() *types.Address
@@ -174,16 +174,16 @@ func (m *manager) GetCoinBase() *types.Address
 GetCoinBase returns the configured coinbase address, or nil for a non\-producing pillar.
 
 <a name="manager.Init"></a>
-### func \(\*manager\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L44>)
+### func \(\*manager\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L45>)
 
 ```go
 func (m *manager) Init() error
 ```
 
-
+Init prepares the receiver for use.
 
 <a name="manager.NewProducerEvent"></a>
-### func \(\*manager\) [NewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L80>)
+### func \(\*manager\) [NewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L85>)
 
 ```go
 func (m *manager) NewProducerEvent(e consensus.ProducerEvent)
@@ -192,7 +192,7 @@ func (m *manager) NewProducerEvent(e consensus.ProducerEvent)
 NewProducerEvent is the [consensus.EventListener](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#EventListener>) callback — dispatches each event to a goroutine so the consensus loop continues without blocking on the producer pipeline.
 
 <a name="manager.Process"></a>
-### func \(\*manager\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L142>)
+### func \(\*manager\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L147>)
 
 ```go
 func (m *manager) Process(e consensus.ProducerEvent) common.Task
@@ -201,7 +201,7 @@ func (m *manager) Process(e consensus.ProducerEvent) common.Task
 Process bypasses the admission rules and synchronously hands the event to the worker. Used by tests \(and by [zenon/mock](<https://pkg.go.dev/zenon/mock/>)\) to drive the pipeline at virtual\-clock speed.
 
 <a name="manager.SetCoinBase"></a>
-### func \(\*manager\) [SetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L157>)
+### func \(\*manager\) [SetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L162>)
 
 ```go
 func (m *manager) SetCoinBase(coinbase *wallet.KeyPair)
@@ -210,25 +210,25 @@ func (m *manager) SetCoinBase(coinbase *wallet.KeyPair)
 SetCoinBase configures the keypair this pillar produces under. Must be called before \[Manager.Start\] for the pillar to act on any ProducerEvent. Updates both the manager \(used in admission checks\) and the worker \(used to sign produced blocks\).
 
 <a name="manager.Start"></a>
-### func \(\*manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L54>)
+### func \(\*manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L57>)
 
 ```go
 func (m *manager) Start() error
 ```
 
-
+Start begins the receiver's background work.
 
 <a name="manager.Stop"></a>
-### func \(\*manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L65>)
+### func \(\*manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L70>)
 
 ```go
 func (m *manager) Stop() error
 ```
 
-
+Stop tears down the receiver.
 
 <a name="manager.processSupervised"></a>
-### func \(\*manager\) [processSupervised](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L111>)
+### func \(\*manager\) [processSupervised](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L116>)
 
 ```go
 func (m *manager) processSupervised(e consensus.ProducerEvent)
@@ -237,7 +237,7 @@ func (m *manager) processSupervised(e consensus.ProducerEvent)
 processSupervised drives one slot end\-to\-end: applies the admission rules, then waits for the worker task to finish, force\- stopping it 250ms before slot EndTime so a late finish does not produce a momentum that other pillars will reject as expired.
 
 <a name="manager.shouldProcess"></a>
-### func \(\*manager\) [shouldProcess](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L88>)
+### func \(\*manager\) [shouldProcess](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L93>)
 
 ```go
 func (m *manager) shouldProcess(e consensus.ProducerEvent) error
@@ -279,16 +279,16 @@ func newWorker(chain chain.Chain, supervisor *vm.Supervisor, broadcaster protoco
 
 
 <a name="worker.Init"></a>
-### func \(\*worker\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L51>)
+### func \(\*worker\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L52>)
 
 ```go
 func (w *worker) Init() error
 ```
 
-
+Init prepares the receiver for use.
 
 <a name="worker.Process"></a>
-### func \(\*worker\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L85>)
+### func \(\*worker\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L90>)
 
 ```go
 func (w *worker) Process(e consensus.ProducerEvent) common.Task
@@ -297,22 +297,22 @@ func (w *worker) Process(e consensus.ProducerEvent) common.Task
 Process schedules one slot of producer work for event e and returns a Task the caller can wait on \(or force\-stop\). Returns nil if the worker has already been Stop'd.
 
 <a name="worker.Start"></a>
-### func \(\*worker\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L54>)
+### func \(\*worker\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L57>)
 
 ```go
 func (w *worker) Start() error
 ```
 
-
+Start begins the receiver's background work.
 
 <a name="worker.Stop"></a>
-### func \(\*worker\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L60>)
+### func \(\*worker\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L65>)
 
 ```go
 func (w *worker) Stop() error
 ```
 
-
+Stop tears down the receiver.
 
 <a name="worker.generateMomentum"></a>
 ### func \(\*worker\) [generateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker_momentum.go#L13>)
@@ -333,7 +333,7 @@ func (w *worker) generateNext(momentumStore store.Momentum, embedded types.Addre
 generateNext produces one auto\-receive block for the next pending send addressed to embedded. Returns ErrNothingToGenerate when the contract's mailbox is empty; any other error is fatal to the sweep.
 
 <a name="worker.shouldStop"></a>
-### func \(\*worker\) [shouldStop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L73>)
+### func \(\*worker\) [shouldStop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L78>)
 
 ```go
 func (w *worker) shouldStop() bool
@@ -351,7 +351,7 @@ func (w *worker) updateContracts(momentumStore store.Momentum) error
 updateContracts walks every embedded contract that participates in periodic updates \([types.EmbeddedWUpdate](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#EmbeddedWUpdate>)\) and produces a signed Update send\-block whenever the cooldown has elapsed. Cooldown / method\-not\-found errors are swallowed; any other error aborts the sweep.
 
 <a name="worker.work"></a>
-### func \(\*worker\) [work](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L111>)
+### func \(\*worker\) [work](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L116>)
 
 ```go
 func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent)

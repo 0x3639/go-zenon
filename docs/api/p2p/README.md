@@ -605,7 +605,7 @@ func Decrypt(prv *ecdsa.PrivateKey, ct []byte) ([]byte, error)
 Decrypt decrypts an ECIES ciphertext using the supplied secp256k1 private key. Exposed for use by the encryption\-handshake code paths.
 
 <a name="ExpectMsg"></a>
-## func [ExpectMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L252>)
+## func [ExpectMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L255>)
 
 ```go
 func ExpectMsg(r MsgReader, code uint64, content interface{}) error
@@ -614,7 +614,7 @@ func ExpectMsg(r MsgReader, code uint64, content interface{}) error
 ExpectMsg reads a message from r and verifies that its code and encoded RLP content match the provided values. If content is nil, the payload is discarded and not verified.
 
 <a name="MsgPipe"></a>
-## func [MsgPipe](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L179>)
+## func [MsgPipe](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L182>)
 
 ```go
 func MsgPipe() (*MsgPipeRW, *MsgPipeRW)
@@ -623,7 +623,7 @@ func MsgPipe() (*MsgPipeRW, *MsgPipeRW)
 MsgPipe creates a message pipe. Reads on one end are matched with writes on the other. The pipe is full\-duplex, both ends implement MsgReadWriter.
 
 <a name="Send"></a>
-## func [Send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L95>)
+## func [Send](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L96>)
 
 ```go
 func Send(w MsgWriter, msgcode uint64, data interface{}) error
@@ -632,7 +632,7 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error
 Send writes an RLP\-encoded message with the given code. data should encode as an RLP list.
 
 <a name="SendItems"></a>
-## func [SendItems](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L111>)
+## func [SendItems](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L112>)
 
 ```go
 func SendItems(w MsgWriter, msgcode uint64, elems ...interface{}) error
@@ -669,7 +669,7 @@ func countMatchingProtocols(protocols []Protocol, caps []Cap) int
 countMatchingProtocols counts how many entries in caps name a protocol the local node supports. Used by Server.run to drop peers with no usable subprotocol overlap \(DiscUselessPeer\).
 
 <a name="exportPubkey"></a>
-## func [exportPubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L513>)
+## func [exportPubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L515>)
 
 ```go
 func exportPubkey(pub *ecies.PublicKey) []byte
@@ -678,7 +678,7 @@ func exportPubkey(pub *ecies.PublicKey) []byte
 exportPubkey serialises an ECIES public key in 64\-byte raw form \(no 0x04 prefix\). Panics on nil input — callers are internal.
 
 <a name="importPublicKey"></a>
-## func [importPublicKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L496>)
+## func [importPublicKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L498>)
 
 ```go
 func importPublicKey(pubKey []byte) (*ecies.PublicKey, error)
@@ -705,7 +705,7 @@ func newMeteredConn(conn net.Conn, ingress bool) net.Conn
 newMeteredConn creates a new metered connection, also bumping the ingress or egress connection meter.
 
 <a name="putInt24"></a>
-## func [putInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L693>)
+## func [putInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L697>)
 
 ```go
 func putInt24(v uint32, b []byte)
@@ -714,7 +714,7 @@ func putInt24(v uint32, b []byte)
 putInt24 encodes v as a big\-endian 24\-bit integer into the first three bytes of b. Caller is responsible for ensuring v fits in 24 bits \(see maxUint24\).
 
 <a name="readInt24"></a>
-## func [readInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L686>)
+## func [readInt24](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L690>)
 
 ```go
 func readInt24(b []byte) uint32
@@ -723,7 +723,7 @@ func readInt24(b []byte) uint32
 readInt24 decodes a big\-endian 24\-bit integer from the first three bytes of b — used for the RLPx frame\-size field.
 
 <a name="updateMAC"></a>
-## func [updateMAC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L674>)
+## func [updateMAC](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L678>)
 
 ```go
 func updateMAC(mac hash.Hash, block cipher.Block, seed []byte) []byte
@@ -732,7 +732,7 @@ func updateMAC(mac hash.Hash, block cipher.Block, seed []byte) []byte
 updateMAC reseeds the given keccak hash with the encrypted seed and returns the first 16 bytes of the resulting digest. Implements the RLPx "MAC update" step that chains together frame headers and frame bodies to detect tampering.
 
 <a name="xor"></a>
-## func [xor](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L522>)
+## func [xor](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L524>)
 
 ```go
 func xor(one, other []byte) (xor []byte)
@@ -888,7 +888,7 @@ func (msg Msg) String() string
 
 
 <a name="MsgPipeRW"></a>
-## type [MsgPipeRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L195-L200>)
+## type [MsgPipeRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L198-L203>)
 
 MsgPipeRW is an endpoint of a MsgReadWriter pipe.
 
@@ -902,7 +902,7 @@ type MsgPipeRW struct {
 ```
 
 <a name="MsgPipeRW.Close"></a>
-### func \(\*MsgPipeRW\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L239>)
+### func \(\*MsgPipeRW\) [Close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L242>)
 
 ```go
 func (p *MsgPipeRW) Close() error
@@ -911,7 +911,7 @@ func (p *MsgPipeRW) Close() error
 Close unblocks any pending ReadMsg and WriteMsg calls on both ends of the pipe. They will return ErrPipeClosed. Close also interrupts any reads from a message payload.
 
 <a name="MsgPipeRW.ReadMsg"></a>
-### func \(\*MsgPipeRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L225>)
+### func \(\*MsgPipeRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L228>)
 
 ```go
 func (p *MsgPipeRW) ReadMsg() (Msg, error)
@@ -920,7 +920,7 @@ func (p *MsgPipeRW) ReadMsg() (Msg, error)
 ReadMsg returns a message sent on the other end of the pipe.
 
 <a name="MsgPipeRW.WriteMsg"></a>
-### func \(\*MsgPipeRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L204>)
+### func \(\*MsgPipeRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L207>)
 
 ```go
 func (p *MsgPipeRW) WriteMsg(msg Msg) error
@@ -929,7 +929,7 @@ func (p *MsgPipeRW) WriteMsg(msg Msg) error
 WriteMsg sends a messsage on the pipe. It blocks until the receiver has consumed the message payload.
 
 <a name="MsgReadWriter"></a>
-## type [MsgReadWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L88-L91>)
+## type [MsgReadWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L89-L92>)
 
 MsgReadWriter provides reading and writing of encoded messages. Implementations should ensure that ReadMsg and WriteMsg can be called simultaneously from multiple goroutines.
 
@@ -952,9 +952,9 @@ type MsgReader interface {
 ```
 
 <a name="MsgWriter"></a>
-## type [MsgWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L76-L83>)
+## type [MsgWriter](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L77-L84>)
 
-
+MsgWriter is part of the package's public API; see the surrounding code for usage.
 
 ```go
 type MsgWriter interface {
@@ -1565,7 +1565,7 @@ type dialHistory []pastDial
 ```
 
 <a name="dialHistory.Len"></a>
-### func \(dialHistory\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L315>)
+### func \(dialHistory\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L318>)
 
 ```go
 func (h dialHistory) Len() int
@@ -1574,7 +1574,7 @@ func (h dialHistory) Len() int
 heap.Interface boilerplate
 
 <a name="dialHistory.Less"></a>
-### func \(dialHistory\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L316>)
+### func \(dialHistory\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L319>)
 
 ```go
 func (h dialHistory) Less(i, j int) bool
@@ -1583,25 +1583,25 @@ func (h dialHistory) Less(i, j int) bool
 
 
 <a name="dialHistory.Pop"></a>
-### func \(\*dialHistory\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L321>)
+### func \(\*dialHistory\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L328>)
 
 ```go
 func (h *dialHistory) Pop() interface{}
 ```
 
-
+Pop satisfies heap.Interface.
 
 <a name="dialHistory.Push"></a>
-### func \(\*dialHistory\) [Push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L318>)
+### func \(\*dialHistory\) [Push](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L323>)
 
 ```go
 func (h *dialHistory) Push(x interface{})
 ```
 
-
+Push satisfies heap.Interface.
 
 <a name="dialHistory.Swap"></a>
-### func \(dialHistory\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L317>)
+### func \(dialHistory\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L320>)
 
 ```go
 func (h dialHistory) Swap(i, j int)
@@ -1610,7 +1610,7 @@ func (h dialHistory) Swap(i, j int)
 
 
 <a name="dialHistory.add"></a>
-### func \(\*dialHistory\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L285>)
+### func \(\*dialHistory\) [add](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L288>)
 
 ```go
 func (h *dialHistory) add(id discover.NodeID, exp time.Time)
@@ -1619,7 +1619,7 @@ func (h *dialHistory) add(id discover.NodeID, exp time.Time)
 
 
 <a name="dialHistory.contains"></a>
-### func \(dialHistory\) [contains](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L300>)
+### func \(dialHistory\) [contains](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L303>)
 
 ```go
 func (h dialHistory) contains(id discover.NodeID) bool
@@ -1628,7 +1628,7 @@ func (h dialHistory) contains(id discover.NodeID) bool
 
 
 <a name="dialHistory.expire"></a>
-### func \(\*dialHistory\) [expire](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L308>)
+### func \(\*dialHistory\) [expire](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L311>)
 
 ```go
 func (h *dialHistory) expire(now time.Time)
@@ -1637,7 +1637,7 @@ func (h *dialHistory) expire(now time.Time)
 
 
 <a name="dialHistory.min"></a>
-### func \(dialHistory\) [min](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L282>)
+### func \(dialHistory\) [min](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L285>)
 
 ```go
 func (h dialHistory) min() pastDial
@@ -1646,7 +1646,7 @@ func (h dialHistory) min() pastDial
 min returns the soonest\-to\-expire entry. Use only these methods to access or modify dialHistory — the slice is a heap.
 
 <a name="dialHistory.remove"></a>
-### func \(\*dialHistory\) [remove](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L288>)
+### func \(\*dialHistory\) [remove](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L291>)
 
 ```go
 func (h *dialHistory) remove(id discover.NodeID)
@@ -1667,16 +1667,16 @@ type dialTask struct {
 ```
 
 <a name="dialTask.Do"></a>
-### func \(\*dialTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L227>)
+### func \(\*dialTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L228>)
 
 ```go
 func (t *dialTask) Do(srv *Server)
 ```
 
-
+Do executes the task.
 
 <a name="dialTask.String"></a>
-### func \(\*dialTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L239>)
+### func \(\*dialTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L240>)
 
 ```go
 func (t *dialTask) String() string
@@ -1784,16 +1784,16 @@ type discoverTask struct {
 ```
 
 <a name="discoverTask.Do"></a>
-### func \(\*discoverTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L243>)
+### func \(\*discoverTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L245>)
 
 ```go
 func (t *discoverTask) Do(srv *Server)
 ```
 
-
+Do executes the task.
 
 <a name="discoverTask.String"></a>
-### func \(\*discoverTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L261>)
+### func \(\*discoverTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L263>)
 
 ```go
 func (t *discoverTask) String() (s string)
@@ -1802,7 +1802,7 @@ func (t *discoverTask) String() (s string)
 
 
 <a name="encHandshake"></a>
-## type [encHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L228-L236>)
+## type [encHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L230-L238>)
 
 encHandshake contains the state of the encryption handshake. Held transiently during initiator/receiver flows; once secrets\(\) succeeds the data is discarded and only the derived \[secrets\] are retained.
 
@@ -1819,7 +1819,7 @@ type encHandshake struct {
 ```
 
 <a name="decodeAuthMsg"></a>
-### func [decodeAuthMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L429>)
+### func [decodeAuthMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L431>)
 
 ```go
 func decodeAuthMsg(prv *ecdsa.PrivateKey, token []byte, auth []byte) (*encHandshake, error)
@@ -1828,7 +1828,7 @@ func decodeAuthMsg(prv *ecdsa.PrivateKey, token []byte, auth []byte) (*encHandsh
 decodeAuthMsg parses the initiator's encrypted auth message \(called on the receiving side\), recovers the initiator's ephemeral public key from the embedded signature, and seeds an encHandshake ready for \[encHandshake.authResp\].
 
 <a name="newInitiatorHandshake"></a>
-### func [newInitiatorHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L319>)
+### func [newInitiatorHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L321>)
 
 ```go
 func newInitiatorHandshake(remoteID discover.NodeID) (*encHandshake, error)
@@ -1837,7 +1837,7 @@ func newInitiatorHandshake(remoteID discover.NodeID) (*encHandshake, error)
 newInitiatorHandshake constructs an encHandshake initialised for the dialing side: a fresh nonce and ephemeral keypair, and the remote node's static public key recovered from remoteID.
 
 <a name="encHandshake.authMsg"></a>
-### func \(\*encHandshake\) [authMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L345>)
+### func \(\*encHandshake\) [authMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L347>)
 
 ```go
 func (h *encHandshake) authMsg(prv *ecdsa.PrivateKey, token []byte) ([]byte, error)
@@ -1846,7 +1846,7 @@ func (h *encHandshake) authMsg(prv *ecdsa.PrivateKey, token []byte) ([]byte, err
 authMsg creates an encrypted initiator handshake message.
 
 <a name="encHandshake.authResp"></a>
-### func \(\*encHandshake\) [authResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L479>)
+### func \(\*encHandshake\) [authResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L481>)
 
 ```go
 func (h *encHandshake) authResp(prv *ecdsa.PrivateKey, token []byte) ([]byte, error)
@@ -1855,7 +1855,7 @@ func (h *encHandshake) authResp(prv *ecdsa.PrivateKey, token []byte) ([]byte, er
 authResp generates the encrypted authentication response message.
 
 <a name="encHandshake.decodeAuthResp"></a>
-### func \(\*encHandshake\) [decodeAuthResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L383>)
+### func \(\*encHandshake\) [decodeAuthResp](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L385>)
 
 ```go
 func (h *encHandshake) decodeAuthResp(auth []byte, prv *ecdsa.PrivateKey) error
@@ -1864,7 +1864,7 @@ func (h *encHandshake) decodeAuthResp(auth []byte, prv *ecdsa.PrivateKey) error
 decodeAuthResp decode an encrypted authentication response message.
 
 <a name="encHandshake.ecdhShared"></a>
-### func \(\*encHandshake\) [ecdhShared](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L284>)
+### func \(\*encHandshake\) [ecdhShared](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L286>)
 
 ```go
 func (h *encHandshake) ecdhShared(prv *ecdsa.PrivateKey) ([]byte, error)
@@ -1873,7 +1873,7 @@ func (h *encHandshake) ecdhShared(prv *ecdsa.PrivateKey) ([]byte, error)
 ecdhShared performs ECDH between the local static private key and the remote static public key. Used as the initial session token for new peers.
 
 <a name="encHandshake.secrets"></a>
-### func \(\*encHandshake\) [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L249>)
+### func \(\*encHandshake\) [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L251>)
 
 ```go
 func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error)
@@ -1882,7 +1882,7 @@ func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error)
 secrets is called after the handshake is completed. It extracts the connection secrets from the handshake values.
 
 <a name="eofSignal"></a>
-## type [eofSignal](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L146-L150>)
+## type [eofSignal](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L149-L153>)
 
 eofSignal wraps a reader with EOF signalling: when the wrapped reader returns an error or count bytes have been consumed, a single value is sent on eof. The MsgPipe sender uses this to know when the receiver has finished draining a message payload, so it can safely release the next write.
 
@@ -1895,7 +1895,7 @@ type eofSignal struct {
 ```
 
 <a name="eofSignal.Read"></a>
-### func \(\*eofSignal\) [Read](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L154>)
+### func \(\*eofSignal\) [Read](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L157>)
 
 ```go
 func (r *eofSignal) Read(buf []byte) (int, error)
@@ -1933,7 +1933,7 @@ func (c *meteredConn) Write(b []byte) (n int, err error)
 Write delegates a network write to the underlying connection, bumping the egress traffic meter along the way.
 
 <a name="netWrapper"></a>
-## type [netWrapper](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L119-L125>)
+## type [netWrapper](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L120-L126>)
 
 netWrapper wraps a MsgReadWriter with locks around ReadMsg/WriteMsg and applies read/write deadlines pulled from rtimeout / wtimeout. Used in tests to compose timeout enforcement onto an arbitrary transport.
 
@@ -1948,22 +1948,22 @@ type netWrapper struct {
 ```
 
 <a name="netWrapper.ReadMsg"></a>
-### func \(\*netWrapper\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L127>)
+### func \(\*netWrapper\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L129>)
 
 ```go
 func (rw *netWrapper) ReadMsg() (Msg, error)
 ```
 
-
+ReadMsg is part of the receiver's public API.
 
 <a name="netWrapper.WriteMsg"></a>
-### func \(\*netWrapper\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L134>)
+### func \(\*netWrapper\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/message.go#L137>)
 
 ```go
 func (rw *netWrapper) WriteMsg(msg Msg) error
 ```
 
-
+WriteMsg is part of the receiver's public API.
 
 <a name="pastDial"></a>
 ## type [pastDial](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L74-L77>)
@@ -2032,7 +2032,7 @@ type protoHandshake struct {
 ```
 
 <a name="readProtocolHandshake"></a>
-### func [readProtocolHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L172>)
+### func [readProtocolHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L174>)
 
 ```go
 func readProtocolHandshake(rw MsgReader, our *protoHandshake) (*protoHandshake, error)
@@ -2058,22 +2058,22 @@ type protoRW struct {
 ```
 
 <a name="protoRW.ReadMsg"></a>
-### func \(\*protoRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L413>)
+### func \(\*protoRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L415>)
 
 ```go
 func (rw *protoRW) ReadMsg() (Msg, error)
 ```
 
-
+ReadMsg is part of the receiver's public API.
 
 <a name="protoRW.WriteMsg"></a>
-### func \(\*protoRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L394>)
+### func \(\*protoRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/peer.go#L395>)
 
 ```go
 func (rw *protoRW) WriteMsg(msg Msg) (err error)
 ```
 
-
+WriteMsg is part of the receiver's public API.
 
 <a name="rlpx"></a>
 ## type [rlpx](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L109-L114>)
@@ -2090,25 +2090,25 @@ type rlpx struct {
 ```
 
 <a name="rlpx.ReadMsg"></a>
-### func \(\*rlpx\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L124>)
+### func \(\*rlpx\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L125>)
 
 ```go
 func (t *rlpx) ReadMsg() (Msg, error)
 ```
 
-
+ReadMsg is part of the receiver's public API.
 
 <a name="rlpx.WriteMsg"></a>
-### func \(\*rlpx\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L131>)
+### func \(\*rlpx\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L133>)
 
 ```go
 func (t *rlpx) WriteMsg(msg Msg) error
 ```
 
-
+WriteMsg is part of the receiver's public API.
 
 <a name="rlpx.close"></a>
-### func \(\*rlpx\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L138>)
+### func \(\*rlpx\) [close](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L140>)
 
 ```go
 func (t *rlpx) close(err error)
@@ -2117,7 +2117,7 @@ func (t *rlpx) close(err error)
 
 
 <a name="rlpx.doEncHandshake"></a>
-### func \(\*rlpx\) [doEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L206>)
+### func \(\*rlpx\) [doEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L208>)
 
 ```go
 func (t *rlpx) doEncHandshake(prv *ecdsa.PrivateKey, dial *discover.Node) (discover.NodeID, error)
@@ -2126,7 +2126,7 @@ func (t *rlpx) doEncHandshake(prv *ecdsa.PrivateKey, dial *discover.Node) (disco
 
 
 <a name="rlpx.doProtoHandshake"></a>
-### func \(\*rlpx\) [doProtoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L155>)
+### func \(\*rlpx\) [doProtoHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L157>)
 
 ```go
 func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err error)
@@ -2135,7 +2135,7 @@ func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err
 doEncHandshake runs the protocol handshake using authenticated messages. the protocol handshake is the first authenticated message and also verifies whether the encryption handshake 'worked' and the remote side actually provided the right public key.
 
 <a name="rlpxFrameRW"></a>
-## type [rlpxFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L543-L551>)
+## type [rlpxFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L545-L553>)
 
 rlpxFrameRW implements a simplified version of RLPx framing. chunked messages are not supported and all headers are equal to zeroHeader.
 
@@ -2154,7 +2154,7 @@ type rlpxFrameRW struct {
 ```
 
 <a name="newRLPXFrameRW"></a>
-### func [newRLPXFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L557>)
+### func [newRLPXFrameRW](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L559>)
 
 ```go
 func newRLPXFrameRW(conn io.ReadWriter, s secrets) *rlpxFrameRW
@@ -2163,25 +2163,25 @@ func newRLPXFrameRW(conn io.ReadWriter, s secrets) *rlpxFrameRW
 newRLPXFrameRW initialises an rlpxFrameRW using the secrets derived from the encryption handshake — separate AES streams for inbound and outbound traffic, one per direction MAC, and the shared macCipher used to update each MAC.
 
 <a name="rlpxFrameRW.ReadMsg"></a>
-### func \(\*rlpxFrameRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L621>)
+### func \(\*rlpxFrameRW\) [ReadMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L625>)
 
 ```go
 func (rw *rlpxFrameRW) ReadMsg() (msg Msg, err error)
 ```
 
-
+ReadMsg is part of the receiver's public API.
 
 <a name="rlpxFrameRW.WriteMsg"></a>
-### func \(\*rlpxFrameRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L579>)
+### func \(\*rlpxFrameRW\) [WriteMsg](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L582>)
 
 ```go
 func (rw *rlpxFrameRW) WriteMsg(msg Msg) error
 ```
 
-
+WriteMsg is part of the receiver's public API.
 
 <a name="secrets"></a>
-## type [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L240-L245>)
+## type [secrets](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L242-L247>)
 
 secrets represents the connection secrets which are negotiated during the encryption handshake.
 
@@ -2195,7 +2195,7 @@ type secrets struct {
 ```
 
 <a name="initiatorEncHandshake"></a>
-### func [initiatorEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L293>)
+### func [initiatorEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L295>)
 
 ```go
 func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID discover.NodeID, token []byte) (s secrets, err error)
@@ -2206,7 +2206,7 @@ initiatorEncHandshake negotiates a session token on conn. it should be called on
 prv is the local client's private key. token is the token from a previous session with this node.
 
 <a name="receiverEncHandshake"></a>
-### func [receiverEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L402>)
+### func [receiverEncHandshake](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L404>)
 
 ```go
 func receiverEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, token []byte) (s secrets, err error)
@@ -2269,16 +2269,16 @@ type waitExpireTask struct {
 ```
 
 <a name="waitExpireTask.Do"></a>
-### func \(waitExpireTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L273>)
+### func \(waitExpireTask\) [Do](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L276>)
 
 ```go
 func (t waitExpireTask) Do(*Server)
 ```
 
-
+Do executes the task.
 
 <a name="waitExpireTask.String"></a>
-### func \(waitExpireTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L276>)
+### func \(waitExpireTask\) [String](<https://github.com/zenon-network/go-zenon/blob/master/p2p/dial.go#L279>)
 
 ```go
 func (t waitExpireTask) String() string

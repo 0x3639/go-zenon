@@ -67,6 +67,7 @@ func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) 
 	return security, nil
 }
 
+// GetOrchestratorInfo loads the OrchestratorInfo record from storage.
 func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -81,11 +82,13 @@ func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) 
 	return orchestratorInfo, nil
 }
 
+// TimeChallengesList is part of the package's public API; see the surrounding code for usage.
 type TimeChallengesList struct {
 	Count int                             `json:"count"`
 	List  []*definition.TimeChallengeInfo `json:"list"`
 }
 
+// GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
 func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -111,6 +114,7 @@ func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	}, nil
 }
 
+// GetNetworkInfo loads the NetworkInfo record from storage.
 func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*definition.NetworkInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -125,6 +129,7 @@ func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*defini
 	return networkInfo, nil
 }
 
+// GetAllNetworks loads the AllNetworks record from storage.
 func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -148,6 +153,7 @@ func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList
 	return result, nil
 }
 
+// NetworkInfoList is part of the package's public API; see the surrounding code for usage.
 type NetworkInfoList struct {
 	Count int                       `json:"count"`
 	List  []*definition.NetworkInfo `json:"list"`
@@ -182,12 +188,14 @@ func (a *BridgeApi) toRequest(context vm_context.AccountVmContext, abiRequest *d
 	return request
 }
 
+// WrapTokenRequest is part of the package's public API; see the surrounding code for usage.
 type WrapTokenRequest struct {
 	*definition.WrapTokenRequest
 	TokenInfo               *api.Token `json:"token"`
 	ConfirmationsToFinality uint64     `json:"confirmationsToFinality"`
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (w *WrapTokenRequest) MarshalJSON() ([]byte, error) {
 	aux := struct {
 		*definition.WrapTokenRequestMarshal
@@ -204,6 +212,7 @@ func (w *WrapTokenRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		*definition.WrapTokenRequestMarshal
@@ -271,6 +280,7 @@ func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapT
 	return actualConfirmationsToFinality, nil
 }
 
+// GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
 func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -303,11 +313,13 @@ func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, e
 	return &WrapTokenRequest{wrapTokenRequest, token, confirmationsToFinality}, nil
 }
 
+// WrapTokenRequestList is part of the package's public API; see the surrounding code for usage.
 type WrapTokenRequestList struct {
 	Count int                 `json:"count"`
 	List  []*WrapTokenRequest `json:"list"`
 }
 
+// GetAllWrapTokenRequests loads the AllWrapTokenRequests record from storage.
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -349,6 +361,7 @@ func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTo
 	return result, nil
 }
 
+// GetAllWrapTokenRequestsByToAddress loads the AllWrapTokenRequestsByToAddress record from storage.
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -400,6 +413,7 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageInd
 	return result, nil
 }
 
+// GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId loads the AllWrapTokenRequestsByToAddressNetworkClassAndChainId record from storage.
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toAddress string, networkClass, chainId uint32, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -448,6 +462,7 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toA
 	return result, nil
 }
 
+// GetAllUnsignedWrapTokenRequests loads the AllUnsignedWrapTokenRequests record from storage.
 func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -498,12 +513,14 @@ func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) 
 	return result, nil
 }
 
+// UnwrapTokenRequest is part of the package's public API; see the surrounding code for usage.
 type UnwrapTokenRequest struct {
 	*definition.UnwrapTokenRequest
 	TokenInfo    *api.Token `json:"token"`
 	RedeemableIn uint64     `json:"redeemableIn"`
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (u *UnwrapTokenRequest) MarshalJSON() ([]byte, error) {
 	aux := struct {
 		*definition.UnwrapTokenRequestMarshal
@@ -519,6 +536,7 @@ func (u *UnwrapTokenRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (u *UnwrapTokenRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		*definition.UnwrapTokenRequestMarshal
@@ -551,11 +569,13 @@ func (u *UnwrapTokenRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// UnwrapTokenRequestList is part of the package's public API; see the surrounding code for usage.
 type UnwrapTokenRequestList struct {
 	Count int                   `json:"count"`
 	List  []*UnwrapTokenRequest `json:"list"`
 }
 
+// GetUnwrapTokenRequestByHashAndLog loads the UnwrapTokenRequestByHashAndLog record from storage.
 func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -586,6 +606,7 @@ func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logInde
 	return unwrapRequest, nil
 }
 
+// GetAllUnwrapTokenRequests loads the AllUnwrapTokenRequests record from storage.
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -625,6 +646,7 @@ func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*Unwr
 	return result, nil
 }
 
+// GetAllUnwrapTokenRequestsByToAddress loads the AllUnwrapTokenRequestsByToAddress record from storage.
 func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -677,6 +699,7 @@ func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageI
 	return result, nil
 }
 
+// GetFeeTokenPair loads the FeeTokenPair record from storage.
 func (a *BridgeApi) GetFeeTokenPair(zts types.ZenonTokenStandard) (*definition.ZtsFeesInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {

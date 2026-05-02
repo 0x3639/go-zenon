@@ -51,6 +51,7 @@ type upnpClient interface {
 	GetNATRSIPStatus() (sip bool, nat bool, err error)
 }
 
+// ExternalIP is part of the receiver's public API.
 func (n *upnp) ExternalIP() (addr net.IP, err error) {
 	ipString, err := n.client.GetExternalIPAddress()
 	if err != nil {
@@ -63,6 +64,7 @@ func (n *upnp) ExternalIP() (addr net.IP, err error) {
 	return ip, nil
 }
 
+// AddMapping is part of the receiver's public API.
 func (n *upnp) AddMapping(protocol string, extport, intport int, desc string, lifetime time.Duration) error {
 	ip, err := n.internalAddress()
 	if err != nil {
@@ -102,6 +104,7 @@ func (n *upnp) internalAddress() (net.IP, error) {
 	return nil, fmt.Errorf("could not find local address in same net as %v", devaddr)
 }
 
+// DeleteMapping is part of the receiver's public API.
 func (n *upnp) DeleteMapping(protocol string, extport, intport int) error {
 	return n.client.DeletePortMapping("", uint16(extport), strings.ToUpper(protocol))
 }

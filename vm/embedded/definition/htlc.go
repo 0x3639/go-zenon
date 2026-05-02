@@ -114,6 +114,7 @@ var (
 	htlcProxyUnlockInfoKeyPrefix = []byte{2}
 )
 
+// CreateHtlcParam is part of the package's public API; see the surrounding code for usage.
 type CreateHtlcParam struct {
 	HashLocked     types.Address `json:"hashLocked"`
 	ExpirationTime int64         `json:"expirationTime"`
@@ -122,6 +123,7 @@ type CreateHtlcParam struct {
 	HashLock       []byte        `json:"hashLock"`
 }
 
+// HtlcInfo is part of the package's public API; see the surrounding code for usage.
 type HtlcInfo struct {
 	Id             types.Hash               `json:"id"`
 	TimeLocked     types.Address            `json:"timeLocked"`
@@ -138,11 +140,13 @@ func (h *HtlcInfo) String() string {
 	return fmt.Sprintf("Id:%s TimeLocked:%s HashLocked:%s TokenStandard:%s Amount:%s ExpirationTime:%d HashType:%d KeyMaxSize:%d HashLock:%s", h.Id, h.TimeLocked, h.HashLocked, h.TokenStandard, h.Amount, h.ExpirationTime, h.HashType, h.KeyMaxSize, base64.StdEncoding.EncodeToString(h.HashLock))
 }
 
+// UnlockHtlcParam is part of the package's public API; see the surrounding code for usage.
 type UnlockHtlcParam struct {
 	Id       types.Hash
 	Preimage []byte
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (h *HtlcInfo) Save(context db.DB) error {
 	data, err := ABIHtlc.PackVariable(
 		variableNameHtlcInfo,
@@ -160,6 +164,8 @@ func (h *HtlcInfo) Save(context db.DB) error {
 	}
 	return context.Put(getHtlcInfoKey(h.Id), data)
 }
+
+// Delete removes the receiver's record from storage.
 func (h *HtlcInfo) Delete(context db.DB) error {
 	return context.Delete(getHtlcInfoKey(h.Id))
 }
@@ -200,6 +206,8 @@ func parseHtlcInfo(key, data []byte) (*HtlcInfo, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetHtlcInfo loads the HtlcInfo record from storage.
 func GetHtlcInfo(context db.DB, id types.Hash) (*HtlcInfo, error) {
 	key := getHtlcInfoKey(id)
 	if data, err := context.Get(key); err != nil {
@@ -209,6 +217,7 @@ func GetHtlcInfo(context db.DB, id types.Hash) (*HtlcInfo, error) {
 	}
 }
 
+// HtlcInfoMarshal is part of the package's public API; see the surrounding code for usage.
 type HtlcInfoMarshal struct {
 	Id             types.Hash               `json:"id"`
 	TimeLocked     types.Address            `json:"timeLocked"`
@@ -221,6 +230,7 @@ type HtlcInfoMarshal struct {
 	HashLock       []byte                   `json:"hashLock"`
 }
 
+// ToHtlcInfoMarshal projects the receiver to its JSON-friendly HtlcInfoMarshal twin.
 func (h *HtlcInfo) ToHtlcInfoMarshal() *HtlcInfoMarshal {
 	aux := &HtlcInfoMarshal{
 		Id:             h.Id,
@@ -237,10 +247,12 @@ func (h *HtlcInfo) ToHtlcInfoMarshal() *HtlcInfoMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (h *HtlcInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(h.ToHtlcInfoMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (h *HtlcInfo) UnmarshalJSON(data []byte) error {
 	aux := new(HtlcInfoMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -260,11 +272,13 @@ func (h *HtlcInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// HtlcProxyUnlockInfo is part of the package's public API; see the surrounding code for usage.
 type HtlcProxyUnlockInfo struct {
 	Address types.Address
 	Allowed bool
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (entry *HtlcProxyUnlockInfo) Save(context db.DB) error {
 	data, err := ABIHtlc.PackVariable(
 		variableNameHtlcProxyUnlockInfo,
@@ -275,6 +289,8 @@ func (entry *HtlcProxyUnlockInfo) Save(context db.DB) error {
 	}
 	return context.Put(getHtlcProxyUnlockInfoKey(entry.Address), data)
 }
+
+// Delete removes the receiver's record from storage.
 func (entry *HtlcProxyUnlockInfo) Delete(context db.DB) error {
 	key := getHtlcProxyUnlockInfoKey(entry.Address)
 	return context.Delete(key)
@@ -313,6 +329,8 @@ func parseHtlcProxyUnlockInfo(key, data []byte) (*HtlcProxyUnlockInfo, error) {
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetHtlcProxyUnlockInfo loads the HtlcProxyUnlockInfo record from storage.
 func GetHtlcProxyUnlockInfo(context db.DB, address types.Address) (*HtlcProxyUnlockInfo, error) {
 	key := getHtlcProxyUnlockInfoKey(address)
 	if data, err := context.Get(key); err != nil {

@@ -341,7 +341,7 @@ NewProtocolManager returns a new sub\-protocol manager wired to bridge for chain
 \(The "ethereum sub protocol" naming is historical — Zenon inherited the wire protocol from go\-ethereum.\)
 
 <a name="ProtocolManager.BroadcastAccountBlock"></a>
-### func \(\*ProtocolManager\) [BroadcastAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L479>)
+### func \(\*ProtocolManager\) [BroadcastAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L481>)
 
 ```go
 func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock)
@@ -350,7 +350,7 @@ func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock)
 BroadcastAccountBlock will propagate a transaction to all peers which are not known to already have the given transaction.
 
 <a name="ProtocolManager.BroadcastMomentum"></a>
-### func \(\*ProtocolManager\) [BroadcastMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L446>)
+### func \(\*ProtocolManager\) [BroadcastMomentum](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L448>)
 
 ```go
 func (pm *ProtocolManager) BroadcastMomentum(detailed *nom.DetailedMomentum, propagate bool)
@@ -359,34 +359,34 @@ func (pm *ProtocolManager) BroadcastMomentum(detailed *nom.DetailedMomentum, pro
 BroadcastMomentum will propagate a block to a subset of it's peers, or will only announce it's availability \(depending what's requested\).
 
 <a name="ProtocolManager.Start"></a>
-### func \(\*ProtocolManager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L153>)
+### func \(\*ProtocolManager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L154>)
 
 ```go
 func (pm *ProtocolManager) Start()
 ```
 
-
+Start begins the receiver's background work.
 
 <a name="ProtocolManager.Stop"></a>
-### func \(\*ProtocolManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L166>)
+### func \(\*ProtocolManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L168>)
 
 ```go
 func (pm *ProtocolManager) Stop()
 ```
 
-
+Stop tears down the receiver.
 
 <a name="ProtocolManager.SyncInfo"></a>
-### func \(\*ProtocolManager\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L490>)
+### func \(\*ProtocolManager\) [SyncInfo](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L493>)
 
 ```go
 func (pm *ProtocolManager) SyncInfo() *SyncInfo
 ```
 
-
+SyncInfo is part of the receiver's public API.
 
 <a name="ProtocolManager.handle"></a>
-### func \(\*ProtocolManager\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L188>)
+### func \(\*ProtocolManager\) [handle](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L190>)
 
 ```go
 func (pm *ProtocolManager) handle(p *peer) error
@@ -395,7 +395,7 @@ func (pm *ProtocolManager) handle(p *peer) error
 handle is the callback invoked to manage the life cycle of an eth peer. When this function terminates, the peer is disconnected.
 
 <a name="ProtocolManager.handleMsg"></a>
-### func \(\*ProtocolManager\) [handleMsg](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L223>)
+### func \(\*ProtocolManager\) [handleMsg](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L225>)
 
 ```go
 func (pm *ProtocolManager) handleMsg(p *peer) error
@@ -404,7 +404,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error
 handleMsg is invoked whenever an inbound message is received from a remote peer. The remote connection is torn down upon returning any error.
 
 <a name="ProtocolManager.newPeer"></a>
-### func \(\*ProtocolManager\) [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L182>)
+### func \(\*ProtocolManager\) [newPeer](<https://github.com/zenon-network/go-zenon/blob/master/protocol/handler.go#L184>)
 
 ```go
 func (pm *ProtocolManager) newPeer(pv, nv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer
@@ -570,61 +570,61 @@ func (c chainBridge) AddAccountBlocks(blocks []*nom.AccountBlock) error
 AddAccountBlocks runs each block through the VM supervisor and commits it under the chain insert lock. Skips blocks whose patch is already known and ignores [nom.BlockTypeContractSend](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeContractSend>) \(those are nested inside their parent receive\).
 
 <a name="chainBridge.CurrentBlock"></a>
-### func \(chainBridge\) [CurrentBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L111>)
+### func \(chainBridge\) [CurrentBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L120>)
 
 ```go
 func (c chainBridge) CurrentBlock() *nom.Momentum
 ```
 
-
+CurrentBlock is part of the receiver's public API.
 
 <a name="chainBridge.GetBlock"></a>
-### func \(chainBridge\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L93>)
+### func \(chainBridge\) [GetBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L100>)
 
 ```go
 func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum
 ```
 
-
+GetBlock loads the Block record from storage.
 
 <a name="chainBridge.GetBlockByNumber"></a>
-### func \(chainBridge\) [GetBlockByNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L118>)
+### func \(chainBridge\) [GetBlockByNumber](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L129>)
 
 ```go
 func (c chainBridge) GetBlockByNumber(num uint64) (*nom.Momentum, error)
 ```
 
-
+GetBlockByNumber loads the BlockByNumber record from storage.
 
 <a name="chainBridge.GetBlockHashesFromHash"></a>
-### func \(chainBridge\) [GetBlockHashesFromHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L82>)
+### func \(chainBridge\) [GetBlockHashesFromHash](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L87>)
 
 ```go
 func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]types.Hash, error)
 ```
 
-
+GetBlockHashesFromHash loads the BlockHashesFromHash record from storage.
 
 <a name="chainBridge.GetTransactions"></a>
-### func \(chainBridge\) [GetTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L73>)
+### func \(chainBridge\) [GetTransactions](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L75>)
 
 ```go
 func (c chainBridge) GetTransactions() []*nom.AccountBlock
 ```
 
-
+GetTransactions loads the Transactions record from storage.
 
 <a name="chainBridge.HasBlock"></a>
-### func \(chainBridge\) [HasBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L78>)
+### func \(chainBridge\) [HasBlock](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L81>)
 
 ```go
 func (c chainBridge) HasBlock(hash types.Hash) bool
 ```
 
-
+HasBlock is part of the receiver's public API.
 
 <a name="chainBridge.InsertChain"></a>
-### func \(chainBridge\) [InsertChain](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L144>)
+### func \(chainBridge\) [InsertChain](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L157>)
 
 ```go
 func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
@@ -639,13 +639,13 @@ InsertChain commits a contiguous batch of [nom.DetailedMomentum](<https://pkg.go
 Returns the number of momentums successfully inserted before any error.
 
 <a name="chainBridge.Status"></a>
-### func \(chainBridge\) [Status](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L122>)
+### func \(chainBridge\) [Status](<https://github.com/zenon-network/go-zenon/blob/master/protocol/chain_bridge.go#L135>)
 
 ```go
 func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash)
 ```
 
-
+Status is part of the receiver's public API.
 
 <a name="chainManager"></a>
 ## type [chainManager](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L57-L78>)

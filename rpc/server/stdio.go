@@ -53,14 +53,17 @@ func (io stdioConn) Write(b []byte) (n int, err error) {
 	return io.out.Write(b)
 }
 
+// Close releases the receiver's resources.
 func (io stdioConn) Close() error {
 	return nil
 }
 
+// RemoteAddr is part of the receiver's public API.
 func (io stdioConn) RemoteAddr() string {
 	return "/dev/stdin"
 }
 
+// SetWriteDeadline updates the WriteDeadline state on the receiver.
 func (io stdioConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "stdio", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }

@@ -121,6 +121,7 @@ func newRLPX(fd net.Conn) transport {
 	return &rlpx{fd: fd}
 }
 
+// ReadMsg is part of the receiver's public API.
 func (t *rlpx) ReadMsg() (Msg, error) {
 	t.rmu.Lock()
 	defer t.rmu.Unlock()
@@ -128,6 +129,7 @@ func (t *rlpx) ReadMsg() (Msg, error) {
 	return t.rw.ReadMsg()
 }
 
+// WriteMsg is part of the receiver's public API.
 func (t *rlpx) WriteMsg(msg Msg) error {
 	t.wmu.Lock()
 	defer t.wmu.Unlock()
@@ -576,6 +578,7 @@ func newRLPXFrameRW(conn io.ReadWriter, s secrets) *rlpxFrameRW {
 	}
 }
 
+// WriteMsg is part of the receiver's public API.
 func (rw *rlpxFrameRW) WriteMsg(msg Msg) error {
 	ptype, _ := rlp.EncodeToBytes(msg.Code)
 
@@ -618,6 +621,7 @@ func (rw *rlpxFrameRW) WriteMsg(msg Msg) error {
 	return err
 }
 
+// ReadMsg is part of the receiver's public API.
 func (rw *rlpxFrameRW) ReadMsg() (msg Msg, err error) {
 	// read the header
 	headbuf := make([]byte, 32)

@@ -121,6 +121,7 @@ type BlockNumberOrHash struct {
 	RequireCanonical bool         `json:"requireCanonical,omitempty"`
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 	type erased BlockNumberOrHash
 	e := erased{}

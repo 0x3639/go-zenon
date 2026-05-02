@@ -36,18 +36,24 @@ func NewEventPrinter(chain chain.Chain, broadcaster protocol.Broadcaster) EventP
 	}
 }
 
+// Init prepares the receiver for use.
 func (ep *eventPrinter) Init() error {
 	return nil
 }
+
+// Start begins the receiver's background work.
 func (ep *eventPrinter) Start() error {
 	ep.chain.Register(ep)
 	return nil
 }
+
+// Stop tears down the receiver.
 func (ep *eventPrinter) Stop() error {
 	ep.chain.UnRegister(ep)
 	return nil
 }
 
+// InsertMomentum is part of the receiver's public API.
 func (ep *eventPrinter) InsertMomentum(detailed *nom.DetailedMomentum) {
 	block := detailed.Momentum
 	txs := 0
@@ -58,6 +64,8 @@ func (ep *eventPrinter) InsertMomentum(detailed *nom.DetailedMomentum) {
 		fmt.Printf("[Momentum inserted] Height: %d, Hash: %s, Timestamp: %d, Pillar producer address: %s, Current time: %s, Txs: %d\n", block.Height, block.Hash, block.Timestamp.Unix(), block.Producer(), time.Now().Format("2006-01-02 15:04:05"), txs)
 	}
 }
+
+// DeleteMomentum is part of the receiver's public API.
 func (ep *eventPrinter) DeleteMomentum(detailed *nom.DetailedMomentum) {
 	fmt.Printf("[Momentum deleted] Height: %v, Hash: %v\n", detailed.Momentum.Height, detailed.Momentum.Hash)
 }

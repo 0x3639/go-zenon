@@ -27,6 +27,7 @@ var (
 	bridgeLog = common.EmbeddedLogger.New("contract", "bridge")
 )
 
+// CheckECDSASignature is part of the package's public API.
 func CheckECDSASignature(message []byte, pubKeyStr, signatureStr string) (bool, error) {
 	pubKey, err := base64.StdEncoding.DecodeString(pubKeyStr)
 	if err != nil {
@@ -55,6 +56,7 @@ func CheckECDSASignature(message []byte, pubKeyStr, signatureStr string) (bool, 
 	return true, nil
 }
 
+// CanPerformAction reports whether the PerformAction action is currently permitted.
 func CanPerformAction(context vm_context.AccountVmContext) (*definition.BridgeInfoVariable, *definition.OrchestratorInfo, error) {
 	if bridgeInfo, errBridge := CheckBridgeInitialized(context); errBridge != nil {
 		return nil, nil, errBridge
@@ -75,6 +77,7 @@ func CanPerformAction(context vm_context.AccountVmContext) (*definition.BridgeIn
 	}
 }
 
+// CheckBridgeInitialized is part of the package's public API.
 func CheckBridgeInitialized(context vm_context.AccountVmContext) (*definition.BridgeInfoVariable, error) {
 	bridgeInfo, err := definition.GetBridgeInfoVariable(context.Storage())
 	if err != nil {
@@ -87,6 +90,7 @@ func CheckBridgeInitialized(context vm_context.AccountVmContext) (*definition.Br
 	return bridgeInfo, nil
 }
 
+// CheckOrchestratorInfoInitialized is part of the package's public API.
 func CheckOrchestratorInfoInitialized(context vm_context.AccountVmContext) (*definition.OrchestratorInfo, error) {
 	orchestratorInfo, err := definition.GetOrchestratorInfoVariable(context.Storage())
 	if err != nil {
@@ -99,6 +103,7 @@ func CheckOrchestratorInfoInitialized(context vm_context.AccountVmContext) (*def
 	return orchestratorInfo, nil
 }
 
+// CheckBridgeHalted is part of the package's public API.
 func CheckBridgeHalted(bridgeInfo *definition.BridgeInfoVariable, context vm_context.AccountVmContext) error {
 	momentum, err := context.GetFrontierMomentum()
 	if err != nil {
@@ -140,9 +145,12 @@ type WrapTokenMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *WrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *WrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.WrapTokenParam)
@@ -162,6 +170,8 @@ func (p *WrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.ToAddress)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *WrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -229,6 +239,7 @@ func (p *WrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, send
 	return nil, nil
 }
 
+// GetMessageToSignEvm loads the MessageToSignEvm record from storage.
 func GetMessageToSignEvm(data []byte) ([]byte, error) {
 	if len(data) != 32 {
 		return nil, errors.New("data len is not 32")
@@ -237,6 +248,7 @@ func GetMessageToSignEvm(data []byte) ([]byte, error) {
 	return crypto.Keccak256([]byte(msg)), nil
 }
 
+// HashByNetworkClass reports whether the receiver has the hByNetworkClass property.
 func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error) {
 	switch networkClass {
 	case definition.NoMClass:
@@ -248,6 +260,7 @@ func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error) {
 	}
 }
 
+// GetWrapTokenRequestMessage loads the WrapTokenRequestMessage record from storage.
 func GetWrapTokenRequestMessage(request *definition.WrapTokenRequest, contractAddress *ecommon.Address) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -279,9 +292,12 @@ type UpdateWrapRequestMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UpdateWrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UpdateWrapRequestParam)
@@ -297,6 +313,8 @@ func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.Id, param.Signature)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -351,6 +369,7 @@ func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmConte
 	return nil, nil
 }
 
+// GetUnwrapTokenRequestMessage loads the UnwrapTokenRequestMessage record from storage.
 func GetUnwrapTokenRequestMessage(param *definition.UnwrapTokenParam) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -395,9 +414,12 @@ type UnwrapTokenMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UnwrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UnwrapTokenParam)
@@ -418,6 +440,8 @@ func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.TransactionHash, param.LogIndex, param.ToAddress, param.TokenAddress, param.Amount, param.Signature)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UnwrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -500,9 +524,12 @@ type SetNetworkMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.NetworkInfoParam)
@@ -534,6 +561,8 @@ func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.Name, param.ContractAddress, param.Metadata)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -580,9 +609,12 @@ type RemoveNetworkMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *RemoveNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.NetworkInfoParam)
@@ -598,6 +630,8 @@ func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *RemoveNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -639,9 +673,12 @@ type SetNetworkMetadataMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetNetworkMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -661,6 +698,8 @@ func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) er
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.Metadata)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetNetworkMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -697,6 +736,7 @@ func (p *SetNetworkMetadataMethod) ReceiveBlock(context vm_context.AccountVmCont
 	return nil, nil
 }
 
+// IsJSON reports whether the receiver satisfies the JSON predicate.
 func IsJSON(s string) bool {
 	var js interface{}
 	return json.Unmarshal([]byte(s), &js) == nil
@@ -709,9 +749,12 @@ type SetTokenPairMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.TokenPairParam)
@@ -752,6 +795,8 @@ func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.TokenStandard, param.TokenAddress, param.Bridgeable, param.Redeemable, param.Owned, param.MinAmount, param.FeePercentage, param.RedeemDelay, param.Metadata)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -834,9 +879,12 @@ type RemoveTokenPairMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *RemoveTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.TokenPairParam)
@@ -856,6 +904,8 @@ func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.NetworkClass, param.ChainId, param.TokenStandard, param.TokenAddress)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -905,6 +955,7 @@ func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext
 	return nil, nil
 }
 
+// GetBasicMethodMessage loads the BasicMethodMessage record from storage.
 func GetBasicMethodMessage(methodName string, tssNonce uint64, networkClass uint32, chainId uint64) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.StringTy}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -932,9 +983,12 @@ type HaltMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *HaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -950,6 +1004,8 @@ func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, *signature)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -997,9 +1053,12 @@ type UnhaltMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *UnhaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	if err := definition.ABIBridge.UnpackEmptyMethod(p.MethodName, block.Data); err != nil {
@@ -1013,6 +1072,8 @@ func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1053,9 +1114,12 @@ type EmergencyMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *EmergencyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	if err := definition.ABIBridge.UnpackEmptyMethod(p.MethodName, block.Data); err != nil {
@@ -1069,6 +1133,8 @@ func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1102,6 +1168,7 @@ func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, send
 	return nil, nil
 }
 
+// GetChangePubKeyMessage loads the ChangePubKeyMessage record from storage.
 func GetChangePubKeyMessage(methodName string, networkClass uint32, chainId, tssNonce uint64, pubKey string) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.StringTy}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -1142,9 +1209,12 @@ type ChangeTssECDSAPubKeyMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ChangeTssECDSAPubKeyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.ChangeECDSAPubKeyParam)
@@ -1166,6 +1236,8 @@ func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.PubKey, param.OldPubKeySignature, param.NewPubKeySignature)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1254,9 +1326,12 @@ type ChangeAdministratorMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ChangeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	address := new(types.Address)
@@ -1279,6 +1354,8 @@ func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, address)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ChangeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1327,9 +1404,12 @@ type SetAllowKeygenMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetAllowKeygenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1345,6 +1425,8 @@ func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error 
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetAllowKeygenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1396,9 +1478,12 @@ type SetOrchestratorInfoMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetOrchestratorInfoMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1418,6 +1503,8 @@ func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.WindowSize, param.KeyGenThreshold, param.ConfirmationsToFinality, param.EstimatedMomentumTime)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetOrchestratorInfoMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1458,9 +1545,12 @@ type SetBridgeMetadataMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *SetBridgeMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1480,6 +1570,8 @@ func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *SetBridgeMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1512,9 +1604,12 @@ type RevokeUnwrapRequestMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *RevokeUnwrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1530,6 +1625,8 @@ func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.TransactionHash, param.LogIndex)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *RevokeUnwrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1568,9 +1665,12 @@ type RedeemMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *RedeemMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.RedeemParam)
@@ -1586,6 +1686,8 @@ func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, param.TransactionHash, param.LogIndex)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *RedeemMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1679,9 +1781,12 @@ type NominateGuardiansMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *NominateGuardiansMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1710,6 +1815,8 @@ func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, guardians)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *NominateGuardiansMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1773,9 +1880,12 @@ type ProposeAdministratorMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *ProposeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1799,6 +1909,8 @@ func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	block.Data, err = definition.ABIBridge.PackMethod(p.MethodName, *address)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *ProposeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

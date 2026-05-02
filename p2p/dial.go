@@ -224,6 +224,7 @@ func (s *dialstate) taskDone(t task, now time.Time) {
 	}
 }
 
+// Do executes the task.
 func (t *dialTask) Do(srv *Server) {
 	addr := &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)}
 	common.P2PLogger.Debug(fmt.Sprintf("dialing %v\n", t.dest))
@@ -240,6 +241,7 @@ func (t *dialTask) String() string {
 	return fmt.Sprintf("%v %x %v:%d", t.flags, t.dest.ID[:8], t.dest.IP, t.dest.TCP)
 }
 
+// Do executes the task.
 func (t *discoverTask) Do(srv *Server) {
 	if t.bootstrap {
 		srv.ntab.Bootstrap(srv.BootstrapNodes)
@@ -270,6 +272,7 @@ func (t *discoverTask) String() (s string) {
 	return s
 }
 
+// Do executes the task.
 func (t waitExpireTask) Do(*Server) {
 	time.Sleep(t.Duration)
 }
@@ -315,9 +318,13 @@ func (h *dialHistory) expire(now time.Time) {
 func (h dialHistory) Len() int           { return len(h) }
 func (h dialHistory) Less(i, j int) bool { return h[i].exp.Before(h[j].exp) }
 func (h dialHistory) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+// Push satisfies heap.Interface.
 func (h *dialHistory) Push(x interface{}) {
 	*h = append(*h, x.(pastDial))
 }
+
+// Pop satisfies heap.Interface.
 func (h *dialHistory) Pop() interface{} {
 	old := *h
 	n := len(old)

@@ -441,6 +441,7 @@ type gzipResponseWriter struct {
 	http.ResponseWriter
 }
 
+// WriteHeader implements http.ResponseWriter.
 func (w *gzipResponseWriter) WriteHeader(status int) {
 	w.Header().Del("Content-Length")
 	w.ResponseWriter.WriteHeader(status)

@@ -150,6 +150,7 @@ func (pm *ProtocolManager) removePeer(id string) {
 	}
 }
 
+// Start begins the receiver's background work.
 func (pm *ProtocolManager) Start() {
 	// start sync handlers
 	pm.wg.Add(1)
@@ -163,6 +164,7 @@ func (pm *ProtocolManager) Start() {
 	}()
 }
 
+// Stop tears down the receiver.
 func (pm *ProtocolManager) Stop() {
 	// Showing a log message. During download / process this could actually
 	// take between 5 to 10 seconds and therefor feedback is required.
@@ -487,6 +489,7 @@ func (pm *ProtocolManager) BroadcastAccountBlock(tx *nom.AccountBlock) {
 	log.Info("propagated account-block to peers", "num-peers", len(peers), "account-block-header", tx.Header())
 }
 
+// SyncInfo is part of the receiver's public API.
 func (pm *ProtocolManager) SyncInfo() *SyncInfo {
 	return pm.syncInfo()
 }

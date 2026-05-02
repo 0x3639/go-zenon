@@ -582,7 +582,7 @@ splitKey tries to split a database key into a node id and a field part.
 func (n NodeID) GoString() string
 ```
 
-The Go syntax representation of a NodeID is a call to HexID.
+GoString implements fmt.GoStringer for %\#v formatting.
 
 <a name="NodeID.Pubkey"></a>
 ### func \(NodeID\) [Pubkey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/discover/node.go#L215>)

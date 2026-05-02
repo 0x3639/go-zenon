@@ -113,10 +113,13 @@ func addReward(context vm_context.AccountVmContext, epoch uint64, reward definit
 	common.DealWithErr(hisDeposit.Save(context.Storage()))
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *CollectRewardMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	// in case of sentinels it issues 2 rewards, but it's not called enough to cause issues
 	return p.Plasma, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -131,6 +134,8 @@ func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *CollectRewardMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -202,13 +207,17 @@ func checkAndConsumeQsr(context vm_context.AccountVmContext, ownerAddress types.
 	return nil
 }
 
+// DepositQsrMethod is part of the package's public API; see the surrounding code for usage.
 type DepositQsrMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *DepositQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -223,6 +232,8 @@ func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *DepositQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -236,13 +247,17 @@ func (p *DepositQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	return nil, nil
 }
 
+// WithdrawQsrMethod is part of the package's public API; see the surrounding code for usage.
 type WithdrawQsrMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *WithdrawQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *WithdrawQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -257,6 +272,8 @@ func (p *WithdrawQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *WithdrawQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -283,13 +300,17 @@ func (p *WithdrawQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 	}, nil
 }
 
+// DonateMethod is part of the package's public API; see the surrounding code for usage.
 type DonateMethod struct {
 	MethodName string
 }
 
+// GetPlasma loads the Plasma record from storage.
 func (p *DonateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -304,6 +325,8 @@ func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *DonateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -312,16 +335,22 @@ func (p *DonateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 	return nil, nil
 }
 
+// VoteByNameMethod is part of the package's public API; see the surrounding code for usage.
 type VoteByNameMethod struct {
 	MethodName string
 }
 
+// Fee is part of the receiver's public API.
 func (p *VoteByNameMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
+
+// GetPlasma loads the Plasma record from storage.
 func (p *VoteByNameMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -341,6 +370,8 @@ func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName, param.Id, param.Name, param.Vote)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *VoteByNameMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -378,16 +409,22 @@ func (p *VoteByNameMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	return nil, nil
 }
 
+// VoteByProdAddressMethod is part of the package's public API; see the surrounding code for usage.
 type VoteByProdAddressMethod struct {
 	MethodName string
 }
 
+// Fee is part of the receiver's public API.
 func (p *VoteByProdAddressMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
+
+// GetPlasma loads the Plasma record from storage.
 func (p *VoteByProdAddressMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
+
+// ValidateSendBlock is part of the receiver's public API.
 func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -407,6 +444,8 @@ func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	block.Data, err = definition.ABICommon.PackMethod(p.MethodName, param.Id, param.Vote)
 	return err
 }
+
+// ReceiveBlock is part of the receiver's public API.
 func (p *VoteByProdAddressMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -445,6 +484,7 @@ func (p *VoteByProdAddressMethod) ReceiveBlock(context vm_context.AccountVmConte
 	return nil, nil
 }
 
+// TimeChallenge is part of the package's public API.
 func TimeChallenge(context vm_context.AccountVmContext, methodName string, hash []byte, delay uint64) (*definition.TimeChallengeInfo, error) {
 	timeChallengeInfo, err := definition.GetTimeChallengeInfoVariable(context.Storage(), methodName)
 	if err != nil {
@@ -482,6 +522,7 @@ func TimeChallenge(context vm_context.AccountVmContext, methodName string, hash 
 	return timeChallengeInfo, nil
 }
 
+// CheckSecurityInitialized is part of the package's public API.
 func CheckSecurityInitialized(context vm_context.AccountVmContext) (*definition.SecurityInfoVariable, error) {
 	securityInfo, err := definition.GetSecurityInfoVariable(context.Storage())
 	if err != nil {

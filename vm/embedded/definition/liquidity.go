@@ -148,6 +148,8 @@ type LiquidityInfoVariable struct {
 	QsrReward     *big.Int      `json:"qsrReward"`
 	TokenTuples   [][]byte      `json:"tokenTuples"`
 }
+
+// LiquidityInfo is part of the package's public API; see the surrounding code for usage.
 type LiquidityInfo struct {
 	Administrator types.Address `json:"administrator"`
 	IsHalted      bool          `json:"isHalted"`
@@ -156,6 +158,7 @@ type LiquidityInfo struct {
 	TokenTuples   []TokenTuple  `json:"tokenTuples"`
 }
 
+// LiquidityInfoMarshal is part of the package's public API; see the surrounding code for usage.
 type LiquidityInfoMarshal struct {
 	Administrator types.Address `json:"administrator"`
 	IsHalted      bool          `json:"isHalted"`
@@ -164,6 +167,7 @@ type LiquidityInfoMarshal struct {
 	TokenTuples   []TokenTuple  `json:"tokenTuples"`
 }
 
+// ToLiquidityInfoMarshal projects the receiver to its JSON-friendly LiquidityInfoMarshal twin.
 func (l *LiquidityInfo) ToLiquidityInfoMarshal() LiquidityInfoMarshal {
 	aux := LiquidityInfoMarshal{
 		Administrator: l.Administrator,
@@ -179,10 +183,13 @@ func (l *LiquidityInfo) ToLiquidityInfoMarshal() LiquidityInfoMarshal {
 
 	return aux
 }
+
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (l *LiquidityInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(l.ToLiquidityInfoMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (l *LiquidityInfo) UnmarshalJSON(data []byte) error {
 	aux := new(LiquidityInfoMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -199,6 +206,7 @@ func (l *LiquidityInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (liq *LiquidityInfoVariable) Save(context db.DB) error {
 	data, err := ABILiquidity.PackVariable(
 		liquidityInfoVariableName,
@@ -248,6 +256,8 @@ func parseLiquidityInfo(data []byte) (*LiquidityInfo, error) {
 		}, nil
 	}
 }
+
+// GetLiquidityInfo loads the LiquidityInfo record from storage.
 func GetLiquidityInfo(context db.DB) (*LiquidityInfo, error) {
 	if data, err := context.Get(LiquidityInfoKeyPrefix); err != nil {
 		return nil, err
@@ -256,6 +266,8 @@ func GetLiquidityInfo(context db.DB) (*LiquidityInfo, error) {
 		return upd, err
 	}
 }
+
+// EncodeLiquidityInfo serialises the input to the package's wire encoding.
 func EncodeLiquidityInfo(liquidityInfo *LiquidityInfo) (*LiquidityInfoVariable, error) {
 	liquidityInfoVariable := new(LiquidityInfoVariable)
 	if err := liquidityInfoVariable.Administrator.SetBytes(liquidityInfo.Administrator.Bytes()); err != nil {
@@ -276,6 +288,7 @@ func EncodeLiquidityInfo(liquidityInfo *LiquidityInfo) (*LiquidityInfoVariable, 
 	return liquidityInfoVariable, nil
 }
 
+// TokenTuple is part of the package's public API; see the surrounding code for usage.
 type TokenTuple struct {
 	TokenStandard string   `json:"tokenStandard"`
 	ZnnPercentage uint32   `json:"znnPercentage"`
@@ -283,6 +296,7 @@ type TokenTuple struct {
 	MinAmount     *big.Int `json:"minAmount"`
 }
 
+// TokenTupleMarshal projects the receiver to its JSON-friendly kenTupleMarshal twin.
 type TokenTupleMarshal struct {
 	TokenStandard string `json:"tokenStandard"`
 	ZnnPercentage uint32 `json:"znnPercentage"`
@@ -290,6 +304,7 @@ type TokenTupleMarshal struct {
 	MinAmount     string `json:"minAmount"`
 }
 
+// ToTokenTupleMarshal projects the receiver to its JSON-friendly TokenTupleMarshal twin.
 func (s *TokenTuple) ToTokenTupleMarshal() *TokenTupleMarshal {
 	aux := &TokenTupleMarshal{
 		TokenStandard: s.TokenStandard,
@@ -300,10 +315,12 @@ func (s *TokenTuple) ToTokenTupleMarshal() *TokenTupleMarshal {
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (s *TokenTuple) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToTokenTupleMarshal())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (s *TokenTuple) UnmarshalJSON(data []byte) error {
 	aux := new(TokenTupleMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -317,15 +334,18 @@ func (s *TokenTuple) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FundParam is part of the package's public API; see the surrounding code for usage.
 type FundParam struct {
 	ZnnReward *big.Int
 	QsrReward *big.Int
 }
 
+// BurnParam is part of the package's public API; see the surrounding code for usage.
 type BurnParam struct {
 	BurnAmount *big.Int
 }
 
+// TokenTuplesParam is part of the package's public API; see the surrounding code for usage.
 type TokenTuplesParam struct {
 	TokenStandards []string
 	ZnnPercentages []uint32
@@ -333,11 +353,13 @@ type TokenTuplesParam struct {
 	MinAmounts     []*big.Int
 }
 
+// SetAdditionalRewardParam updates the AdditionalRewardParam state on the receiver.
 type SetAdditionalRewardParam struct {
 	ZnnReward *big.Int
 	QsrReward *big.Int
 }
 
+// LiquidityStakeEntry is part of the package's public API; see the surrounding code for usage.
 type LiquidityStakeEntry struct {
 	Amount         *big.Int                 `json:"amount"`
 	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
@@ -349,6 +371,7 @@ type LiquidityStakeEntry struct {
 	Id             types.Hash               `json:"id"`
 }
 
+// Save persists the receiver under its keyed slot in storage.
 func (stake *LiquidityStakeEntry) Save(context db.DB) error {
 	return context.Put(
 		getLiquidityStakeEntryKey(stake.Id, stake.StakeAddress),
@@ -362,6 +385,8 @@ func (stake *LiquidityStakeEntry) Save(context db.DB) error {
 			stake.ExpirationTime,
 		))
 }
+
+// Delete removes the receiver's record from storage.
 func (stake *LiquidityStakeEntry) Delete(context db.DB) error {
 	return context.Delete(getLiquidityStakeEntryKey(stake.Id, stake.StakeAddress))
 }
@@ -409,6 +434,8 @@ func parseLiquidityStakeEntry(key []byte, data []byte) (*LiquidityStakeEntry, er
 		return nil, constants.ErrDataNonExistent
 	}
 }
+
+// GetLiquidityStakeEntry loads the LiquidityStakeEntry record from storage.
 func GetLiquidityStakeEntry(context db.DB, id types.Hash, address types.Address) (*LiquidityStakeEntry, error) {
 	key := getLiquidityStakeEntryKey(id, address)
 	if data, err := context.Get(key); err != nil {
@@ -418,6 +445,7 @@ func GetLiquidityStakeEntry(context db.DB, id types.Hash, address types.Address)
 	}
 }
 
+// IterateLiquidityStakeEntries is part of the package's public API.
 func IterateLiquidityStakeEntries(context db.DB, f func(entry *LiquidityStakeEntry) error) error {
 	iterator := context.NewIterator(LiquidityStakeEntryKeyPrefix)
 	defer iterator.Release()
@@ -442,6 +470,7 @@ func IterateLiquidityStakeEntries(context db.DB, f func(entry *LiquidityStakeEnt
 	return nil
 }
 
+// LiquidityStakeEntryMarshal is part of the package's public API; see the surrounding code for usage.
 type LiquidityStakeEntryMarshal struct {
 	Amount         string                   `json:"amount"`
 	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
@@ -453,6 +482,7 @@ type LiquidityStakeEntryMarshal struct {
 	Id             types.Hash               `json:"id"`
 }
 
+// ToLiquidityStakeEntry is part of the receiver's public API.
 func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMarshal {
 	aux := &LiquidityStakeEntryMarshal{
 		Amount:         stake.Amount.String(),
@@ -467,10 +497,12 @@ func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMa
 	return aux
 }
 
+// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 func (stake *LiquidityStakeEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(stake.ToLiquidityStakeEntry())
 }
 
+// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 func (stake *LiquidityStakeEntry) UnmarshalJSON(data []byte) error {
 	aux := new(LiquidityStakeEntryMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -487,7 +519,7 @@ func (stake *LiquidityStakeEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Returns all *active* stake entries for an address
+// GetLiquidityStakeListByAddress loads the LiquidityStakeListByAddress record from storage.
 func GetLiquidityStakeListByAddress(context db.DB, address types.Address) ([]*LiquidityStakeEntry, *big.Int, *big.Int, error) {
 	total := big.NewInt(0)
 	weighted := big.NewInt(0)
@@ -508,6 +540,7 @@ func GetLiquidityStakeListByAddress(context db.DB, address types.Address) ([]*Li
 	}
 }
 
+// GetAllLiquidityStakeEntries loads the AllLiquidityStakeEntries record from storage.
 func GetAllLiquidityStakeEntries(context db.DB) []*LiquidityStakeEntry {
 	iterator := context.NewIterator(LiquidityStakeEntryKeyPrefix)
 	defer iterator.Release()
@@ -527,6 +560,7 @@ func GetAllLiquidityStakeEntries(context db.DB) []*LiquidityStakeEntry {
 	return liquidityStakeEntries
 }
 
+// LiquidityStakeByExpirationTime is part of the package's public API; see the surrounding code for usage.
 type LiquidityStakeByExpirationTime []*LiquidityStakeEntry
 
 func (a LiquidityStakeByExpirationTime) Len() int      { return len(a) }

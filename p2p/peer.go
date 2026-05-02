@@ -391,6 +391,7 @@ type protoRW struct {
 	w      MsgWriter
 }
 
+// WriteMsg is part of the receiver's public API.
 func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 	if msg.Code >= rw.Length {
 		return newPeerError(errInvalidMsgCode, "not handled")
@@ -410,6 +411,7 @@ func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 	return err
 }
 
+// ReadMsg is part of the receiver's public API.
 func (rw *protoRW) ReadMsg() (Msg, error) {
 	select {
 	case msg := <-rw.in:
