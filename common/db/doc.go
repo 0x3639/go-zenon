@@ -1,14 +1,81 @@
-// Package db is the versioned LevelDB layer used by chain, consensus, and VM
-// stores.
+// Package db is the versioned key/value layer used by the chain, consensus,
+// and embedded-contract stores.
 //
 // # Overview
 //
-// db wraps go-leveldb in a `Manager` that exposes versioned snapshots, atomic
-// `Patch` mutations, and a `Commit` interface that ledger objects implement to
-// describe their state-change footprint. Higher-level code stages a patch,
-// validates against the current version, and commits in one atomic step under
-// the chain insert lock.
+// db wraps goleveldb in two abstractions: a low-level [DB] interface that
+// adds tombstone-based deletion, change-set capture, and snapshotting on top
+// of LevelDB; and a higher-level [Manager] interface that composes [DB]
+// snapshots with per-version forward and rollback [Patch]es so the chain can
+// expose any committed [HashHeight] as a queryable historical view.
 //
-// Per-package documentation is being filled in incrementally. See
-// docs/STYLE.md for the full template applied in subsequent PRs.
+// Every chain mutation flows through this package: the VM produces a [Patch]
+// per executed account block, the chain layer wraps it in a [Transaction]
+// alongside the relevant [Commit]s, and [Manager.Add] persists the lot
+// atomically. Reorgs use [Manager.Pop] to apply the matching rollback patch
+// in the inverse direction.
+//
+// # Key Concepts
+//
+//   - DB — the high-level handle. Layered on top of [db] via
+//     [enableDelete], adding tombstone-encoded deletion, [DB.Changes]
+//     capture for in-memory overlays, and [DB.Snapshot] for cheap
+//     point-in-time forks.
+//   - Patch — a replayable batch of put/delete operations. Constructed by
+//     the VM and committed by the manager.
+//   - Commit — a chain object (account block, momentum) that knows its own
+//     [HashHeight] and serialized form.
+//   - Transaction — a sequence of [Commit]s plus the [Patch] capturing
+//     their state effects. The unit [Manager.Add] consumes.
+//   - Manager — the versioned database. Holds the live frontier, every
+//     historical view in scope, and the forward / rollback patches needed
+//     to navigate between them.
+//   - SubDB — a namespace decorator that prefixes every key. Used to keep
+//     unrelated keyspaces separate within a single LevelDB instance.
+//   - MergedDB — a read-through stack of [db]s. The first layer is
+//     writable; later layers are read-only. Used to put an in-memory
+//     overlay in front of an immutable LevelDB snapshot.
+//
+// # Usage
+//
+// Open a backing store and wrap it in a manager:
+//
+//	mgr := db.NewLevelDBManager("data/nom")
+//	defer mgr.Stop()
+//
+// Read at a specific height:
+//
+//	view := mgr.Get(types.HashHeight{Hash: h, Height: 42})
+//	if view == nil { /* no longer reachable */ }
+//	value, err := view.Get(key)
+//
+// Commit a transaction (typically built by the VM and chain layer):
+//
+//	if err := mgr.Add(tx); err != nil { /* handle */ }
+//
+// Tombstone-encoded deletion: writes through [DB.Delete] are persisted as a
+// single-byte tombstone so that LevelDB snapshots remain immutable while
+// still letting iteration skip deleted keys via [newSkipDeletedIterator].
+//
+// # Concurrency
+//
+// Every method on a [Manager] is goroutine-safe; the manager owns the mutex
+// that serializes [Manager.Add] / [Manager.Pop] against reads. Individual
+// [DB] views are not reentrant — derive a fresh snapshot via [DB.Snapshot]
+// per goroutine.
+//
+// # Related Packages
+//
+//   - [github.com/zenon-network/go-zenon/common/types] — defines
+//     [types.HashHeight] and the protobuf wrappers patches serialize.
+//   - [github.com/zenon-network/go-zenon/common] — provides the byte
+//     helpers used to compose canonical key forms.
+//   - [github.com/zenon-network/go-zenon/chain] — the primary consumer;
+//     wraps every state mutation in a [Transaction] and commits via
+//     [Manager.Add].
+//   - [github.com/zenon-network/go-zenon/vm] — produces the [Patch] for
+//     each executed account block; reads from [DB] views supplied by the
+//     chain.
+//   - [github.com/zenon-network/go-zenon/consensus/storage] — uses the
+//     same primitives to persist consensus state.
 package db

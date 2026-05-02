@@ -4,6 +4,12 @@ import (
 	"math/big"
 )
 
+// Pre-allocated [big.Int] constants used throughout the codebase. These
+// avoid allocating fresh big.Ints in hot paths — VM execution, plasma
+// arithmetic, and the embedded contracts all reuse them. Values:
+//   - Big0..Big256: small constants.
+//   - BigP255 = 2^255, BigP255m1 = 2^255 - 1.
+//   - BigP256 = 2^256, BigP256m1 = 2^256 - 1 (the unsigned 256-bit max).
 var (
 	Big0      = big.NewInt(0)
 	Big1      = big.NewInt(1)
@@ -19,6 +25,7 @@ var (
 	BigP256m1 = new(big.Int).Sub(BigP256, big.NewInt(1))
 )
 
+// MinInt64 returns the smaller of x and y.
 func MinInt64(x, y int64) int64 {
 	if x < y {
 		return x
@@ -26,6 +33,7 @@ func MinInt64(x, y int64) int64 {
 	return y
 }
 
+// MaxInt64 returns the larger of x and y.
 func MaxInt64(x, y int64) int64 {
 	if x > y {
 		return x

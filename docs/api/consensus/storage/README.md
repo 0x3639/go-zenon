@@ -327,7 +327,7 @@ func file_consensus_storage_point_proto_rawDescGZIP() []byte
 
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.pb.go#L194>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.pb.go#L222>)
 
 ```go
 func init()

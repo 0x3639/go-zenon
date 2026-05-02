@@ -6,13 +6,40 @@
 import "github.com/zenon-network/go-zenon/common/types"
 ```
 
-Package types defines the foundational identifier types used everywhere on the chain: addresses, hashes, token standards, sporks, and hash/height pairs.
+Package types defines the foundational identifier types used everywhere on the chain: addresses, hashes, hash/height pairs, token standards, account headers, and the spork registry.
 
 ### Overview
 
-types is the deepest dependency in the codebase. It owns \`Address\` and its human\-readable encoding, the 32\-byte \`Hash\`, the \`HashHeight\` location pair used to reference points on either ledger, the \`TokenStandard\` identifier for ZTS tokens, and the \`Spork\` definitions that gate protocol upgrades.
+types is the deepest dependency in the codebase — every other package imports it directly or transitively. It owns the canonical encodings \(bech32 for [Address](<#Address>) and [ZenonTokenStandard](<#ZenonTokenStandard>), hex for [Hash](<#Hash>)\) and the fixed\-size binary layouts that protobuf wrappers \([AddressProto](<#AddressProto>), [HashProto](<#HashProto>), [HashHeightProto](<#HashHeightProto>), [AccountHeaderProto](<#AccountHeaderProto>)\) marshal to and from for on\-chain storage and peer\-to\-peer transport.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- Address — 20\-byte account identifier; one type byte \([UserAddrByte](<#UserAddrByte>) or [ContractAddrByte](<#UserAddrByte>)\) plus 19 payload bytes. See [PubKeyToAddress](<#PubKeyToAddress>) for the user\-account derivation rule and [EmbeddedContracts](<#PillarContract>) for the enumerated system addresses.
+- Hash — 32\-byte SHA3\-256 digest. See [NewHash](<#NewHash>).
+- HashHeight — \`\(hash, height\)\` pair locating any block on either ledger. See [github.com/zenon\\\-network/go\\\-zenon/ARCHITECTURE.md](<https://pkg.go.dev/github.com/zenon-network/go-zenon/ARCHITECTURE.md/>) for the dual\-ledger model.
+- AccountHeader — \`\(address, hash, height\)\` triple identifying a block within a specific account chain.
+- ZenonTokenStandard \(ZTS\) — 10\-byte token identifier, the analog of an ERC\-20 contract address.
+- ImplementedSpork — binary\-side handle for a protocol upgrade gated by the spork contract. The constants in this file \( [AcceleratorSpork](<#AcceleratorSpork>), [HtlcSpork](<#AcceleratorSpork>), [BridgeAndLiquiditySpork](<#AcceleratorSpork>)\) enumerate the upgrades this binary recognizes.
+- PillarDelegation — consensus\-layer summary of a registered pillar's name, coinbase, and aggregated stake weight.
+
+### Usage
+
+Construct identifiers with the typed constructors rather than copying raw bytes; the constructors validate length and panic on programmer error so invariants stay enforced at the boundary:
+
+- [ParseAddress](<#ParseAddress>) / [ParseAddressPanic](<#ParseAddressPanic>) — bech32 string to [Address](<#Address>).
+- [PubKeyToAddress](<#PubKeyToAddress>) — Ed25519 public key to user [Address](<#Address>).
+- [NewHash](<#NewHash>) — bytes to [Hash](<#Hash>) via the canonical hash function.
+- [HexToHash](<#HexToHash>) / [HexToHashPanic](<#HexToHashPanic>) — hex string to [Hash](<#Hash>).
+- [NewZenonTokenStandard](<#NewZenonTokenStandard>) — derive a fresh ZTS from issuance bytes.
+
+Convert to/from protobuf with the \`Proto\`/\`DeProto\*\` family for storage and wire formats; use [encoding.TextMarshaler](<https://pkg.go.dev/encoding/#TextMarshaler>)/[encoding.TextUnmarshaler](<https://pkg.go.dev/encoding/#TextUnmarshaler>) \(already implemented\) for transparent JSON encoding.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>) — provides the byte and time helpers \([common.JoinBytes](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#JoinBytes>), [common.Uint64ToBytes](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Uint64ToBytes>)\) used to compose canonical key forms.
+- [github.com/zenon\\\-network/go\\\-zenon/common/crypto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/>) — supplies the SHA3\-256 hash primitive consumed by [NewHash](<#NewHash>) and [NewZenonTokenStandard](<#NewZenonTokenStandard>).
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — uses these types to define [chain/nom.AccountBlock](<https://pkg.go.dev/chain/nom/#AccountBlock>) and [chain/nom.Momentum](<https://pkg.go.dev/chain/nom/#Momentum>).
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — dispatches on the [EmbeddedContracts](<#PillarContract>) addresses defined here.
 
 ## Index
 
@@ -127,21 +154,31 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="AddressPrefix"></a>
+<a name="AddressPrefix"></a>Bech32 encoding parameters for [Address](<#Address>). The on\-the\-wire layout is one type byte \(UserAddrByte or ContractAddrByte\) followed by an AddressCoreSize\-byte payload, encoded with the AddressPrefix human\-readable part.
 
 ```go
 const (
-    AddressPrefix   = "z"
-    AddressSize     = 1 + AddressCoreSize
+    // AddressPrefix is the bech32 human-readable part for every Zenon address.
+    AddressPrefix = "z"
+    // AddressSize is the total length of the binary representation in bytes:
+    // one type byte plus AddressCoreSize payload bytes.
+    AddressSize = 1 + AddressCoreSize
+    // AddressCoreSize is the number of payload bytes carried in an address
+    // (the truncated SHA3-256 of a public key for users; a deterministic
+    // vanity payload for embedded contracts).
     AddressCoreSize = 19
 )
 ```
 
-<a name="UserAddrByte"></a>
+<a name="UserAddrByte"></a>Address\-type discriminator stored in byte 0 of every [Address](<#Address>).
 
 ```go
 const (
-    UserAddrByte     = byte(0)
+    // UserAddrByte marks an externally owned account derived from a public
+    // key. See [PubKeyToAddress].
+    UserAddrByte = byte(0)
+    // ContractAddrByte marks an embedded-contract address. See
+    // [IsEmbeddedAddress] and the embedded contract address constants below.
     ContractAddrByte = byte(1)
 )
 ```
@@ -157,16 +194,19 @@ const (
 )
 ```
 
-<a name="ZTSPrefix"></a>
+<a name="ZTSPrefix"></a>Bech32 encoding parameters for [ZenonTokenStandard](<#ZenonTokenStandard>). ZTS identifiers are 10 bytes encoded with the [ZTSPrefix](<#ZTSPrefix>) human\-readable part.
 
 ```go
 const (
-    ZTSPrefix              = "zts"
+    // ZTSPrefix is the bech32 human-readable part for every ZTS token id.
+    ZTSPrefix = "zts"
+    // ZenonTokenStandardSize is the binary length of a token-standard
+    // identifier in bytes.
     ZenonTokenStandardSize = 10
 )
 ```
 
-<a name="HashSize"></a>
+<a name="HashSize"></a>HashSize is the byte length of every [Hash](<#Hash>). Hashes are produced by [github.com/zenon\\\-network/go\\\-zenon/common/crypto.Hash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/#Hash>), which uses SHA3\-256.
 
 ```go
 const (
@@ -176,30 +216,50 @@ const (
 
 ## Variables
 
-<a name="PillarContract"></a>
+<a name="PillarContract"></a>Canonical addresses of the embedded contracts. Each is a vanity bech32 string that begins \`z1qxemdedded\` so it is easy to recognize on\-chain. These are the \*only\* contract addresses VM code dispatches to; see [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>).
 
 ```go
 var (
-    PillarContract      = parseEmbedded("z1qxemdeddedxpyllarxxxxxxxxxxxxxxxsy3fmg")
-    PlasmaContract      = parseEmbedded("z1qxemdeddedxplasmaxxxxxxxxxxxxxxxxsctrp")
-    StakeContract       = parseEmbedded("z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62")
-    SporkContract       = parseEmbedded("z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48")
-    TokenContract       = parseEmbedded("z1qxemdeddedxt0kenxxxxxxxxxxxxxxxxh9amk0")
-    SentinelContract    = parseEmbedded("z1qxemdeddedxsentynelxxxxxxxxxxxxxwy0r2r")
-    SwapContract        = parseEmbedded("z1qxemdeddedxswapxxxxxxxxxxxxxxxxxxl4yww")
-    LiquidityContract   = parseEmbedded("z1qxemdeddedxlyquydytyxxxxxxxxxxxxflaaae")
+    // PillarContract registers and rewards block-producing pillars.
+    PillarContract = parseEmbedded("z1qxemdeddedxpyllarxxxxxxxxxxxxxxxsy3fmg")
+    // PlasmaContract manages QSR fusing for plasma generation.
+    PlasmaContract = parseEmbedded("z1qxemdeddedxplasmaxxxxxxxxxxxxxxxxsctrp")
+    // StakeContract holds locked ZNN entitlements that yield QSR.
+    StakeContract = parseEmbedded("z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62")
+    // SporkContract owns spork lifecycle (create/activate).
+    SporkContract = parseEmbedded("z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48")
+    // TokenContract issues ZTS tokens (mint, burn, ownership).
+    TokenContract = parseEmbedded("z1qxemdeddedxt0kenxxxxxxxxxxxxxxxxh9amk0")
+    // SentinelContract registers and rewards sentinel nodes.
+    SentinelContract = parseEmbedded("z1qxemdeddedxsentynelxxxxxxxxxxxxxwy0r2r")
+    // SwapContract redeems legacy-chain balances for current-chain tokens.
+    SwapContract = parseEmbedded("z1qxemdeddedxswapxxxxxxxxxxxxxxxxxxl4yww")
+    // LiquidityContract distributes liquidity-program rewards.
+    LiquidityContract = parseEmbedded("z1qxemdeddedxlyquydytyxxxxxxxxxxxxflaaae")
+    // AcceleratorContract funds projects via on-chain votes.
     AcceleratorContract = parseEmbedded("z1qxemdeddedxaccelerat0rxxxxxxxxxxp4tk22")
-    HtlcContract        = parseEmbedded("z1qxemdeddedxhtlcxxxxxxxxxxxxxxxxxygecvw")
-    BridgeContract      = parseEmbedded("z1qxemdeddedxdrydgexxxxxxxxxxxxxxxmqgr0d")
+    // HtlcContract implements hashed timelock contracts.
+    HtlcContract = parseEmbedded("z1qxemdeddedxhtlcxxxxxxxxxxxxxxxxxygecvw")
+    // BridgeContract is the cross-chain bridge endpoint (wrap/unwrap).
+    BridgeContract = parseEmbedded("z1qxemdeddedxdrydgexxxxxxxxxxxxxxxmqgr0d")
 
+    // EmbeddedContracts enumerates every embedded-contract address. The
+    // dispatcher uses this list to validate that a target address belongs to
+    // a known system contract.
     EmbeddedContracts = []Address{PlasmaContract, PillarContract, TokenContract, SentinelContract, SwapContract, StakeContract, SporkContract, LiquidityContract, AcceleratorContract, HtlcContract, BridgeContract}
-    EmbeddedWUpdate   = []Address{PillarContract, StakeContract, SentinelContract, LiquidityContract, AcceleratorContract}
+    // EmbeddedWUpdate enumerates the contracts that participate in the
+    // post-update receive flow (those whose state must be advanced as part of
+    // every momentum tick).
+    EmbeddedWUpdate = []Address{PillarContract, StakeContract, SentinelContract, LiquidityContract, AcceleratorContract}
 
+    // SporkAddress is the live spork-controlling address. It is set during
+    // node start-up from configuration and consulted by the spork contract to
+    // authorize spork creation and activation.
     SporkAddress *Address
 
-    // The community spork address is used as a temporary spork address
-    // until an embedded governance contract is taken into use.
-    // The address belongs to Mariposa01 pillar.
+    // CommunitySporkAddress is the temporary spork-controlling address used
+    // until an embedded governance contract takes over. The address belongs
+    // to the Mariposa01 pillar.
     CommunitySporkAddress = ParseAddressPanic("z1qqvwzz2xq7q5gwk6uhcddgrpxlfcyzc8rsu82s")
 )
 ```
@@ -213,14 +273,21 @@ var (
 )
 ```
 
-<a name="AcceleratorSpork"></a>
+<a name="AcceleratorSpork"></a>The implemented sporks. Each entry corresponds to an upstream protocol upgrade gated through the spork contract. Activating a spork through governance lets the VM and verifier dispatch to the new code path; the IDs here must match the on\-chain spork records exactly.
 
 ```go
 var (
-    AcceleratorSpork        = NewImplementedSpork("6d2b1e6cb4025f2f45533f0fe22e9b7ce2014d91cc960471045fa64eee5a6ba3")
-    HtlcSpork               = NewImplementedSpork("ceb7e3808ef17ea910adda2f3ab547be4cdfb54de8400ce3683258d06be1354b")
+    // AcceleratorSpork enables the accelerator project-funding contract.
+    AcceleratorSpork = NewImplementedSpork("6d2b1e6cb4025f2f45533f0fe22e9b7ce2014d91cc960471045fa64eee5a6ba3")
+    // HtlcSpork enables the hashed-timelock-contract embedded contract.
+    HtlcSpork = NewImplementedSpork("ceb7e3808ef17ea910adda2f3ab547be4cdfb54de8400ce3683258d06be1354b")
+    // BridgeAndLiquiditySpork enables the cross-chain bridge and the
+    // liquidity-program reward distribution.
     BridgeAndLiquiditySpork = NewImplementedSpork("ddd43466769461c5b5d109c639da0f50a7eeb96ad6e7274b1928a35c431d7b1b")
 
+    // ImplementedSporksMap is a lookup of every spork ID this binary knows
+    // how to honor. The spork contract uses it to reject creation of unknown
+    // sporks during boot.
     ImplementedSporksMap = map[Hash]bool{
         AcceleratorSpork.SporkId:        true,
         HtlcSpork.SporkId:               true,
@@ -235,25 +302,25 @@ var (
 var File_common_types_protobuf_proto protoreflect.FileDescriptor
 ```
 
-<a name="QsrTokenStandard"></a>
+<a name="QsrTokenStandard"></a>QsrTokenStandard is the canonical QSR \(gas/staking token\) identifier.
 
 ```go
 var QsrTokenStandard = ParseZTSPanic("zts1qsrxxxxxxxxxxxxxmrhjll")
 ```
 
-<a name="ZeroAddress"></a>
+<a name="ZeroAddress"></a>ZeroAddress is the all\-zeros address sentinel. Treated as "no address" by callers that need to express absence.
 
 ```go
 var ZeroAddress = Address{}
 ```
 
-<a name="ZeroHash"></a>
+<a name="ZeroHash"></a>ZeroHash is the all\-zeros hash sentinel. Treated as "no hash" by callers that need to express absence.
 
 ```go
 var ZeroHash = Hash{}
 ```
 
-<a name="ZeroHashHeight"></a>
+<a name="ZeroHashHeight"></a>ZeroHashHeight is the all\-zeros sentinel. Stores use it to express the position before genesis.
 
 ```go
 var ZeroHashHeight = HashHeight{
@@ -262,13 +329,13 @@ var ZeroHashHeight = HashHeight{
 }
 ```
 
-<a name="ZeroTokenStandard"></a>
+<a name="ZeroTokenStandard"></a>ZeroTokenStandard is the all\-zeros ZTS sentinel. Treated as "no token" by callers that need to express absence.
 
 ```go
 var ZeroTokenStandard = ZenonTokenStandard{}
 ```
 
-<a name="ZnnTokenStandard"></a>
+<a name="ZnnTokenStandard"></a>ZnnTokenStandard is the canonical ZNN \(network token\) identifier.
 
 ```go
 var ZnnTokenStandard = ParseZTSPanic("zts1znnxxxxxxxxxxxxx9z4ulx")
@@ -338,13 +405,13 @@ var file_common_types_protobuf_proto_rawDesc = []byte{
 ```
 
 <a name="IsEmbeddedAddress"></a>
-## func [IsEmbeddedAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L46>)
+## func [IsEmbeddedAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L89>)
 
 ```go
 func IsEmbeddedAddress(addr Address) bool
 ```
 
-
+IsEmbeddedAddress reports whether addr is the address of an embedded contract \(i.e., its type byte is [ContractAddrByte](<#UserAddrByte>)\). The check is structural — it does not validate that the address is one of the recognized [EmbeddedContracts](<#PillarContract>).
 
 <a name="file_common_types_protobuf_proto_init"></a>
 ## func [file\\\_common\\\_types\\\_protobuf\\\_proto\\\_init](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L287>)
@@ -365,13 +432,13 @@ func file_common_types_protobuf_proto_rawDescGZIP() []byte
 
 
 <a name="formatBech32"></a>
-## func [formatBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L161>)
+## func [formatBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L248>)
 
 ```go
 func formatBech32(hrp string, payload []byte) (string, error)
 ```
 
-formatBech32 takes an address's bytes as input and returns a bech32 address
+formatBech32 takes an address's bytes as input and returns a bech32 address. Used by [Address.String](<#Address.String>) and [ZenonTokenStandard.String](<#ZenonTokenStandard.String>).
 
 <a name="init"></a>
 ## func [init](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L286>)
@@ -383,18 +450,18 @@ func init()
 
 
 <a name="parseBech32"></a>
-## func [parseBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L148>)
+## func [parseBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L234>)
 
 ```go
 func parseBech32(addrStr string) (string, []byte, error)
 ```
 
-parseBech32 takes a bech32 address as input and returns the HRP and data section of a bech32 address
+parseBech32 takes a bech32 address as input and returns the HRP and data section of a bech32 address. Used by [ParseAddress](<#ParseAddress>) and [ParseZTS](<#ParseZTS>).
 
 <a name="AccountHeader"></a>
-## type [AccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L9-L12>)
+## type [AccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L13-L16>)
 
-
+AccountHeader uniquely identifies an account block by its owning address and its [HashHeight](<#HashHeight>) within that account's chain. Momentums embed a list of these headers in their content to commit to the set of account blocks they finalize.
 
 ```go
 type AccountHeader struct {
@@ -404,58 +471,58 @@ type AccountHeader struct {
 ```
 
 <a name="DeProtoAccountHeader"></a>
-### func [DeProtoAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L24>)
+### func [DeProtoAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L34>)
 
 ```go
 func DeProtoAccountHeader(pb *AccountHeaderProto) *AccountHeader
 ```
 
-
+DeProtoAccountHeader decodes an [AccountHeaderProto](<#AccountHeaderProto>) back into an [AccountHeader](<#AccountHeader>).
 
 <a name="DeserializeAccountHeader"></a>
-### func [DeserializeAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L33>)
+### func [DeserializeAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L49>)
 
 ```go
 func DeserializeAccountHeader(data []byte) (*AccountHeader, error)
 ```
 
-
+DeserializeAccountHeader decodes a protobuf byte slice into an [AccountHeader](<#AccountHeader>). Returns an error if the data is not a valid encoded [AccountHeaderProto](<#AccountHeaderProto>).
 
 <a name="AccountHeader.Bytes"></a>
-### func \(\*AccountHeader\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L41>)
+### func \(\*AccountHeader\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L59>)
 
 ```go
 func (abh *AccountHeader) Bytes() []byte
 ```
 
-
+Bytes returns the \`address || height || hash\` concatenation used as a database key in stores indexed by account header.
 
 <a name="AccountHeader.Identifier"></a>
-### func \(\*AccountHeader\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L14>)
+### func \(\*AccountHeader\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L20>)
 
 ```go
 func (abh *AccountHeader) Identifier() HashHeight
 ```
 
-
+Identifier returns the embedded [HashHeight](<#HashHeight>) portion of the header — the account\-chain\-relative position with no address.
 
 <a name="AccountHeader.Proto"></a>
-### func \(\*AccountHeader\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L18>)
+### func \(\*AccountHeader\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L25>)
 
 ```go
 func (abh *AccountHeader) Proto() *AccountHeaderProto
 ```
 
-
+Proto wraps abh in an [AccountHeaderProto](<#AccountHeaderProto>) for protobuf serialization.
 
 <a name="AccountHeader.Serialize"></a>
-### func \(\*AccountHeader\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L30>)
+### func \(\*AccountHeader\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L42>)
 
 ```go
 func (abh *AccountHeader) Serialize() ([]byte, error)
 ```
 
-
+Serialize encodes abh as a protobuf byte slice.
 
 <a name="AccountHeaderProto"></a>
 ## type [AccountHeaderProto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L172-L179>)
@@ -537,130 +604,130 @@ func (x *AccountHeaderProto) String() string
 
 
 <a name="Address"></a>
-## type [Address](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L50>)
+## type [Address](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L97>)
 
-
+Address is a 20\-byte Zenon account identifier: one type\-byte \([UserAddrByte](<#UserAddrByte>) or [ContractAddrByte](<#UserAddrByte>)\) followed by an AddressCoreSize\-byte payload. Display form is bech32 with the [AddressPrefix](<#AddressPrefix>) human\-readable part.
 
 ```go
 type Address [AddressSize]byte
 ```
 
 <a name="BytesToAddress"></a>
-### func [BytesToAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L73>)
+### func [BytesToAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L136>)
 
 ```go
 func BytesToAddress(b []byte) (Address, error)
 ```
 
-
+BytesToAddress builds an [Address](<#Address>) from its raw byte form. Returns the zero address and an error if b is not exactly [AddressSize](<#AddressPrefix>) bytes.
 
 <a name="DeProtoAddress"></a>
-### func [DeProtoAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L137>)
+### func [DeProtoAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L223>)
 
 ```go
 func DeProtoAddress(pb *AddressProto) *Address
 ```
 
-
+DeProtoAddress decodes an [AddressProto](<#AddressProto>) back into an [Address](<#Address>). Panics on size mismatch — the protobuf shape is fixed at AddressSize bytes.
 
 <a name="ParseAddress"></a>
-### func [ParseAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L78>)
+### func [ParseAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L145>)
 
 ```go
 func ParseAddress(addrStr string) (Address, error)
 ```
 
-
+ParseAddress decodes a bech32\-encoded address string. Returns an error if the string is malformed or if the human\-readable part is not [AddressPrefix](<#AddressPrefix>).
 
 <a name="ParseAddressPanic"></a>
-### func [ParseAddressPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L92>)
+### func [ParseAddressPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L162>)
 
 ```go
 func ParseAddressPanic(addrStr string) Address
 ```
 
-
+ParseAddressPanic is the panicking variant of [ParseAddress](<#ParseAddress>); intended for constants and tests where parse failure is a programmer error.
 
 <a name="PubKeyToAddress"></a>
-### func [PubKeyToAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L110>)
+### func [PubKeyToAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L186>)
 
 ```go
 func PubKeyToAddress(pubKey []byte) Address
 ```
 
-
+PubKeyToAddress derives the user\-account address that owns an Ed25519 public key. The address is \`UserAddrByte || SHA3\-256\(pubKey\)\[:AddressCoreSize\]\`.
 
 <a name="parseEmbedded"></a>
-### func [parseEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L99>)
+### func [parseEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L173>)
 
 ```go
 func parseEmbedded(addrStr string) Address
 ```
 
-
+parseEmbedded parses an embedded\-contract address constant and panics if the string is malformed or not flagged as an embedded address. Used to initialize the [EmbeddedContracts](<#PillarContract>) table.
 
 <a name="Address.Bytes"></a>
-### func \(Address\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L61>)
+### func \(Address\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L116>)
 
 ```go
 func (addr Address) Bytes() []byte
 ```
 
-
+Bytes returns a fresh slice over addr's underlying array. Mutating the slice mutates the address.
 
 <a name="Address.IsZero"></a>
-### func \(Address\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L62>)
+### func \(Address\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L119>)
 
 ```go
 func (addr Address) IsZero() bool
 ```
 
-
+IsZero reports whether addr equals [ZeroAddress](<#ZeroAddress>).
 
 <a name="Address.MarshalText"></a>
-### func \(Address\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L120>)
+### func \(Address\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L198>)
 
 ```go
 func (addr Address) MarshalText() ([]byte, error)
 ```
 
-
+MarshalText emits the bech32 string form. Implements [encoding.TextMarshaler](<https://pkg.go.dev/encoding/#TextMarshaler>) for transparent JSON/text encoding.
 
 <a name="Address.Proto"></a>
-### func \(\*Address\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L132>)
+### func \(\*Address\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L215>)
 
 ```go
 func (addr *Address) Proto() *AddressProto
 ```
 
-
+Proto wraps the address bytes in an [AddressProto](<#AddressProto>) for protobuf serialization.
 
 <a name="Address.SetBytes"></a>
-### func \(\*Address\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L54>)
+### func \(\*Address\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L106>)
 
 ```go
 func (addr *Address) SetBytes(b []byte) error
 ```
 
-
+SetBytes overwrites addr in place with the contents of b. Returns an error if b is not exactly [AddressSize](<#AddressPrefix>) bytes; the receiver is unchanged in that case.
 
 <a name="Address.String"></a>
-### func \(Address\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L65>)
+### func \(Address\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L126>)
 
 ```go
 func (addr Address) String() string
 ```
 
-
+String renders addr in bech32 form. Panics on encoding failure, which indicates a corrupt address value \(encoding cannot fail for a well\-formed AddressSize byte array\).
 
 <a name="Address.UnmarshalText"></a>
-### func \(\*Address\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L123>)
+### func \(\*Address\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L204>)
 
 ```go
 func (addr *Address) UnmarshalText(input []byte) error
 ```
 
-
+UnmarshalText parses the bech32 string form. Implements [encoding.TextUnmarshaler](<https://pkg.go.dev/encoding/#TextUnmarshaler>) for transparent JSON/text decoding.
 
 <a name="AddressProto"></a>
 ## type [AddressProto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L23-L29>)
@@ -732,135 +799,135 @@ func (x *AddressProto) String() string
 
 
 <a name="Hash"></a>
-## type [Hash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L14>)
+## type [Hash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L18>)
 
-
+Hash is a 32\-byte cryptographic digest. Display form is hex; the binary form is what is signed and stored on chain.
 
 ```go
 type Hash [HashSize]byte
 ```
 
 <a name="BytesToHash"></a>
-### func [BytesToHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L40>)
+### func [BytesToHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L60>)
 
 ```go
 func BytesToHash(b []byte) (Hash, error)
 ```
 
-
+BytesToHash builds a [Hash](<#Hash>) from its raw byte form. Returns the zero hash and an error if b is not exactly [HashSize](<#HashSize>) bytes.
 
 <a name="BytesToHashPanic"></a>
-### func [BytesToHashPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L45>)
+### func [BytesToHashPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L68>)
 
 ```go
 func BytesToHashPanic(b []byte) Hash
 ```
 
-
+BytesToHashPanic is the panicking variant of [BytesToHash](<#BytesToHash>); intended for constants and tests where size mismatch is a programmer error.
 
 <a name="DeProtoHash"></a>
-### func [DeProtoHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L86>)
+### func [DeProtoHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L124>)
 
 ```go
 func DeProtoHash(pb *HashProto) *Hash
 ```
 
-
+DeProtoHash decodes a [HashProto](<#HashProto>) back into a [Hash](<#Hash>). Panics on size mismatch — the protobuf shape is fixed at [HashSize](<#HashSize>) bytes.
 
 <a name="HexToHash"></a>
-### func [HexToHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L52>)
+### func [HexToHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L78>)
 
 ```go
 func HexToHash(hexStr string) (Hash, error)
 ```
 
-
+HexToHash decodes a 64\-character lower\-case hex string into a [Hash](<#Hash>). Returns an error on length mismatch or invalid hex.
 
 <a name="HexToHashPanic"></a>
-### func [HexToHashPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L62>)
+### func [HexToHashPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L91>)
 
 ```go
 func HexToHashPanic(hexStr string) Hash
 ```
 
-
+HexToHashPanic is the panicking variant of [HexToHash](<#HexToHash>); intended for constants and tests where parse failure is a programmer error.
 
 <a name="NewHash"></a>
-### func [NewHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L18>)
+### func [NewHash](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L27>)
 
 ```go
 func NewHash(data []byte) Hash
 ```
 
-
+NewHash hashes data with the package's canonical hash function and returns the result as a [Hash](<#Hash>). Panic\-free: the underlying digest is always HashSize bytes.
 
 <a name="Hash.Bytes"></a>
-### func \(Hash\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L30>)
+### func \(Hash\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L44>)
 
 ```go
 func (h Hash) Bytes() []byte
 ```
 
-
+Bytes returns a fresh slice over h's underlying array. Mutating the slice mutates the hash.
 
 <a name="Hash.IsZero"></a>
-### func \(Hash\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L33>)
+### func \(Hash\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L49>)
 
 ```go
 func (h Hash) IsZero() bool
 ```
 
-
+IsZero reports whether h equals [ZeroHash](<#ZeroHash>).
 
 <a name="Hash.MarshalText"></a>
-### func \(Hash\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L77>)
+### func \(Hash\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L111>)
 
 ```go
 func (h Hash) MarshalText() ([]byte, error)
 ```
 
-
+MarshalText emits the hex string form. Implements [encoding.TextMarshaler](<https://pkg.go.dev/encoding/#TextMarshaler>) for transparent JSON/text encoding.
 
 <a name="Hash.Proto"></a>
-### func \(\*Hash\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L81>)
+### func \(\*Hash\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L116>)
 
 ```go
 func (h *Hash) Proto() *HashProto
 ```
 
-
+Proto wraps the hash bytes in a [HashProto](<#HashProto>) for protobuf serialization.
 
 <a name="Hash.SetBytes"></a>
-### func \(\*Hash\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L23>)
+### func \(\*Hash\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L34>)
 
 ```go
 func (h *Hash) SetBytes(b []byte) error
 ```
 
-
+SetBytes overwrites h in place with the contents of b. Returns an error if b is not exactly [HashSize](<#HashSize>) bytes; the receiver is unchanged in that case.
 
 <a name="Hash.String"></a>
-### func \(Hash\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L36>)
+### func \(Hash\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L54>)
 
 ```go
 func (h Hash) String() string
 ```
 
-
+String renders h as a lower\-case hex string with no \`0x\` prefix.
 
 <a name="Hash.UnmarshalText"></a>
-### func \(\*Hash\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L70>)
+### func \(\*Hash\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash.go#L101>)
 
 ```go
 func (h *Hash) UnmarshalText(input []byte) error
 ```
 
-
+UnmarshalText parses the hex string form. Implements [encoding.TextUnmarshaler](<https://pkg.go.dev/encoding/#TextUnmarshaler>) for transparent JSON/text decoding.
 
 <a name="HashHeight"></a>
-## type [HashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L9-L12>)
+## type [HashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L13-L16>)
 
-
+HashHeight is the canonical \(hash, height\) pair used to reference a position on either ledger — an account chain or the momentum chain. Equality of \`HashHeight\` between two views means they agree on the content at that position.
 
 ```go
 type HashHeight struct {
@@ -870,58 +937,58 @@ type HashHeight struct {
 ```
 
 <a name="DeProtoHashHeight"></a>
-### func [DeProtoHashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L35>)
+### func [DeProtoHashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L48>)
 
 ```go
 func DeProtoHashHeight(pb *HashHeightProto) *HashHeight
 ```
 
-
+DeProtoHashHeight decodes a [HashHeightProto](<#HashHeightProto>) back into a [HashHeight](<#HashHeight>).
 
 <a name="DeserializeHashHeight"></a>
-### func [DeserializeHashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L46>)
+### func [DeserializeHashHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L66>)
 
 ```go
 func DeserializeHashHeight(data []byte) (*HashHeight, error)
 ```
 
-
+DeserializeHashHeight decodes a protobuf byte slice into a [HashHeight](<#HashHeight>). Returns an error if data is not a valid encoded [HashHeightProto](<#HashHeightProto>).
 
 <a name="HashHeight.Bytes"></a>
-### func \(\*HashHeight\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L22>)
+### func \(\*HashHeight\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L32>)
 
 ```go
 func (b *HashHeight) Bytes() []byte
 ```
 
-
+Bytes returns the binary \`hash || height\` concatenation used as a database key in account and momentum stores.
 
 <a name="HashHeight.IsZero"></a>
-### func \(HashHeight\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L19>)
+### func \(HashHeight\) [IsZero](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L26>)
 
 ```go
 func (b HashHeight) IsZero() bool
 ```
 
-
+IsZero reports whether b equals [ZeroHashHeight](<#ZeroHashHeight>).
 
 <a name="HashHeight.Proto"></a>
-### func \(\*HashHeight\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L29>)
+### func \(\*HashHeight\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L40>)
 
 ```go
 func (b *HashHeight) Proto() *HashHeightProto
 ```
 
-
+Proto wraps b in a [HashHeightProto](<#HashHeightProto>) for protobuf serialization.
 
 <a name="HashHeight.Serialize"></a>
-### func \(\*HashHeight\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L41>)
+### func \(\*HashHeight\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/common/types/hash_height.go#L58>)
 
 ```go
 func (b *HashHeight) Serialize() []byte
 ```
 
-
+Serialize encodes b as a protobuf byte slice. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) if marshalling fails — protobuf serialization on the fixed shape is expected to succeed.
 
 <a name="HashHeightProto"></a>
 ## type [HashHeightProto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L117-L124>)
@@ -1072,9 +1139,9 @@ func (x *HashProto) String() string
 
 
 <a name="ImplementedSpork"></a>
-## type [ImplementedSpork](<https://github.com/zenon-network/go-zenon/blob/master/common/types/spork.go#L15-L17>)
+## type [ImplementedSpork](<https://github.com/zenon-network/go-zenon/blob/master/common/types/spork.go#L29-L31>)
 
-
+ImplementedSpork is the binary\-side handle for a spork: the canonical hash the on\-chain spork record must match. Activation state itself lives in the spork contract's storage; this struct only carries the identity.
 
 ```go
 type ImplementedSpork struct {
@@ -1083,18 +1150,18 @@ type ImplementedSpork struct {
 ```
 
 <a name="NewImplementedSpork"></a>
-### func [NewImplementedSpork](<https://github.com/zenon-network/go-zenon/blob/master/common/types/spork.go#L19>)
+### func [NewImplementedSpork](<https://github.com/zenon-network/go-zenon/blob/master/common/types/spork.go#L35>)
 
 ```go
 func NewImplementedSpork(SporkIdStr string) *ImplementedSpork
 ```
 
-
+NewImplementedSpork constructs an [ImplementedSpork](<#ImplementedSpork>) from a hex\-encoded spork id. Panics on malformed input — the IDs are compile\-time constants.
 
 <a name="PillarDelegation"></a>
-## type [PillarDelegation](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L8-L12>)
+## type [PillarDelegation](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L12-L16>)
 
-
+PillarDelegation is the consensus\-layer summary of a registered pillar: its display name, its producing\-key address \(coinbase\), and the total weight currently delegated to it. Weight is the sum of stake\-weighted delegations from voting accounts.
 
 ```go
 type PillarDelegation struct {
@@ -1105,27 +1172,27 @@ type PillarDelegation struct {
 ```
 
 <a name="ToPillarDelegation"></a>
-### func [ToPillarDelegation](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L72>)
+### func [ToPillarDelegation](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L103>)
 
 ```go
 func ToPillarDelegation(details []*PillarDelegationDetail) []*PillarDelegation
 ```
 
-ToPillarDelegation converts delegationDetail to delegation to save memory by dropping backers
+ToPillarDelegation projects a slice of detailed delegations down to plain \[PillarDelegation\]s, dropping the per\-backer maps. Use this whenever the caller only needs aggregate weights — it cuts memory significantly when the network has many backers.
 
 <a name="PillarDelegation.String"></a>
-### func \(\*PillarDelegation\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L19>)
+### func \(\*PillarDelegation\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L28>)
 
 ```go
 func (v *PillarDelegation) String() string
 ```
 
-Used for logging purposes
+String renders v in \`name@weight\` form for log output.
 
 <a name="PillarDelegationDetail"></a>
-## type [PillarDelegationDetail](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L13-L16>)
+## type [PillarDelegationDetail](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L22-L25>)
 
-
+PillarDelegationDetail extends [PillarDelegation](<#PillarDelegation>) with a per\-backer breakdown. Used by snapshot/election code that needs to credit backers individually; consumers that only care about totals should call [ToPillarDelegation](<#ToPillarDelegation>) to drop the backer map and save memory.
 
 ```go
 type PillarDelegationDetail struct {
@@ -1135,192 +1202,192 @@ type PillarDelegationDetail struct {
 ```
 
 <a name="PillarDelegationDetail.Merge"></a>
-### func \(\*PillarDelegationDetail\) [Merge](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L24>)
+### func \(\*PillarDelegationDetail\) [Merge](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L35>)
 
 ```go
 func (pdd *PillarDelegationDetail) Merge(oth *PillarDelegationDetail)
 ```
 
-Add all values together into this object
+Merge folds oth into pdd in place: weights are added, and per\-backer amounts accumulate. Used by the election code to combine partial delegation snapshots across momentum windows.
 
 <a name="PillarDelegationDetail.Reduce"></a>
-### func \(\*PillarDelegationDetail\) [Reduce](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L37>)
+### func \(\*PillarDelegationDetail\) [Reduce](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L49>)
 
 ```go
 func (pdd *PillarDelegationDetail) Reduce(count int64)
 ```
 
-Reduce all values by dividing them by count
+Reduce divides every weight \(the aggregate and per\-backer\) by count, producing the average across that many samples.
 
 <a name="SortPDByWeight"></a>
-## type [SortPDByWeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L58>)
+## type [SortPDByWeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L80>)
 
-
+SortPDByWeight sorts a slice of [PillarDelegation](<#PillarDelegation>) by descending weight, breaking ties alphabetically by name. Implements [sort.Interface](<https://pkg.go.dev/sort/#Interface>).
 
 ```go
 type SortPDByWeight []*PillarDelegation
 ```
 
 <a name="SortPDByWeight.Len"></a>
-### func \(SortPDByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L60>)
+### func \(SortPDByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L83>)
 
 ```go
 func (a SortPDByWeight) Len() int
 ```
 
-
+Len returns the number of pillars in a.
 
 <a name="SortPDByWeight.Less"></a>
-### func \(SortPDByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L62>)
+### func \(SortPDByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L90>)
 
 ```go
 func (a SortPDByWeight) Less(i, j int) bool
 ```
 
-
+Less reports whether entry i sorts before entry j: heavier weight first, alphabetical name as the tiebreaker.
 
 <a name="SortPDByWeight.Swap"></a>
-### func \(SortPDByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L61>)
+### func \(SortPDByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L86>)
 
 ```go
 func (a SortPDByWeight) Swap(i, j int)
 ```
 
-
+Swap exchanges entries i and j in a.
 
 <a name="SortPDDByWeight"></a>
-## type [SortPDDByWeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L45>)
+## type [SortPDDByWeight](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L59>)
 
-
+SortPDDByWeight sorts a slice of [PillarDelegationDetail](<#PillarDelegationDetail>) by descending weight, breaking ties alphabetically by name. Implements [sort.Interface](<https://pkg.go.dev/sort/#Interface>).
 
 ```go
 type SortPDDByWeight []*PillarDelegationDetail
 ```
 
 <a name="SortPDDByWeight.Len"></a>
-### func \(SortPDDByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L47>)
+### func \(SortPDDByWeight\) [Len](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L62>)
 
 ```go
 func (a SortPDDByWeight) Len() int
 ```
 
-
+Len returns the number of pillars in a.
 
 <a name="SortPDDByWeight.Less"></a>
-### func \(SortPDDByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L49>)
+### func \(SortPDDByWeight\) [Less](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L69>)
 
 ```go
 func (a SortPDDByWeight) Less(i, j int) bool
 ```
 
-
+Less reports whether entry i sorts before entry j: heavier weight first, alphabetical name as the tiebreaker.
 
 <a name="SortPDDByWeight.Swap"></a>
-### func \(SortPDDByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L48>)
+### func \(SortPDDByWeight\) [Swap](<https://github.com/zenon-network/go-zenon/blob/master/common/types/pillar_delegation.go#L65>)
 
 ```go
 func (a SortPDDByWeight) Swap(i, j int)
 ```
 
-
+Swap exchanges entries i and j in a.
 
 <a name="ZenonTokenStandard"></a>
-## type [ZenonTokenStandard](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L17>)
+## type [ZenonTokenStandard](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L25>)
 
-
+ZenonTokenStandard \(ZTS\) identifies a Zenon token, analogous to a contract address for an ERC\-20 on Ethereum. Display form is bech32 with the [ZTSPrefix](<#ZTSPrefix>).
 
 ```go
 type ZenonTokenStandard [ZenonTokenStandardSize]byte
 ```
 
 <a name="BytesToZTS"></a>
-### func [BytesToZTS](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L44>)
+### func [BytesToZTS](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L70>)
 
 ```go
 func BytesToZTS(b []byte) (ZenonTokenStandard, error)
 ```
 
-
+BytesToZTS builds a [ZenonTokenStandard](<#ZenonTokenStandard>) from its raw byte form. Returns the zero token standard and an error on size mismatch.
 
 <a name="BytesToZTSPanic"></a>
-### func [BytesToZTSPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L49>)
+### func [BytesToZTSPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L78>)
 
 ```go
 func BytesToZTSPanic(b []byte) ZenonTokenStandard
 ```
 
-
+BytesToZTSPanic is the panicking variant of [BytesToZTS](<#BytesToZTS>); intended for constants and tests where size mismatch is a programmer error.
 
 <a name="NewZenonTokenStandard"></a>
-### func [NewZenonTokenStandard](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L23>)
+### func [NewZenonTokenStandard](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L40>)
 
 ```go
 func NewZenonTokenStandard(data ...[]byte) ZenonTokenStandard
 ```
 
-
+NewZenonTokenStandard derives a fresh ZTS identifier by hashing the supplied data and truncating to [ZenonTokenStandardSize](<#ZTSPrefix>) bytes. The token contract uses this to mint stable IDs from issuance parameters.
 
 <a name="ParseZTS"></a>
-### func [ParseZTS](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L54>)
+### func [ParseZTS](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L86>)
 
 ```go
 func ParseZTS(ztsString string) (ZenonTokenStandard, error)
 ```
 
-
+ParseZTS decodes a bech32\-encoded ZTS string. Returns an error if the string is malformed or if the human\-readable part is not [ZTSPrefix](<#ZTSPrefix>).
 
 <a name="ParseZTSPanic"></a>
-### func [ParseZTSPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L71>)
+### func [ParseZTSPanic](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L106>)
 
 ```go
 func ParseZTSPanic(ztsString string) ZenonTokenStandard
 ```
 
-
+ParseZTSPanic is the panicking variant of [ParseZTS](<#ParseZTS>); intended for constants and tests where parse failure is a programmer error.
 
 <a name="ZenonTokenStandard.Bytes"></a>
-### func \(ZenonTokenStandard\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L35>)
+### func \(ZenonTokenStandard\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L56>)
 
 ```go
 func (zts ZenonTokenStandard) Bytes() []byte
 ```
 
-
+Bytes returns a fresh slice over zts's underlying array.
 
 <a name="ZenonTokenStandard.MarshalText"></a>
-### func \(ZenonTokenStandard\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L79>)
+### func \(ZenonTokenStandard\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L116>)
 
 ```go
 func (zts ZenonTokenStandard) MarshalText() ([]byte, error)
 ```
 
-
+MarshalText emits the bech32 string form. Implements [encoding.TextMarshaler](<https://pkg.go.dev/encoding/#TextMarshaler>) for transparent JSON/text encoding.
 
 <a name="ZenonTokenStandard.SetBytes"></a>
-### func \(\*ZenonTokenStandard\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L28>)
+### func \(\*ZenonTokenStandard\) [SetBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L47>)
 
 ```go
 func (zts *ZenonTokenStandard) SetBytes(b []byte) error
 ```
 
-
+SetBytes overwrites zts in place with the contents of b. Returns an error if b is not exactly [ZenonTokenStandardSize](<#ZTSPrefix>) bytes.
 
 <a name="ZenonTokenStandard.String"></a>
-### func \(ZenonTokenStandard\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L36>)
+### func \(ZenonTokenStandard\) [String](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L60>)
 
 ```go
 func (zts ZenonTokenStandard) String() string
 ```
 
-
+String renders zts in bech32 form. Panics on encoding failure, which would indicate a corrupt fixed\-size array.
 
 <a name="ZenonTokenStandard.UnmarshalText"></a>
-### func \(\*ZenonTokenStandard\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L82>)
+### func \(\*ZenonTokenStandard\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/common/types/tokenstandard.go#L122>)
 
 ```go
 func (zts *ZenonTokenStandard) UnmarshalText(input []byte) error
 ```
 
-
+UnmarshalText parses the bech32 string form. Implements [encoding.TextUnmarshaler](<https://pkg.go.dev/encoding/#TextUnmarshaler>) for transparent JSON/text decoding.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

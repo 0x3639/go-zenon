@@ -8,10 +8,16 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+// Logger is the project's logging facade. It is identical to
+// [log15.Logger]; the alias exists so consumers import a single canonical
+// logging interface from `common` rather than reaching into log15 directly.
 type Logger interface {
 	log15.Logger
 }
 
+// Per-subsystem loggers. Every package logs through one of these so log
+// output can be filtered and routed by the `module` field. Use the
+// per-subsystem variables — do not call `log15.New` ad hoc.
 var (
 	ChainLogger      = log15.New("module", "chain")
 	ConsensusLogger  = log15.New("module", "consensus")
@@ -30,6 +36,10 @@ var (
 	WalletLogger     = log15.New("module", "wallet")
 )
 
+// InitLogging wires the per-subsystem loggers to two rotating files under
+// `<dataPath>/log/`: `zenon.log` for events at logLevelStr or finer (but
+// strictly below `error`) and `zenon.error.log` for errors. Invalid level
+// strings fall back to Info.
 func InitLogging(dataPath, logLevelStr string) {
 	var logHandle []log15.Handler
 
@@ -47,24 +57,36 @@ func InitLogging(dataPath, logLevelStr string) {
 	))
 }
 
+// runLogDir returns the path to the log directory under dataPath.
 func runLogDir(dataPath string) string {
 	return filepath.Join(dataPath, "log")
 }
+
+// runLogHandler returns the log15 handler that writes the main rotating log.
 func runLogHandler(logDir string) log15.Handler {
 	filename := "zenon.log"
 	logger := defaultLogger(filepath.Join(logDir, filename))
 	return log15.StreamHandler(logger, log15.LogfmtFormat())
 }
+
+// runErrorLogHandler returns the log15 handler that writes errors only.
 func runErrorLogHandler(logDir string) log15.Handler {
 	filename := "zenon.error.log"
 	logger := defaultLogger(filepath.Join(logDir, "error", filename))
 	return log15.StreamHandler(logger, log15.LogfmtFormat())
 }
+
+// errorExcludeLvlFilterHandler returns a log15 filter that admits records
+// at or below maxLvl — used to keep error records out of the main log
+// (they go to the dedicated error log instead).
 func errorExcludeLvlFilterHandler(maxLvl log15.Lvl, h log15.Handler) log15.Handler {
 	return log15.FilterHandler(func(r *log15.Record) (ss bool) {
 		return r.Lvl <= maxLvl
 	}, h)
 }
+
+// defaultLogger returns the lumberjack rotating-file writer configured for
+// node logs (100 MiB rotation, 14-day retention, no compression, UTC).
 func defaultLogger(absFilePath string) *lumberjack.Logger {
 	return &lumberjack.Logger{
 		Filename:   absFilePath,
@@ -76,16 +98,26 @@ func defaultLogger(absFilePath string) *lumberjack.Logger {
 	}
 }
 
+// LogSaver is a log15.Format that captures every formatted record into an
+// in-memory buffer instead of (or in addition to) writing to disk. Used by
+// tests via [SaveLogs] to assert on log output. The format also overrides
+// each record's timestamp with [Clock] so tests on a fake clock get
+// deterministic output.
 type LogSaver struct {
 	format log15.Format
 	buffer *bytes.Buffer
 }
 
+// Format formats r using the wrapped log15.Format after rewriting the
+// record's timestamp from [Clock].
 func (f LogSaver) Format(r *log15.Record) []byte {
 	r.Time = Clock.Now()
 	return f.format.Format(r)
 }
 
+// SaveLogs replaces log's handler with one that captures records into an
+// in-memory buffer and returns an [Expecter] over the captured output.
+// Used by tests to assert on what a subsystem logged.
 func SaveLogs(log log15.Logger) *Expecter {
 	logBuffer := new(bytes.Buffer)
 	handler := &LogSaver{format: log15.LogfmtFormat(), buffer: logBuffer}

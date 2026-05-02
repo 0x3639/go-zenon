@@ -6,13 +6,60 @@
 import "github.com/zenon-network/go-zenon/common/db"
 ```
 
-Package db is the versioned LevelDB layer used by chain, consensus, and VM stores.
+Package db is the versioned key/value layer used by the chain, consensus, and embedded\-contract stores.
 
 ### Overview
 
-db wraps go\-leveldb in a \`Manager\` that exposes versioned snapshots, atomic \`Patch\` mutations, and a \`Commit\` interface that ledger objects implement to describe their state\-change footprint. Higher\-level code stages a patch, validates against the current version, and commits in one atomic step under the chain insert lock.
+db wraps goleveldb in two abstractions: a low\-level [DB](<#DB>) interface that adds tombstone\-based deletion, change\-set capture, and snapshotting on top of LevelDB; and a higher\-level [Manager](<#Manager>) interface that composes [DB](<#DB>) snapshots with per\-version forward and rollback \[Patch\]es so the chain can expose any committed \[HashHeight\] as a queryable historical view.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+Every chain mutation flows through this package: the VM produces a [Patch](<#Patch>) per executed account block, the chain layer wraps it in a [Transaction](<#Transaction>) alongside the relevant \[Commit\]s, and \[Manager.Add\] persists the lot atomically. Reorgs use \[Manager.Pop\] to apply the matching rollback patch in the inverse direction.
+
+### Key Concepts
+
+- DB — the high\-level handle. Layered on top of db via \[enableDelete\], adding tombstone\-encoded deletion, \[DB.Changes\] capture for in\-memory overlays, and \[DB.Snapshot\] for cheap point\-in\-time forks.
+- Patch — a replayable batch of put/delete operations. Constructed by the VM and committed by the manager.
+- Commit — a chain object \(account block, momentum\) that knows its own \[HashHeight\] and serialized form.
+- Transaction — a sequence of \[Commit\]s plus the [Patch](<#Patch>) capturing their state effects. The unit \[Manager.Add\] consumes.
+- Manager — the versioned database. Holds the live frontier, every historical view in scope, and the forward / rollback patches needed to navigate between them.
+- SubDB — a namespace decorator that prefixes every key. Used to keep unrelated keyspaces separate within a single LevelDB instance.
+- MergedDB — a read\-through stack of \[db\]s. The first layer is writable; later layers are read\-only. Used to put an in\-memory overlay in front of an immutable LevelDB snapshot.
+
+### Usage
+
+Open a backing store and wrap it in a manager:
+
+```
+mgr := db.NewLevelDBManager("data/nom")
+defer mgr.Stop()
+```
+
+Read at a specific height:
+
+```
+view := mgr.Get(types.HashHeight{Hash: h, Height: 42})
+if view == nil { /* no longer reachable */ }
+value, err := view.Get(key)
+```
+
+Commit a transaction \(typically built by the VM and chain layer\):
+
+```
+if err := mgr.Add(tx); err != nil { /* handle */ }
+```
+
+Tombstone\-encoded deletion: writes through \[DB.Delete\] are persisted as a single\-byte tombstone so that LevelDB snapshots remain immutable while still letting iteration skip deleted keys via \[newSkipDeletedIterator\].
+
+### Concurrency
+
+Every method on a [Manager](<#Manager>) is goroutine\-safe; the manager owns the mutex that serializes \[Manager.Add\] / \[Manager.Pop\] against reads. Individual [DB](<#DB>) views are not reentrant — derive a fresh snapshot via \[DB.Snapshot\] per goroutine.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — defines [types.HashHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#HashHeight>) and the protobuf wrappers patches serialize.
+- [github.com/zenon\\\-network/go\\\-zenon/common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>) — provides the byte helpers used to compose canonical key forms.
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — the primary consumer; wraps every state mutation in a [Transaction](<#Transaction>) and commits via \[Manager.Add\].
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — produces the [Patch](<#Patch>) for each executed account block; reads from [DB](<#DB>) views supplied by the chain.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus/storage](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/>) — uses the same primitives to persist consensus state.
 
 ## Index
 
@@ -166,48 +213,63 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="noCurrent"></a>
+<a name="noCurrent"></a>Sentinel values for \[mergedIterator.current\] and per\-iterator status.
 
 ```go
 const (
-    noCurrent        = -1
+    // noCurrent indicates the merged iterator has no active per-layer
+    // iterator (initial state, or every layer is exhausted).
+    noCurrent = -1
+    // iteratorFinished marks a per-layer iterator as exhausted; the merge
+    // algorithm skips it on subsequent steps.
     iteratorFinished = 1
 )
 ```
 
-<a name="l1CacheSize"></a>
+<a name="l1CacheSize"></a>LRU sizes and the cache cliff used by \[ldbManager.Get\] to decide whether a historical view should be cached.
 
 ```go
 const (
-    l1CacheSize                  = 400
-    l2CacheSize                  = 100
+    // l1CacheSize bounds the count of recent historical views cached.
+    l1CacheSize = 400
+    // l2CacheSize bounds the count of older historical views cached.
+    l2CacheSize = 100
+    // maximumCacheHeightDifference is the height delta below which a view
+    // is admitted to the L1 cache; older views fall through to L2.
     maximumCacheHeightDifference = 360
 )
 ```
 
 ## Variables
 
-<a name="frontierIdentifierKey"></a>
+<a name="frontierIdentifierKey"></a>Single\-byte key prefixes used by [SetFrontier](<#SetFrontier>) / [GetFrontierIdentifier](<#GetFrontierIdentifier>) and the height/hash indexes. Each prefix lives in its own keyspace so scans for one don't pick up others.
 
 ```go
 var (
+    // frontierIdentifierKey stores the [HashHeight] of the most recent
+    // commit (the "frontier" of the chain).
     frontierIdentifierKey = []byte{0}
-    heightByHashPrefix    = []byte{1}
-    entryByHeightPrefix   = []byte{2}
+    // heightByHashPrefix maps an entry's hash to its height.
+    heightByHashPrefix = []byte{1}
+    // entryByHeightPrefix maps an entry's height to its serialized bytes.
+    entryByHeightPrefix = []byte{2}
 )
 ```
 
-<a name="frontierByte"></a>
+<a name="frontierByte"></a>Single\-byte storage prefixes used by \[ldbManager\] to namespace its three records on top of a shared LevelDB instance.
 
 ```go
 var (
+    // frontierByte namespaces the live (frontier) chain state.
     frontierByte = []byte{85}
-    patchByte    = []byte{102}
+    // patchByte namespaces forward patches keyed by height.
+    patchByte = []byte{102}
+    // rollbackByte namespaces rollback patches keyed by height.
     rollbackByte = []byte{119}
 )
 ```
 
-<a name="existsByte"></a>
+<a name="existsByte"></a>existsByte is the one\-byte tombstone marker prefixed onto every value the \[enableDeleteDB\] decorator stores. A value of \`existsByte || ...\` is a live entry; a single \`0x00\` byte is a tombstone signaling deletion.
 
 ```go
 var (
@@ -216,241 +278,257 @@ var (
 ```
 
 <a name="ApplyPatch"></a>
-## func [ApplyPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L178>)
+## func [ApplyPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L235>)
 
 ```go
 func ApplyPatch(db DB, patch Patch) error
 ```
 
-
+ApplyPatch replays patch against db using a \[patchApplier\]. Returns the first error encountered.
 
 <a name="ApplyWithoutOverride"></a>
-## func [ApplyWithoutOverride](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L188>)
+## func [ApplyWithoutOverride](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L249>)
 
 ```go
 func ApplyWithoutOverride(db db, patch Patch) error
 ```
 
-
+ApplyWithoutOverride replays patch against db using a \[patchApplierWO\]; keys that already exist are left untouched. Used by the LevelDB manager's rollback cache to layer rollback patches.
 
 <a name="DebugDB"></a>
-## func [DebugDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L127>)
+## func [DebugDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L177>)
 
 ```go
 func DebugDB(db DB) string
 ```
 
-
+DebugDB returns a hex dump of every key/value pair in db. Intended for ad\-hoc inspection; the output format is not stable.
 
 <a name="DebugPatch"></a>
-## func [DebugPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L118>)
+## func [DebugPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L161>)
 
 ```go
 func DebugPatch(patch Patch) string
 ```
 
-
+DebugPatch returns a hex dump of patch, one operation per line. Intended for ad\-hoc inspection in tests and logs; the output format is not stable.
 
 <a name="GetEntryByHash"></a>
-## func [GetEntryByHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L54>)
+## func [GetEntryByHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L72>)
 
 ```go
 func GetEntryByHash(db DB, hash types.Hash) ([]byte, error)
 ```
 
-
+GetEntryByHash returns the serialized bytes of the entry whose hash is hash. Returns [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) if no such entry exists.
 
 <a name="GetEntryByHeight"></a>
-## func [GetEntryByHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L62>)
+## func [GetEntryByHeight](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L83>)
 
 ```go
 func GetEntryByHeight(db DB, height uint64) ([]byte, error)
 ```
 
-
+GetEntryByHeight returns the serialized bytes of the entry at height. Returns [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) if no such entry exists.
 
 <a name="GetFrontierIdentifier"></a>
-## func [GetFrontierIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L33>)
+## func [GetFrontierIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L45>)
 
 ```go
 func GetFrontierIdentifier(db DB) types.HashHeight
 ```
 
-
+GetFrontierIdentifier returns the \[HashHeight\] of the most recent commit in db, or [types.ZeroHashHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZeroHashHeight>) if the database is empty.
 
 <a name="GetIdentifierByHash"></a>
-## func [GetIdentifierByHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L43>)
+## func [GetIdentifierByHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L58>)
 
 ```go
 func GetIdentifierByHash(db DB, hash types.Hash) (*types.HashHeight, error)
 ```
 
-
+GetIdentifierByHash looks up the \[HashHeight\] of the entry whose hash is hash. Returns [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) if no such entry exists.
 
 <a name="PatchHash"></a>
-## func [PatchHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L124>)
+## func [PatchHash](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L171>)
 
 ```go
 func PatchHash(patch Patch) types.Hash
 ```
 
-
+PatchHash hashes the canonical serialization of patch with the package hash function. Used as the [chain/nom.Momentum.ChangesHash](<https://pkg.go.dev/chain/nom/#Momentum.ChangesHash>) commitment so every momentum binds the state changes it caused.
 
 <a name="SetFrontier"></a>
-## func [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L20>)
+## func [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L30>)
 
 ```go
 func SetFrontier(db DB, version types.HashHeight, data []byte) error
 ```
 
-
+SetFrontier writes the \(version, data\) pair into db: it updates the frontier identifier, the hash → height index, and the height → entry data record. Used by \[Manager.Add\] to advance the chain by one commit.
 
 <a name="absDiff"></a>
-## func [absDiff](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L28>)
+## func [absDiff](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L40>)
 
 ```go
 func absDiff(x, y uint64) uint64
 ```
 
-
+absDiff returns |x \- y| for unsigned heights without underflow.
 
 <a name="getConsensusOpenFilesCacheCapacity"></a>
-## func [getConsensusOpenFilesCacheCapacity](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L14>)
+## func [getConsensusOpenFilesCacheCapacity](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L17>)
 
 ```go
 func getConsensusOpenFilesCacheCapacity() int
 ```
 
-
+getConsensusOpenFilesCacheCapacity returns the LevelDB open\-files cache size for the consensus database. macOS has a tighter default ulimit so we cap it lower there.
 
 <a name="getEntryByHeightKey"></a>
-## func [getEntryByHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L16>)
+## func [getEntryByHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L23>)
 
 ```go
 func getEntryByHeightKey(height uint64) []byte
 ```
 
-
+getEntryByHeightKey returns the database key that maps height → serialized entry bytes.
 
 <a name="getFrontierIdentifierKey"></a>
-## func [getFrontierIdentifierKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L10>)
+## func [getFrontierIdentifierKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L12>)
 
 ```go
 func getFrontierIdentifierKey() []byte
 ```
 
-
+getFrontierIdentifierKey returns the database key holding the current chain frontier's \[HashHeight\].
 
 <a name="getHeightByHashKey"></a>
-## func [getHeightByHashKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L13>)
+## func [getHeightByHashKey](<https://github.com/zenon-network/go-zenon/blob/master/common/db/store.go#L17>)
 
 ```go
 func getHeightByHashKey(hash types.Hash) []byte
 ```
 
-
+getHeightByHashKey returns the database key that maps hash → height.
 
 <a name="getOpenFilesCacheCapacity"></a>
-## func [getOpenFilesCacheCapacity](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L35>)
+## func [getOpenFilesCacheCapacity](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L49>)
 
 ```go
 func getOpenFilesCacheCapacity() int
 ```
 
-
+getOpenFilesCacheCapacity returns the LevelDB open\-files cache size for the chain database. macOS has a tighter default ulimit so we cap it lower.
 
 <a name="Commit"></a>
-## type [Commit](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L19-L23>)
+## type [Commit](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L39-L46>)
 
-
+Commit is the chain\-side handle of any object that can be persisted as part of an atomic transaction: account blocks, momentums, or descendant blocks. Implementations expose their position on the chain \(\[HashHeight\]\) and the bytes the database stores at that position.
 
 ```go
 type Commit interface {
+    // Identifier returns the [HashHeight] that uniquely names this commit.
     Identifier() types.HashHeight
+    // Previous returns the [HashHeight] this commit chains from.
     Previous() types.HashHeight
+    // Serialize returns the bytes to persist at Identifier.
     Serialize() ([]byte, error)
 }
 ```
 
 <a name="DB"></a>
-## type [DB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L38-L50>)
+## type [DB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L80-L105>)
 
-
+DB is the higher\-level key/value abstraction the chain consumes. Implementations layer on top of db to add the cross\-cutting features every consumer expects: deletion \(via tombstones\), changes capture, and snapshotting.
 
 ```go
 type DB interface {
+    // Get returns the value at key or [leveldb.ErrNotFound].
     Get([]byte) ([]byte, error)
+    // Has reports whether key exists.
     Has([]byte) (bool, error)
+    // Put writes value at key.
     Put(key, value []byte) error
+    // Delete removes key (tombstone — keys may resurface in Snapshot views
+    // when an underlying layer still has them).
     Delete(key []byte) error
 
+    // NewIterator walks every key starting with prefix.
     NewIterator(prefix []byte) StorageIterator
+    // Subset returns a view that transparently prepends prefix to every key.
     Subset(prefix []byte) DB
 
+    // Apply replays patch onto this DB.
     Apply(Patch) error
+    // Changes returns a patch describing every write made to this DB since
+    // it was created (typically meaningful only for in-memory views layered
+    // on top of an immutable snapshot).
     Changes() (Patch, error)
+    // Snapshot returns an isolated copy that subsequent writes go into; the
+    // underlying read-through layer remains shared.
     Snapshot() DB
 }
 ```
 
 <a name="DisableNotFound"></a>
-### func [DisableNotFound](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L19>)
+### func [DisableNotFound](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L27>)
 
 ```go
 func DisableNotFound(db DB) DB
 ```
 
-
+DisableNotFound wraps db so missing\-key reads return an empty slice and nil error. Useful in code paths where absence is not exceptional.
 
 <a name="NewLevelDB"></a>
-### func [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L102>)
+### func [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L145>)
 
 ```go
 func NewLevelDB(dirname string) (DB, *leveldb.DB)
 ```
 
-
+NewLevelDB opens \(or creates\) a LevelDB at dirname and returns both the high\-level [DB](<#DB>) view and the underlying \`\*leveldb.DB\` \(for callers that need to take snapshots, close it, etc.\). Panics on open failure.
 
 <a name="NewLevelDBSnapshotWrapper"></a>
-### func [NewLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L86>)
+### func [NewLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L124>)
 
 ```go
 func NewLevelDBSnapshotWrapper(ldb *leveldb.Snapshot) DB
 ```
 
-
+NewLevelDBSnapshotWrapper returns the high\-level [DB](<#DB>) view of a LevelDB snapshot, with deletion support enabled via the tombstone\-byte encoding.
 
 <a name="NewLevelDBWrapper"></a>
-### func [NewLevelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L95>)
+### func [NewLevelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L135>)
 
 ```go
 func NewLevelDBWrapper(db *leveldb.DB) DB
 ```
 
-
+NewLevelDBWrapper returns a high\-level [DB](<#DB>) view of a writable LevelDB instance.
 
 <a name="NewMemDB"></a>
-### func [NewMemDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L46>)
+### func [NewMemDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L59>)
 
 ```go
 func NewMemDB() DB
 ```
 
-
+NewMemDB returns a fresh in\-memory [DB](<#DB>) with deletion support enabled. Used by tests and by the manager's per\-version overlays.
 
 <a name="enableDelete"></a>
-### func [enableDelete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L112>)
+### func [enableDelete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L160>)
 
 ```go
 func enableDelete(db db) DB
 ```
 
-
+enableDelete wraps a low\-level db in an \[enableDeleteDB\] decorator, promoting it to the high\-level [DB](<#DB>) interface.
 
 <a name="LevelDBLike"></a>
-## type [LevelDBLike](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L51-L54>)
+## type [LevelDBLike](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L73-L76>)
 
-
+LevelDBLike is the read\-write subset of \`\*leveldb.DB\` that \[levelDBWrapper\] adapts.
 
 ```go
 type LevelDBLike interface {
@@ -460,9 +538,9 @@ type LevelDBLike interface {
 ```
 
 <a name="LevelDBLikeRO"></a>
-## type [LevelDBLikeRO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L25-L29>)
+## type [LevelDBLikeRO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L31-L35>)
 
-
+LevelDBLikeRO is the read\-only subset of \`\*leveldb.DB\` that \[levelDBROWrapper\] adapts. Snapshots and the live database both satisfy this interface.
 
 ```go
 type LevelDBLikeRO interface {
@@ -473,182 +551,209 @@ type LevelDBLikeRO interface {
 ```
 
 <a name="Manager"></a>
-## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L46-L56>)
+## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L68-L89>)
 
+Manager is the versioned database the chain orchestrates. It exposes a frontier \(the most recent commit\) and lookups for any historical \[HashHeight\] still in scope, while serializing forward and rollback commits behind a single mutex. Both an in\-memory and a LevelDB\-backed implementation are provided.
 
+Concurrency: every method is safe for concurrent use; the manager owns the mutex.
 
 ```go
 type Manager interface {
+    // Frontier returns a [DB] view of the most recent commit.
     Frontier() DB
+    // Get returns a [DB] view at the given identifier, or nil if it is no
+    // longer reachable.
     Get(types.HashHeight) DB
+    // GetPatch returns the forward patch that produced identifier, or nil
+    // if not available.
     GetPatch(identifier types.HashHeight) Patch
 
+    // Add commits a transaction (sequence of commits + their patch) onto
+    // the frontier.
     Add(Transaction) error
+    // Pop reverses the most recent commit.
     Pop() error
 
+    // Stop releases resources held by the manager.
     Stop() error
+    // Location reports where the underlying storage lives ("in-memory" or
+    // the LevelDB directory path).
     Location() string
 }
 ```
 
 <a name="NewLevelDBManager"></a>
-### func [NewLevelDBManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L196>)
+### func [NewLevelDBManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L264>)
 
 ```go
 func NewLevelDBManager(dir string) Manager
 ```
 
-
+NewLevelDBManager opens a LevelDB at dir and returns a manager that persists every commit \(forward \+ rollback patches and the live frontier\). Panics on open failure — a missing or corrupt directory is fatal here.
 
 <a name="NewMemDBManager"></a>
-### func [NewMemDBManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L69>)
+### func [NewMemDBManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L107>)
 
 ```go
 func NewMemDBManager(rawDB DB) Manager
 ```
 
-
+NewMemDBManager constructs a memory\-backed [Manager](<#Manager>) seeded from the frontier already present in rawDB.
 
 <a name="Patch"></a>
-## type [Patch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L12-L18>)
+## type [Patch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L23-L33>)
 
-
+Patch is an ordered, replayable batch of put/delete operations against a [DB](<#DB>). Patches are the unit of atomic state change throughout the chain: the VM produces a patch per executed account block, and the database manager commits the patch atomically alongside the block's serialized form.
 
 ```go
 type Patch interface {
+    // Put appends a write of value at key.
     Put(key []byte, value []byte)
+    // Delete appends a removal of key.
     Delete(key []byte)
 
+    // Replay drives a [PatchReplayer] over every recorded operation in order.
     Replay(PatchReplayer) error
+    // Dump serializes the patch to bytes; pair with [NewPatchFromDump].
     Dump() []byte
 }
 ```
 
 <a name="DumpDB"></a>
-### func [DumpDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L147>)
+### func [DumpDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L200>)
 
 ```go
 func DumpDB(db DB) Patch
 ```
 
-
+DumpDB returns a [Patch](<#Patch>) that, when applied to an empty DB, reproduces the contents of db. Used by tests and import/export tooling.
 
 <a name="NewPatch"></a>
-### func [NewPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L21>)
+### func [NewPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L27>)
 
 ```go
 func NewPatch() Patch
 ```
 
-
+NewPatch returns a fresh empty [Patch](<#Patch>).
 
 <a name="NewPatchFromDump"></a>
-### func [NewPatchFromDump](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L26>)
+### func [NewPatchFromDump](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L35>)
 
 ```go
 func NewPatchFromDump(data []byte) (Patch, error)
 ```
 
-
+NewPatchFromDump rebuilds a [Patch](<#Patch>) from bytes produced by \[Patch.Dump\]. Returns an error if the bytes are not a valid leveldb batch encoding.
 
 <a name="PrefixPatchValues"></a>
-### func [PrefixPatchValues](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L169>)
+### func [PrefixPatchValues](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L224>)
 
 ```go
 func PrefixPatchValues(patch Patch, prefix []byte) Patch
 ```
 
-
+PrefixPatchValues returns a copy of patch with prefix prepended to every value. Useful when staging a patch for namespaced storage.
 
 <a name="RollbackPatch"></a>
-### func [RollbackPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L198>)
+### func [RollbackPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L263>)
 
 ```go
 func RollbackPatch(db DB, patch Patch) Patch
 ```
 
-
+RollbackPatch computes the inverse of patch by reading the prior values of every touched key from db. Combined forward \+ rollback patches are stored together so \[Manager.Pop\] can undo a commit cheaply.
 
 <a name="PatchReplayer"></a>
-## type [PatchReplayer](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L7-L10>)
+## type [PatchReplayer](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L11-L16>)
 
-
+PatchReplayer receives the individual operations of a [Patch](<#Patch>) when the patch is replayed. Implementations capture or transform the per\-key operations, used by \`patchApplier\`, \`patchRollback\`, \`patchPrinter\`, and the value\-prefixing helper to compose patch behaviors without copying.
 
 ```go
 type PatchReplayer interface {
+    // Put records a write of value at key.
     Put(key []byte, value []byte)
+    // Delete records the removal of key.
     Delete(key []byte)
 }
 ```
 
 <a name="StorageIterator"></a>
-## type [StorageIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L29-L36>)
+## type [StorageIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L62-L74>)
 
-
+StorageIterator walks key/value pairs in lexicographic key order. Callers must call \[StorageIterator.Release\] when done; iterators returned from a [DB](<#DB>) may hold underlying snapshot resources.
 
 ```go
 type StorageIterator interface {
+    // Next advances to the next pair and reports whether one was reached.
     Next() bool
 
+    // Key returns the current key. Valid only after a successful Next.
     Key() []byte
+    // Value returns the current value. Valid only after a successful Next.
     Value() []byte
+    // Error returns any error encountered during iteration.
     Error() error
+    // Release frees iterator resources. Safe to call exactly once.
     Release()
 }
 ```
 
 <a name="newEnableDeleteIterator"></a>
-### func [newEnableDeleteIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L107>)
+### func [newEnableDeleteIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L152>)
 
 ```go
 func newEnableDeleteIterator(iterator StorageIterator) StorageIterator
 ```
 
-
+newEnableDeleteIterator returns an iterator that hides the tombstone\-byte encoding from its consumer.
 
 <a name="newMergedIterator"></a>
-### func [newMergedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L68>)
+### func [newMergedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L97>)
 
 ```go
 func newMergedIterator(iterators []StorageIterator) StorageIterator
 ```
 
-
+newMergedIterator advances every per\-layer iterator to its first key, captures any per\-layer error, and returns the merge iterator ready for \[mergedIterator.Next\].
 
 <a name="newSkipDeletedIterator"></a>
-### func [newSkipDeletedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L27>)
+### func [newSkipDeletedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L36>)
 
 ```go
 func newSkipDeletedIterator(iterator StorageIterator) StorageIterator
 ```
 
-
+newSkipDeletedIterator wraps iterator to drop tombstoned entries.
 
 <a name="newSubIterator"></a>
-### func [newSubIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L67>)
+### func [newSubIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L93>)
 
 ```go
 func newSubIterator(prefixLen int, iterator StorageIterator) StorageIterator
 ```
 
-
+newSubIterator wraps iterator so emitted keys have their leading prefixLen bytes stripped.
 
 <a name="Transaction"></a>
-## type [Transaction](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L24-L27>)
+## type [Transaction](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L51-L57>)
 
-
+Transaction bundles one or more \[Commit\]s with the [Patch](<#Patch>) that captures their combined state changes. The chain layer constructs a transaction from VM output and hands it to \[Manager.Add\] for atomic insertion.
 
 ```go
 type Transaction interface {
+    // GetCommits returns the commits in the transaction, in canonical order.
     GetCommits() []Commit
+    // StealChanges returns the patch and clears the field on the
+    // transaction; intended to transfer ownership without copying.
     StealChanges() Patch
 }
 ```
 
 <a name="db"></a>
-## type [db](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L52-L60>)
+## type [db](<https://github.com/zenon-network/go-zenon/blob/master/common/db/interfaces.go#L111-L119>)
 
-
+db is the lower\-level interface implemented by raw backends \(\[levelDBWrapper\], \[memDBWrapper\]\) and by structural decorators \(\[subDB\], \[mergedDB\], \[skipDeletedDb\]\). Higher\-level [DB](<#DB>) features are layered on via \[enableDeleteDB\].
 
 ```go
 type db interface {
@@ -663,54 +768,54 @@ type db interface {
 ```
 
 <a name="newLevelDBSnapshotWrapper"></a>
-### func [newLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L77>)
+### func [newLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L113>)
 
 ```go
 func newLevelDBSnapshotWrapper(ldb *leveldb.Snapshot) db
 ```
 
-
+newLevelDBSnapshotWrapper returns a low\-level db view of a LevelDB snapshot with a writable in\-memory overlay merged in front, so consumers can buffer writes against an immutable read\-through layer.
 
 <a name="newMemDBInternal"></a>
-### func [newMemDBInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L40>)
+### func [newMemDBInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L51>)
 
 ```go
 func newMemDBInternal() db
 ```
 
-
+newMemDBInternal returns a low\-level in\-memory db for use in \[mergedDB\] stacks where the package wires deletion support separately.
 
 <a name="newMergedDb"></a>
-### func [newMergedDb](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L8>)
+### func [newMergedDb](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L13>)
 
 ```go
 func newMergedDb(dbs []db) db
 ```
 
-
+newMergedDb stacks dbs into a read\-through chain: lookups try each layer in order and return the first hit. Writes go to dbs\[0\] only; the remaining layers are read\-only. The typical layout is \`\[memdb, levelDBSnapshot\]\`, giving a writable overlay in front of an immutable snapshot.
 
 <a name="newSkipDelete"></a>
-### func [newSkipDelete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L32>)
+### func [newSkipDelete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L43>)
 
 ```go
 func newSkipDelete(db db) db
 ```
 
-
+newSkipDelete wraps db so its iterator skips tombstoned entries.
 
 <a name="newSubDB"></a>
-### func [newSubDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L21>)
+### func [newSubDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L31>)
 
 ```go
 func newSubDB(prefix []byte, db db) db
 ```
 
-
+newSubDB returns a db that namespaces every key under prefix in db.
 
 <a name="disableNotFoundDB"></a>
-## type [disableNotFoundDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L7-L9>)
+## type [disableNotFoundDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L11-L13>)
 
-
+disableNotFoundDB is a [DB](<#DB>) decorator that translates [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) into an empty\-byte\-slice success. Used by callers that prefer to branch on \`len\(value\) == 0\` rather than on a specific error sentinel.
 
 ```go
 type disableNotFoundDB struct {
@@ -719,18 +824,18 @@ type disableNotFoundDB struct {
 ```
 
 <a name="disableNotFoundDB.Get"></a>
-### func \(\*disableNotFoundDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L11>)
+### func \(\*disableNotFoundDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/dissable_notfound.go#L17>)
 
 ```go
 func (d *disableNotFoundDB) Get(key []byte) ([]byte, error)
 ```
 
-
+Get reads key. Missing keys return \(\[\]byte\{\}, nil\) instead of \(\_, [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>)\); other errors pass through unchanged.
 
 <a name="enableDeleteDB"></a>
-## type [enableDeleteDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L28-L30>)
+## type [enableDeleteDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L45-L47>)
 
-
+enableDeleteDB layers tombstone\-based deletion on top of a low\-level db that itself has no Delete operation. Live values are stored as \`existsByte || value\`; deleted keys are stored as \`0x00\`. This makes LevelDB snapshots representable as immutable data while still letting chain reorgs roll keys forward and back.
 
 ```go
 type enableDeleteDB struct {
@@ -739,90 +844,90 @@ type enableDeleteDB struct {
 ```
 
 <a name="enableDeleteDB.Apply"></a>
-### func \(\*enableDeleteDB\) [Apply](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L81>)
+### func \(\*enableDeleteDB\) [Apply](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L117>)
 
 ```go
 func (d *enableDeleteDB) Apply(patch Patch) error
 ```
 
-
+Apply replays patch onto this DB. Returns the first error encountered.
 
 <a name="enableDeleteDB.Changes"></a>
-### func \(\*enableDeleteDB\) [Changes](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L64>)
+### func \(\*enableDeleteDB\) [Changes](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L94>)
 
 ```go
 func (d *enableDeleteDB) Changes() (Patch, error)
 ```
 
-
+Changes returns a [Patch](<#Patch>) of every live put / tombstone delete recorded against the underlying db, with values decoded back to their natural form.
 
 <a name="enableDeleteDB.Delete"></a>
-### func \(\*enableDeleteDB\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L57>)
+### func \(\*enableDeleteDB\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L82>)
 
 ```go
 func (d *enableDeleteDB) Delete(key []byte) error
 ```
 
-
+Delete writes a single\-byte tombstone at key.
 
 <a name="enableDeleteDB.Get"></a>
-### func \(\*enableDeleteDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L44>)
+### func \(\*enableDeleteDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L65>)
 
 ```go
 func (d *enableDeleteDB) Get(key []byte) ([]byte, error)
 ```
 
-
+Get returns the live value at key with the tombstone byte stripped. Returns [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) for tombstoned or missing keys.
 
 <a name="enableDeleteDB.Has"></a>
-### func \(\*enableDeleteDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L32>)
+### func \(\*enableDeleteDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L50>)
 
 ```go
 func (d *enableDeleteDB) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether key has a live value \(i.e., a non\-tombstone entry\).
 
 <a name="enableDeleteDB.NewIterator"></a>
-### func \(\*enableDeleteDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L60>)
+### func \(\*enableDeleteDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L88>)
 
 ```go
 func (d *enableDeleteDB) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator walks live keys, transparently stripping the tombstone byte from values.
 
 <a name="enableDeleteDB.Put"></a>
-### func \(\*enableDeleteDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L54>)
+### func \(\*enableDeleteDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L77>)
 
 ```go
 func (d *enableDeleteDB) Put(key, value []byte) error
 ```
 
-
+Put writes key with the live\-value prefix prepended.
 
 <a name="enableDeleteDB.Snapshot"></a>
-### func \(\*enableDeleteDB\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L78>)
+### func \(\*enableDeleteDB\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L112>)
 
 ```go
 func (d *enableDeleteDB) Snapshot() DB
 ```
 
-
+Snapshot returns a [DB](<#DB>) view that buffers writes in a fresh in\-memory layer in front of the current contents — used by the manager to expose per\-version writable handles without copying the full state.
 
 <a name="enableDeleteDB.Subset"></a>
-### func \(\*enableDeleteDB\) [Subset](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L91>)
+### func \(\*enableDeleteDB\) [Subset](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L130>)
 
 ```go
 func (d *enableDeleteDB) Subset(prefix []byte) DB
 ```
 
-
+Subset returns a namespaced view of this DB whose keys are transparently prefixed; deletion semantics are preserved through the namespace.
 
 <a name="enableDeleteIterator"></a>
-## type [enableDeleteIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L95-L97>)
+## type [enableDeleteIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L136-L138>)
 
-
+enableDeleteIterator strips the tombstone\-byte prefix from values emitted by the wrapped iterator.
 
 ```go
 type enableDeleteIterator struct {
@@ -831,18 +936,18 @@ type enableDeleteIterator struct {
 ```
 
 <a name="enableDeleteIterator.Value"></a>
-### func \(\*enableDeleteIterator\) [Value](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L99>)
+### func \(\*enableDeleteIterator\) [Value](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L142>)
 
 ```go
 func (i *enableDeleteIterator) Value() []byte
 ```
 
-
+Value returns the live value with the tombstone byte stripped, or nil for tombstoned entries.
 
 <a name="enableDeletePatch"></a>
-## type [enableDeletePatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L13-L15>)
+## type [enableDeletePatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L20-L22>)
 
-
+enableDeletePatch is a [PatchReplayer](<#PatchReplayer>) that decodes tombstone\-encoded patches back to the natural delete/put representation. Used by \[enableDeleteDB.Changes\] to re\-surface the change\-set after the tombstone\-byte transform has been applied internally.
 
 ```go
 type enableDeletePatch struct {
@@ -851,27 +956,27 @@ type enableDeletePatch struct {
 ```
 
 <a name="enableDeletePatch.Delete"></a>
-### func \(\*enableDeletePatch\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L24>)
+### func \(\*enableDeletePatch\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L36>)
 
 ```go
 func (p *enableDeletePatch) Delete(key []byte)
 ```
 
-
+Delete is unreachable: the tombstone\-encoded patch never emits raw deletes, only puts.
 
 <a name="enableDeletePatch.Put"></a>
-### func \(\*enableDeletePatch\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L17>)
+### func \(\*enableDeletePatch\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/enable_delete.go#L26>)
 
 ```go
 func (p *enableDeletePatch) Put(key []byte, value []byte)
 ```
 
-
+Put records a put or delete depending on whether value carries the tombstone byte.
 
 <a name="ldbManager"></a>
-## type [ldbManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L187-L194>)
+## type [ldbManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L252-L259>)
 
-
+ldbManager is the [Manager](<#Manager>) implementation backed by a LevelDB on disk. It stores forward and rollback patches per height alongside the live frontier, and amortizes historical\-view reconstruction with two LRUs.
 
 ```go
 type ldbManager struct {
@@ -885,90 +990,92 @@ type ldbManager struct {
 ```
 
 <a name="ldbManager.Add"></a>
-### func \(\*ldbManager\) [Add](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L324>)
+### func \(\*ldbManager\) [Add](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L411>)
 
 ```go
 func (m *ldbManager) Add(transaction Transaction) error
 ```
 
+Add applies transaction onto the current frontier and persists both the forward patch and the matching rollback patch.
 
+Concurrency: serialized by m.changes.
 
 <a name="ldbManager.Frontier"></a>
-### func \(\*ldbManager\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L212>)
+### func \(\*ldbManager\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L282>)
 
 ```go
 func (m *ldbManager) Frontier() DB
 ```
 
-
+Frontier returns a [DB](<#DB>) view of the live frontier sub\-namespace, or nil if the manager has been stopped.
 
 <a name="ldbManager.Get"></a>
-### func \(\*ldbManager\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L221>)
+### func \(\*ldbManager\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L296>)
 
 ```go
 func (m *ldbManager) Get(identifier types.HashHeight) DB
 ```
 
-
+Get returns a [DB](<#DB>) view at identifier. If identifier is in the past, the view is materialized by replaying rollback patches from the frontier back to identifier and is then cached for subsequent lookups. Returns nil if identifier is unknown or unreachable.
 
 <a name="ldbManager.GetPatch"></a>
-### func \(\*ldbManager\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L291>)
+### func \(\*ldbManager\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L369>)
 
 ```go
 func (m *ldbManager) GetPatch(identifier types.HashHeight) Patch
 ```
 
-
+GetPatch returns the persisted forward patch for identifier, or nil if none is stored.
 
 <a name="ldbManager.Location"></a>
-### func \(\*ldbManager\) [Location](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L404>)
+### func \(\*ldbManager\) [Location](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L499>)
 
 ```go
 func (m *ldbManager) Location() string
 ```
 
-
+Location returns the directory the underlying LevelDB lives in.
 
 <a name="ldbManager.Pop"></a>
-### func \(\*ldbManager\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L376>)
+### func \(\*ldbManager\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L466>)
 
 ```go
 func (m *ldbManager) Pop() error
 ```
 
-
+Pop applies the most recent rollback patch and discards the corresponding forward and rollback records from disk.
 
 <a name="ldbManager.Stop"></a>
-### func \(\*ldbManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L392>)
+### func \(\*ldbManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L485>)
 
 ```go
 func (m *ldbManager) Stop() error
 ```
 
-
+Stop closes the underlying LevelDB and clears the caches. After Stop returns, every method on the manager returns nil/zero values.
 
 <a name="ldbManager.getPatch"></a>
-### func \(\*ldbManager\) [getPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L299>)
+### func \(\*ldbManager\) [getPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L380>)
 
 ```go
 func (m *ldbManager) getPatch(identifier types.HashHeight) Patch
 ```
 
-
+getPatch reads the forward patch for identifier from disk. Caller must hold m.changes.
 
 <a name="ldbManager.getRollback"></a>
-### func \(\*ldbManager\) [getRollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L311>)
+### func \(\*ldbManager\) [getRollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L394>)
 
 ```go
 func (m *ldbManager) getRollback(height uint64) Patch
 ```
 
-
+getRollback reads the rollback patch for height from disk.
 
 <a name="levelDBROWrapper"></a>
-## type [levelDBROWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L31-L33>)
+## type [levelDBROWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L40-L42>)
 
-
+levelDBROWrapper adapts a [LevelDBLikeRO](<#LevelDBLikeRO>) to the package's low\-level db interface, so a snapshot can be merged into a \[mergedDB\] alongside a writable in\-memory layer.
 
 ```go
 type levelDBROWrapper struct {
@@ -977,54 +1084,54 @@ type levelDBROWrapper struct {
 ```
 
 <a name="levelDBROWrapper.Get"></a>
-### func \(\*levelDBROWrapper\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L35>)
+### func \(\*levelDBROWrapper\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L45>)
 
 ```go
 func (ro *levelDBROWrapper) Get(key []byte) ([]byte, error)
 ```
 
-
+Get reads key from the wrapped read\-only LevelDB.
 
 <a name="levelDBROWrapper.Has"></a>
-### func \(\*levelDBROWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L38>)
+### func \(\*levelDBROWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L50>)
 
 ```go
 func (ro *levelDBROWrapper) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether key exists in the wrapped read\-only LevelDB.
 
 <a name="levelDBROWrapper.NewIterator"></a>
-### func \(\*levelDBROWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L47>)
+### func \(\*levelDBROWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L67>)
 
 ```go
 func (ro *levelDBROWrapper) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator walks the read\-only LevelDB starting at prefix.
 
 <a name="levelDBROWrapper.Put"></a>
-### func \(\*levelDBROWrapper\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L41>)
+### func \(\*levelDBROWrapper\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L56>)
 
 ```go
 func (ro *levelDBROWrapper) Put(key []byte, value []byte) error
 ```
 
-
+Put panics — a read\-only wrapper must never be written to. Callers that need writes must layer a writable in\-memory db in front via \[newMergedDb\].
 
 <a name="levelDBROWrapper.changesInternal"></a>
-### func \(\*levelDBROWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L44>)
+### func \(\*levelDBROWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L62>)
 
 ```go
 func (ro *levelDBROWrapper) changesInternal(prefix []byte) (Patch, error)
 ```
 
-
+changesInternal panics — a read\-only wrapper has no per\-prefix change tracking; only the in\-memory layer in front of it captures writes.
 
 <a name="levelDBWrapper"></a>
-## type [levelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L56-L58>)
+## type [levelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L80-L82>)
 
-
+levelDBWrapper adapts a writable [LevelDBLike](<#LevelDBLike>) to the package's low\-level db interface.
 
 ```go
 type levelDBWrapper struct {
@@ -1033,54 +1140,54 @@ type levelDBWrapper struct {
 ```
 
 <a name="levelDBWrapper.Get"></a>
-### func \(\*levelDBWrapper\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L60>)
+### func \(\*levelDBWrapper\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L85>)
 
 ```go
 func (ldbw *levelDBWrapper) Get(key []byte) ([]byte, error)
 ```
 
-
+Get reads key from the wrapped LevelDB.
 
 <a name="levelDBWrapper.Has"></a>
-### func \(\*levelDBWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L63>)
+### func \(\*levelDBWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L90>)
 
 ```go
 func (ldbw *levelDBWrapper) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether key exists in the wrapped LevelDB.
 
 <a name="levelDBWrapper.NewIterator"></a>
-### func \(\*levelDBWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L69>)
+### func \(\*levelDBWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L100>)
 
 ```go
 func (ldbw *levelDBWrapper) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator walks the wrapped LevelDB starting at prefix.
 
 <a name="levelDBWrapper.Put"></a>
-### func \(\*levelDBWrapper\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L66>)
+### func \(\*levelDBWrapper\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L95>)
 
 ```go
 func (ldbw *levelDBWrapper) Put(key, value []byte) error
 ```
 
-
+Put writes key/value into the wrapped LevelDB.
 
 <a name="levelDBWrapper.changesInternal"></a>
-### func \(\*levelDBWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L73>)
+### func \(\*levelDBWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L106>)
 
 ```go
 func (ldbw *levelDBWrapper) changesInternal(prefix []byte) (Patch, error)
 ```
 
-
+changesInternal panics — direct LevelDB writes are committed transactionally elsewhere; the wrapper does not track them per\-prefix.
 
 <a name="memDBWrapper"></a>
-## type [memDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L9-L11>)
+## type [memDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L11-L13>)
 
-
+memDBWrapper adapts goleveldb's \`\*memdb.DB\` \(an in\-memory ordered map\) to the package's low\-level db interface.
 
 ```go
 type memDBWrapper struct {
@@ -1089,36 +1196,36 @@ type memDBWrapper struct {
 ```
 
 <a name="memDBWrapper.Has"></a>
-### func \(\*memDBWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L13>)
+### func \(\*memDBWrapper\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L16>)
 
 ```go
 func (mdbw *memDBWrapper) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether key is present in the in\-memory store.
 
 <a name="memDBWrapper.NewIterator"></a>
-### func \(\*memDBWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L16>)
+### func \(\*memDBWrapper\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L21>)
 
 ```go
 func (mdbw *memDBWrapper) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator walks every key/value beginning with prefix.
 
 <a name="memDBWrapper.changesInternal"></a>
-### func \(\*memDBWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L19>)
+### func \(\*memDBWrapper\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/memdb.go#L28>)
 
 ```go
 func (mdbw *memDBWrapper) changesInternal(prefix []byte) (Patch, error)
 ```
 
-
+changesInternal returns a [Patch](<#Patch>) capturing every key/value present under prefix. Used to derive a forward patch from an in\-memory overlay before merging it into the durable layer.
 
 <a name="memdbManager"></a>
-## type [memdbManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L58-L67>)
+## type [memdbManager](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L94-L103>)
 
-
+memdbManager is the [Manager](<#Manager>) implementation backed entirely by in\-memory stores. Every committed version retains a full snapshot. Used for tests and short\-lived nodes.
 
 ```go
 type memdbManager struct {
@@ -1134,72 +1241,72 @@ type memdbManager struct {
 ```
 
 <a name="memdbManager.Add"></a>
-### func \(\*memdbManager\) [Add](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L101>)
+### func \(\*memdbManager\) [Add](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L150>)
 
 ```go
 func (m *memdbManager) Add(transaction Transaction) error
 ```
 
-
+Add applies transaction onto the current frontier, advancing it to the transaction's last commit. Returns an error if the transaction does not chain from the current frontier.
 
 <a name="memdbManager.Frontier"></a>
-### func \(\*memdbManager\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L81>)
+### func \(\*memdbManager\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L120>)
 
 ```go
 func (m *memdbManager) Frontier() DB
 ```
 
-
+Frontier returns a snapshot of the most recent committed version.
 
 <a name="memdbManager.Get"></a>
-### func \(\*memdbManager\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L87>)
+### func \(\*memdbManager\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L129>)
 
 ```go
 func (m *memdbManager) Get(identifier types.HashHeight) DB
 ```
 
-
+Get returns a snapshot at identifier or nil if the version has been pruned or never existed.
 
 <a name="memdbManager.GetPatch"></a>
-### func \(\*memdbManager\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L96>)
+### func \(\*memdbManager\) [GetPatch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L141>)
 
 ```go
 func (m *memdbManager) GetPatch(identifier types.HashHeight) Patch
 ```
 
-
+GetPatch returns the forward patch that produced identifier or nil if it is not retained.
 
 <a name="memdbManager.Location"></a>
-### func \(\*memdbManager\) [Location](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L178>)
+### func \(\*memdbManager\) [Location](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L236>)
 
 ```go
 func (m *memdbManager) Location() string
 ```
 
-
+Location reports the well\-known sentinel "in\-memory" for callers that log the database path.
 
 <a name="memdbManager.Pop"></a>
-### func \(\*memdbManager\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L154>)
+### func \(\*memdbManager\) [Pop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L206>)
 
 ```go
 func (m *memdbManager) Pop() error
 ```
 
-
+Pop reverses the most recent commit unless the frontier is at the stable identifier \(the snapshot the manager was constructed against\).
 
 <a name="memdbManager.Stop"></a>
-### func \(\*memdbManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L172>)
+### func \(\*memdbManager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L227>)
 
 ```go
 func (m *memdbManager) Stop() error
 ```
 
-
+Stop discards retained versions; the in\-memory manager has no persistent resources to release.
 
 <a name="mergedDB"></a>
-## type [mergedDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L14-L16>)
+## type [mergedDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L20-L22>)
 
-
+mergedDB is the db returned by \[newMergedDb\].
 
 ```go
 type mergedDB struct {
@@ -1208,54 +1315,54 @@ type mergedDB struct {
 ```
 
 <a name="mergedDB.Get"></a>
-### func \(\*mergedDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L18>)
+### func \(\*mergedDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L26>)
 
 ```go
 func (u *mergedDB) Get(key []byte) ([]byte, error)
 ```
 
-
+Get returns the value at key from the first layer that has it, or [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) if no layer has it.
 
 <a name="mergedDB.Has"></a>
-### func \(\*mergedDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L28>)
+### func \(\*mergedDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L38>)
 
 ```go
 func (u *mergedDB) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether any layer contains key.
 
 <a name="mergedDB.NewIterator"></a>
-### func \(\*mergedDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L41>)
+### func \(\*mergedDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L56>)
 
 ```go
 func (u *mergedDB) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator returns an iterator that walks every key in lexicographic order across all layers, deduplicating by key \(the topmost layer wins\).
 
 <a name="mergedDB.Put"></a>
-### func \(\*mergedDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L38>)
+### func \(\*mergedDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L50>)
 
 ```go
 func (u *mergedDB) Put(key, value []byte) error
 ```
 
-
+Put writes key/value to the topmost \(writable\) layer.
 
 <a name="mergedDB.changesInternal"></a>
-### func \(\*mergedDB\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L49>)
+### func \(\*mergedDB\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L66>)
 
 ```go
 func (u *mergedDB) changesInternal(prefix []byte) (Patch, error)
 ```
 
-
+changesInternal returns the changes captured by the writable top layer only — read\-only layers contribute their existing state, not change\-set.
 
 <a name="mergedIterator"></a>
-## type [mergedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L58-L66>)
+## type [mergedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L84-L92>)
 
-
+mergedIterator walks multiple \[StorageIterator\]s in lockstep, presenting a single sorted, deduplicated stream. The earlier iterator in the input list shadows later iterators on key collision \(matching the read\-through precedence of \[mergedDB.Get\]\).
 
 ```go
 type mergedIterator struct {
@@ -1270,63 +1377,63 @@ type mergedIterator struct {
 ```
 
 <a name="mergedIterator.Error"></a>
-### func \(\*mergedIterator\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L102>)
+### func \(\*mergedIterator\) [Error](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L141>)
 
 ```go
 func (mi *mergedIterator) Error() error
 ```
 
-
+Error returns the first per\-layer error encountered, if any.
 
 <a name="mergedIterator.Key"></a>
-### func \(\*mergedIterator\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L90>)
+### func \(\*mergedIterator\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L124>)
 
 ```go
 func (mi *mergedIterator) Key() []byte
 ```
 
-
+Key returns the current merged key, or nil if there is no current key or an error has been captured.
 
 <a name="mergedIterator.Next"></a>
-### func \(\*mergedIterator\) [Next](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L87>)
+### func \(\*mergedIterator\) [Next](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L118>)
 
 ```go
 func (mi *mergedIterator) Next() bool
 ```
 
-
+Next advances to the next merged key; returns false when every per\-layer iterator is exhausted or an error is sticky.
 
 <a name="mergedIterator.Release"></a>
-### func \(\*mergedIterator\) [Release](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L105>)
+### func \(\*mergedIterator\) [Release](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L146>)
 
 ```go
 func (mi *mergedIterator) Release()
 ```
 
-
+Release frees every per\-layer iterator. Safe to call exactly once.
 
 <a name="mergedIterator.Value"></a>
-### func \(\*mergedIterator\) [Value](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L96>)
+### func \(\*mergedIterator\) [Value](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L133>)
 
 ```go
 func (mi *mergedIterator) Value() []byte
 ```
 
-
+Value returns the current merged value, or nil if there is no current key or an error has been captured.
 
 <a name="mergedIterator.step"></a>
-### func \(\*mergedIterator\) [step](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L110>)
+### func \(\*mergedIterator\) [step](<https://github.com/zenon-network/go-zenon/blob/master/common/db/merged.go#L155>)
 
 ```go
 func (mi *mergedIterator) step() bool
 ```
 
-
+step picks the next key in lexicographic order across all layers, advancing every per\-layer iterator that was sitting on the previous key \(so duplicates collapse into a single emitted entry\).
 
 <a name="patch"></a>
-## type [patch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L13-L15>)
+## type [patch](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L16-L18>)
 
-
+patch is the canonical [Patch](<#Patch>) implementation, backed by goleveldb's \`\*leveldb.Batch\` so that patches can be dumped, reloaded, and applied atomically against a real LevelDB.
 
 ```go
 type patch struct {
@@ -1335,18 +1442,18 @@ type patch struct {
 ```
 
 <a name="patch.Replay"></a>
-### func \(\*patch\) [Replay](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L17>)
+### func \(\*patch\) [Replay](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L22>)
 
 ```go
 func (p *patch) Replay(pr PatchReplayer) error
 ```
 
-
+Replay walks every operation in p in insertion order, calling pr.Put or pr.Delete as appropriate.
 
 <a name="patchApplier"></a>
-## type [patchApplier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L65-L68>)
+## type [patchApplier](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L91-L94>)
 
-
+patchApplier replays a [Patch](<#Patch>) against a [DB](<#DB>), short\-circuiting on the first error so it propagates back to the caller without further writes.
 
 ```go
 type patchApplier struct {
@@ -1356,27 +1463,27 @@ type patchApplier struct {
 ```
 
 <a name="patchApplier.Delete"></a>
-### func \(\*patchApplier\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L76>)
+### func \(\*patchApplier\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L105>)
 
 ```go
 func (pa *patchApplier) Delete(key []byte)
 ```
 
-
+Delete writes through to the underlying DB unless a prior op already failed.
 
 <a name="patchApplier.Put"></a>
-### func \(\*patchApplier\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L70>)
+### func \(\*patchApplier\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L97>)
 
 ```go
 func (pa *patchApplier) Put(key []byte, value []byte)
 ```
 
-
+Put writes through to the underlying DB unless a prior op already failed.
 
 <a name="patchApplierWO"></a>
-## type [patchApplierWO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L92-L95>)
+## type [patchApplierWO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L129-L132>)
 
-
+patchApplierWO \("write\-once"\) replays a patch against a low\-level db while skipping any keys that already exist. Used by [ApplyWithoutOverride](<#ApplyWithoutOverride>) to layer rollback patches onto cached snapshots without overwriting newer state already present in the cache.
 
 ```go
 type patchApplierWO struct {
@@ -1386,27 +1493,27 @@ type patchApplierWO struct {
 ```
 
 <a name="patchApplierWO.Delete"></a>
-### func \(\*patchApplierWO\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L107>)
+### func \(\*patchApplierWO\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L148>)
 
 ```go
 func (pa *patchApplierWO) Delete(key []byte)
 ```
 
-
+Delete writes a single tombstone byte at key only if key is absent.
 
 <a name="patchApplierWO.Put"></a>
-### func \(\*patchApplierWO\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L97>)
+### func \(\*patchApplierWO\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L136>)
 
 ```go
 func (pa *patchApplierWO) Put(key []byte, value []byte)
 ```
 
-
+Put writes value at key only if key is absent. The value is prefixed with \`0x00\` to interoperate with the \[enableDeleteDB\] tombstone byte.
 
 <a name="patchPrinter"></a>
-## type [patchPrinter](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L34-L36>)
+## type [patchPrinter](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L45-L47>)
 
-
+patchPrinter is a [PatchReplayer](<#PatchReplayer>) that accumulates a hex dump of every operation. Used by [DebugPatch](<#DebugPatch>).
 
 ```go
 type patchPrinter struct {
@@ -1415,27 +1522,27 @@ type patchPrinter struct {
 ```
 
 <a name="patchPrinter.Delete"></a>
-### func \(\*patchPrinter\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L41>)
+### func \(\*patchPrinter\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L55>)
 
 ```go
 func (pp *patchPrinter) Delete(key []byte)
 ```
 
-
+Delete appends a \`key \- DELETE\` line to the printer's dump.
 
 <a name="patchPrinter.Put"></a>
-### func \(\*patchPrinter\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L38>)
+### func \(\*patchPrinter\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L50>)
 
 ```go
 func (pp *patchPrinter) Put(key []byte, value []byte)
 ```
 
-
+Put appends a \`key \- value\` line to the printer's dump.
 
 <a name="patchRollback"></a>
-## type [patchRollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L45-L48>)
+## type [patchRollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L63-L66>)
 
-
+patchRollback constructs the inverse of a forward patch: for each key the forward patch touches, it records the prior value \(or a delete if the key did not exist\). Used by the manager to compute rollback patches at insert time so that \[Manager.Pop\] can undo without re\-reading the entire chain.
 
 ```go
 type patchRollback struct {
@@ -1445,36 +1552,36 @@ type patchRollback struct {
 ```
 
 <a name="patchRollback.Delete"></a>
-### func \(\*patchRollback\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L61>)
+### func \(\*patchRollback\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L85>)
 
 ```go
 func (pr *patchRollback) Delete(key []byte)
 ```
 
-
+Delete records the inverse of a forward Delete: the previous value of key.
 
 <a name="patchRollback.Put"></a>
-### func \(\*patchRollback\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L58>)
+### func \(\*patchRollback\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L80>)
 
 ```go
 func (pr *patchRollback) Put(key []byte, _ []byte)
 ```
 
-
+Put records the inverse of a forward Put: the previous value of key.
 
 <a name="patchRollback.rollback"></a>
-### func \(\*patchRollback\) [rollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L50>)
+### func \(\*patchRollback\) [rollback](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L70>)
 
 ```go
 func (pr *patchRollback) rollback(key []byte)
 ```
 
-
+rollback records the inverse of a write or delete on key by reading the current value from the underlying DB.
 
 <a name="patchValuePrefixer"></a>
-## type [patchValuePrefixer](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L83-L86>)
+## type [patchValuePrefixer](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L115-L118>)
 
-
+patchValuePrefixer is a [PatchReplayer](<#PatchReplayer>) that prepends a fixed prefix to every value written. Used by [PrefixPatchValues](<#PrefixPatchValues>) to namespace the values of an entire patch in a single pass.
 
 ```go
 type patchValuePrefixer struct {
@@ -1484,18 +1591,18 @@ type patchValuePrefixer struct {
 ```
 
 <a name="patchValuePrefixer.Put"></a>
-### func \(\*patchValuePrefixer\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L88>)
+### func \(\*patchValuePrefixer\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/patch.go#L121>)
 
 ```go
 func (pa *patchValuePrefixer) Put(key []byte, value []byte)
 ```
 
-
+Put records key → prefix||value into the wrapped patch.
 
 <a name="removePatchKeyPrefix"></a>
-## type [removePatchKeyPrefix](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L7-L10>)
+## type [removePatchKeyPrefix](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L11-L14>)
 
-
+removePatchKeyPrefix is a [PatchReplayer](<#PatchReplayer>) that drops the leading prefixLength bytes of every key before passing the operation through to the wrapped [Patch](<#Patch>). Used by \[subDB.changesInternal\] to strip the namespace prefix when surfacing changes upstream.
 
 ```go
 type removePatchKeyPrefix struct {
@@ -1505,18 +1612,18 @@ type removePatchKeyPrefix struct {
 ```
 
 <a name="removePatchKeyPrefix.Put"></a>
-### func \(\*removePatchKeyPrefix\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L12>)
+### func \(\*removePatchKeyPrefix\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L17>)
 
 ```go
 func (edp *removePatchKeyPrefix) Put(key []byte, value []byte)
 ```
 
-
+Put writes key\[prefixLength:\] / value into the wrapped patch.
 
 <a name="rollbackCache"></a>
-## type [rollbackCache](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L182-L185>)
+## type [rollbackCache](<https://github.com/zenon-network/go-zenon/blob/master/common/db/versioned_db.go#L244-L247>)
 
-
+rollbackCache holds a partially\-rolled\-back view of the frontier, memoizing the application of historical rollback patches up to a particular height. Used by \[ldbManager.Get\] to amortize the cost of reconstructing a historical view.
 
 ```go
 type rollbackCache struct {
@@ -1526,9 +1633,9 @@ type rollbackCache struct {
 ```
 
 <a name="skipDeletedDb"></a>
-## type [skipDeletedDb](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L3-L5>)
+## type [skipDeletedDb](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L7-L9>)
 
-
+skipDeletedDb is a low\-level db decorator whose iterator skips tombstone\-encoded entries. Used inside the \[ldbManager.Get\] read\-through stack so an iterator over a historical view does not surface keys whose tombstone has already been honored on disk.
 
 ```go
 type skipDeletedDb struct {
@@ -1537,18 +1644,18 @@ type skipDeletedDb struct {
 ```
 
 <a name="skipDeletedDb.NewIterator"></a>
-### func \(\*skipDeletedDb\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L7>)
+### func \(\*skipDeletedDb\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L12>)
 
 ```go
 func (db *skipDeletedDb) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator returns an iterator that skips tombstoned entries.
 
 <a name="skipDeletedIterator"></a>
-## type [skipDeletedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L11-L13>)
+## type [skipDeletedIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L17-L19>)
 
-
+skipDeletedIterator filters out tombstoned values during iteration.
 
 ```go
 type skipDeletedIterator struct {
@@ -1557,18 +1664,18 @@ type skipDeletedIterator struct {
 ```
 
 <a name="skipDeletedIterator.Next"></a>
-### func \(\*skipDeletedIterator\) [Next](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L15>)
+### func \(\*skipDeletedIterator\) [Next](<https://github.com/zenon-network/go-zenon/blob/master/common/db/skip_deleted.go#L23>)
 
 ```go
 func (i *skipDeletedIterator) Next() bool
 ```
 
-
+Next advances past tombstoned entries, returning false only when every remaining key in the wrapped iterator is a tombstone.
 
 <a name="subDB"></a>
-## type [subDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L16-L19>)
+## type [subDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L25-L28>)
 
-
+subDB is a namespacing decorator: every read and write transparently has the prefix prepended, giving a logically isolated keyspace inside a shared underlying db. Used to keep the chain and meta keyspaces separate within a single LevelDB.
 
 ```go
 type subDB struct {
@@ -1578,54 +1685,54 @@ type subDB struct {
 ```
 
 <a name="subDB.Get"></a>
-### func \(\*subDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L28>)
+### func \(\*subDB\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L39>)
 
 ```go
 func (u *subDB) Get(key []byte) ([]byte, error)
 ```
 
-
+Get reads \(prefix||key\) from the wrapped db.
 
 <a name="subDB.Has"></a>
-### func \(\*subDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L31>)
+### func \(\*subDB\) [Has](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L44>)
 
 ```go
 func (u *subDB) Has(key []byte) (bool, error)
 ```
 
-
+Has reports whether \(prefix||key\) exists in the wrapped db.
 
 <a name="subDB.NewIterator"></a>
-### func \(\*subDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L37>)
+### func \(\*subDB\) [NewIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L55>)
 
 ```go
 func (u *subDB) NewIterator(prefix []byte) StorageIterator
 ```
 
-
+NewIterator walks every key beginning with \(prefix||queryPrefix\), with the namespace prefix stripped from each emitted key.
 
 <a name="subDB.Put"></a>
-### func \(\*subDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L34>)
+### func \(\*subDB\) [Put](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L49>)
 
 ```go
 func (u *subDB) Put(key, value []byte) error
 ```
 
-
+Put writes \(prefix||key\) / value into the wrapped db.
 
 <a name="subDB.changesInternal"></a>
-### func \(\*subDB\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L41>)
+### func \(\*subDB\) [changesInternal](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L62>)
 
 ```go
 func (u *subDB) changesInternal(prefix []byte) (Patch, error)
 ```
 
-
+changesInternal returns the changes from the wrapped db restricted to the subDB's namespace, with the prefix stripped from each key so callers see the unprefixed view.
 
 <a name="subIterator"></a>
-## type [subIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L58-L61>)
+## type [subIterator](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L81-L84>)
 
-
+subIterator strips the leading prefixLen bytes from each key emitted by the wrapped iterator. Values pass through unchanged.
 
 ```go
 type subIterator struct {
@@ -1635,12 +1742,12 @@ type subIterator struct {
 ```
 
 <a name="subIterator.Key"></a>
-### func \(\*subIterator\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L63>)
+### func \(\*subIterator\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/common/db/subdb.go#L87>)
 
 ```go
 func (si *subIterator) Key() []byte
 ```
 
-
+Key returns the wrapped iterator's key with the namespace prefix removed.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
