@@ -9,12 +9,19 @@ import (
 	"github.com/zenon-network/go-zenon/consensus/api"
 )
 
+// API is the canonical [api.PillarReader] implementation: a read-only
+// view bound to a momentum store, the election reader, and the points
+// subsystem. RPC handlers receive an API via
+// [Consensus.FrontierPillarReader] / [Consensus.FixedPillarReader].
 type API struct {
 	momentumStore store.Momentum
 	er            ElectionReader
 	points        Points
 }
 
+// GetPillarWeights returns the per-pillar weight at the most recently
+// completed period (one tick before the frontier's tick). Used by RPC
+// to expose live election weights to clients.
 func (obj *API) GetPillarWeights() (map[string]*big.Int, error) {
 	m, err := obj.momentumStore.GetFrontierMomentum()
 	if err != nil {
@@ -34,9 +41,16 @@ func (obj *API) GetPillarWeights() (map[string]*big.Int, error) {
 	}
 	return weights, nil
 }
+
+// EpochTicker returns the epoch [common.Ticker] consumers use to map
+// times ↔ epoch numbers consistent with the points subsystem.
 func (obj *API) EpochTicker() common.Ticker {
 	return obj.points.GetEpochPoints()
 }
+
+// EpochStats returns aggregate per-pillar statistics for the supplied
+// epoch number: produced vs expected blocks, weight, and the running
+// total. Returns nil when the epoch has not started yet.
 func (obj *API) EpochStats(epoch uint64) (*api.EpochStats, error) {
 	point, err := obj.points.GetEpochPoints().GetPoint(epoch)
 	if err != nil {
@@ -63,6 +77,11 @@ func (obj *API) EpochStats(epoch uint64) (*api.EpochStats, error) {
 	}
 	return stats, nil
 }
+
+// GetPillarDelegationsByEpoch averages every per-period delegation
+// snapshot inside epoch into a single per-epoch view. Used by epoch
+// reward calculations: averaging across periods smooths transient
+// delegation churn within the epoch.
 func (obj *API) GetPillarDelegationsByEpoch(epoch uint64) (map[string]*types.PillarDelegationDetail, error) {
 	multiplier, err := obj.er.TickMultiplier(obj.EpochTicker())
 	common.DealWithErr(err)

@@ -8,11 +8,17 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// ElectionData is the cached output of one election: the ordered slate
+// of producer addresses for a tick plus the delegation snapshot they
+// were elected against. The tick is keyed by proof-block hash, not by
+// tick number — see [DB.GetElectionResultByHash].
 type ElectionData struct {
 	Producers   []types.Address
 	Delegations []*types.PillarDelegation
 }
 
+// Marshal encodes d as protobuf bytes via the auto-generated
+// [ElectionDataProto] (defined in the .pb.go sibling file).
 func (d *ElectionData) Marshal() ([]byte, error) {
 	pb := &ElectionDataProto{}
 	pb.Delegations = make([]*PillarDelegationProto, 0, len(d.Delegations))
@@ -34,6 +40,9 @@ func (d *ElectionData) Marshal() ([]byte, error) {
 	}
 	return buf, nil
 }
+
+// Unmarshal decodes buf back into d. Returns an error on protobuf
+// shape mismatch or on an [types.Address] of the wrong length.
 func (d *ElectionData) Unmarshal(buf []byte) error {
 	pb := &ElectionDataProto{}
 	if err := proto.Unmarshal(buf, pb); err != nil {
@@ -65,6 +74,8 @@ func (d *ElectionData) Unmarshal(buf []byte) error {
 	return nil
 }
 
+// GenElectionData builds an [ElectionData] from the supplied
+// producer order and delegation snapshot.
 func GenElectionData(producers []types.Address, delegations []*types.PillarDelegation) *ElectionData {
 	return &ElectionData{
 		Producers:   producers,

@@ -6,13 +6,38 @@
 import "github.com/zenon-network/go-zenon/consensus"
 ```
 
-Package consensus runs the pillar\-election scheduler that determines which pillar produces each momentum.
+Package consensus runs the pillar\-election scheduler that determines which pillar produces each momentum, and aggregates per\-pillar performance into period and epoch points.
 
 ### Overview
 
-Time is divided into ticks; each tick maps deterministically to one elected pillar through a weighted shuffle of the registered pillar set. consensus owns the tick scheduler, the points system that adjusts election weight by historical performance, and the ProducerEvent emission that [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) reacts to.
+Time is divided into ticks; each tick maps deterministically to one elected pillar through a weighted shuffle of the registered pillar set. consensus owns:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- The tick scheduler \(\[consensus.work\]\) running in a background goroutine that broadcasts a [ProducerEvent](<#ProducerEvent>) at every elected pillar's start time.
+- The election manager \(\[electionManager\], \[electionAlgorithm\]\) that resolves any tick to its producer slate. Results are cached keyed by the proof block's hash so reorgs invalidate them implicitly.
+- The points subsystem \([Points](<#Points>), \[periodPoints\], \[compoundPoints\]\) that aggregates per\-pillar performance per period \(one election cycle\) and per epoch \(24h by default\).
+- The verifier hook \(\[Consensus.VerifyMomentumProducer\]\) that gates momentum acceptance on the elected\-pillar match.
+- A read\-only [API](<#API>) surface for RPC queries of weights, epoch stats, and per\-epoch delegations.
+
+### Key Concepts
+
+- Tick — one election cycle; wall\-clock duration is \`BlockTime × NodeCount\` seconds \(see [Context](<#Context>)\).
+- Proof block — the most recent momentum strictly before \`endTime\(tick \- 2\)\`. Using tick\-2 prevents producers from influencing their own elections by reordering blocks.
+- Election algorithm — weighted top\-N filter with a RandCount promotion rule from group B and a deterministic random shuffle. See \[electionAlgorithm.SelectProducers\].
+- Period vs Epoch points — period is one tick; epoch is the wall\-clock aggregate of [EpochDuration](<#EpochDuration>) \(default 24h\). Compound epoch points are derived by averaging the per\-pillar weights of the constituent period points.
+- ProducerEvent — the per\-pillar \(start, end\) window broadcast by the tick scheduler so [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) knows when to author a momentum.
+
+### Concurrency
+
+Every public method on [Consensus](<#Consensus>) is safe for concurrent use. The tick scheduler runs in its own goroutine started by \[Consensus.Start\] and stopped by \[Consensus.Stop\]. Listener callbacks \(\[EventListener.NewProducerEvent\]\) run synchronously on the scheduler's goroutine — heavy work should be deferred to a separate goroutine.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — supplies the chain handle the consensus layer reads frontier and momentum stores from.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus/api](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/>) — read\-only API types \([api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>), [api.EpochStats](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#EpochStats>)\) the [API](<#API>) handle implements.
+- [github.com/zenon\\\-network/go\\\-zenon/consensus/storage](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/>) — LevelDB wrapper for cached election results and pre\-computed points.
+- [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) — registers an [EventListener](<#EventListener>) and authors momentums when its coinbase matches.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — calls \[Consensus.VerifyMomentumProducer\] during momentum\-transaction validation.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/constants](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/>) — defines [constants.ConsensusConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ConsensusConfig>) \(BlockTime, NodeCount, RandCount\).
 
 ## Index
 
@@ -98,7 +123,7 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="EpochDuration"></a>
+<a name="EpochDuration"></a>EpochDuration is the wall\-clock length of one points\-aggregation epoch. Per\-pillar performance points are summarized at this cadence and persisted under [storage.PrefixEpochPoint](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#PrefixEpochPoint>).
 
 ```go
 var (
@@ -106,7 +131,7 @@ var (
 )
 ```
 
-<a name="ErrElectionBeforeGenesis"></a>
+<a name="ErrElectionBeforeGenesis"></a>ErrElectionBeforeGenesis is returned when an election is requested for a time/tick that predates the chain's genesis timestamp.
 
 ```go
 var (
@@ -115,18 +140,18 @@ var (
 ```
 
 <a name="getMomentumBeforeTime"></a>
-## func [getMomentumBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L19>)
+## func [getMomentumBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L24>)
 
 ```go
 func getMomentumBeforeTime(chain chain.Chain, t time.Time) (*nom.Momentum, error)
 ```
 
-
+getMomentumBeforeTime is the chain\-side helper used to find the election proof block — the most recent momentum strictly before t. Returns an error rather than nil so failed lookups are loud.
 
 <a name="API"></a>
-## type [API](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L12-L16>)
+## type [API](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L16-L20>)
 
-
+API is the canonical [api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>) implementation: a read\-only view bound to a momentum store, the election reader, and the points subsystem. RPC handlers receive an API via \[Consensus.FrontierPillarReader\] / \[Consensus.FixedPillarReader\].
 
 ```go
 type API struct {
@@ -137,45 +162,45 @@ type API struct {
 ```
 
 <a name="API.EpochStats"></a>
-### func \(\*API\) [EpochStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L40>)
+### func \(\*API\) [EpochStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L54>)
 
 ```go
 func (obj *API) EpochStats(epoch uint64) (*api.EpochStats, error)
 ```
 
-
+EpochStats returns aggregate per\-pillar statistics for the supplied epoch number: produced vs expected blocks, weight, and the running total. Returns nil when the epoch has not started yet.
 
 <a name="API.EpochTicker"></a>
-### func \(\*API\) [EpochTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L37>)
+### func \(\*API\) [EpochTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L47>)
 
 ```go
 func (obj *API) EpochTicker() common.Ticker
 ```
 
-
+EpochTicker returns the epoch [common.Ticker](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Ticker>) consumers use to map times ↔ epoch numbers consistent with the points subsystem.
 
 <a name="API.GetPillarDelegationsByEpoch"></a>
-### func \(\*API\) [GetPillarDelegationsByEpoch](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L66>)
+### func \(\*API\) [GetPillarDelegationsByEpoch](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L85>)
 
 ```go
 func (obj *API) GetPillarDelegationsByEpoch(epoch uint64) (map[string]*types.PillarDelegationDetail, error)
 ```
 
-
+GetPillarDelegationsByEpoch averages every per\-period delegation snapshot inside epoch into a single per\-epoch view. Used by epoch reward calculations: averaging across periods smooths transient delegation churn within the epoch.
 
 <a name="API.GetPillarWeights"></a>
-### func \(\*API\) [GetPillarWeights](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L18>)
+### func \(\*API\) [GetPillarWeights](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api.go#L25>)
 
 ```go
 func (obj *API) GetPillarWeights() (map[string]*big.Int, error)
 ```
 
-
+GetPillarWeights returns the per\-pillar weight at the most recently completed period \(one tick before the frontier's tick\). Used by RPC to expose live election weights to clients.
 
 <a name="AlgorithmConfig"></a>
-## type [AlgorithmConfig](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L10-L13>)
+## type [AlgorithmConfig](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L13-L16>)
 
-
+AlgorithmConfig is the input snapshot the election algorithm runs against: the candidate delegations and the proof\-block \(hash, height\) pair used to derive the random seed.
 
 ```go
 type AlgorithmConfig struct {
@@ -185,63 +210,89 @@ type AlgorithmConfig struct {
 ```
 
 <a name="NewAlgorithmContext"></a>
-### func [NewAlgorithmContext](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L15>)
+### func [NewAlgorithmContext](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L20>)
 
 ```go
 func NewAlgorithmContext(delegations []*types.PillarDelegation, hashH *types.HashHeight) *AlgorithmConfig
 ```
 
-
+NewAlgorithmContext builds an [AlgorithmConfig](<#AlgorithmConfig>) for the supplied delegations and proof\-block identifier.
 
 <a name="ChainTicker"></a>
-## type [ChainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L11-L17>)
+## type [ChainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L18-L32>)
 
+ChainTicker extends [common.Ticker](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Ticker>) with chain\-aware queries: per\-tick progress checks \(started / finished against the chain frontier\) and per\-tick content lookups \(the head momentum and the full block list inside a tick window\).
 
+The points subsystem consumes a ChainTicker to walk completed ticks and aggregate per\-pillar performance statistics.
 
 ```go
 type ChainTicker interface {
     common.Ticker
+    // IsFinished reports whether the chain has progressed past tick's
+    // end time.
     IsFinished(tick uint64) bool
+    // HasStarted reports whether the chain has reached or passed
+    // tick's start time.
     HasStarted(tick uint64) bool
+    // GetEndBlock returns the head momentum of tick (the most recent
+    // momentum strictly before tick's end time).
     GetEndBlock(tick uint64) (*nom.Momentum, error)
+    // GetContent returns every momentum committed within tick's
+    // wall-clock window, in ascending height order.
     GetContent(tick uint64) ([]*nom.Momentum, error)
 }
 ```
 
 <a name="Consensus"></a>
-## type [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L33-L45>)
+## type [Consensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L59-L83>)
 
-Consensus include all interface for consensus
+Consensus is the public surface of the consensus subsystem: producer election, points \(pillar performance\), and verifier integration.
+
+Concurrency: every method is safe for concurrent use. The internal election scheduler runs in a background goroutine started by \[Start\] and stopped by \[Stop\].
 
 ```go
 type Consensus interface {
     Verifier
     EventManager
 
+    // Init is currently a no-op; reserved for future use. Returned for
+    // symmetry with the chain / verifier subsystems.
     Init() error
+    // Start launches the tick scheduler goroutine and registers the
+    // consensus state listeners with the chain.
     Start() error
+    // Stop stops the tick scheduler and unregisters listeners. Blocks
+    // until the scheduler goroutine has exited.
     Stop() error
 
+    // GetMomentumProducer returns the pillar address elected to produce
+    // the momentum at timestamp.
     GetMomentumProducer(timestamp time.Time) (*types.Address, error)
 
+    // FrontierPillarReader returns a read-only [api.PillarReader] view
+    // pinned at the chain frontier.
     FrontierPillarReader() api.PillarReader
+    // FixedPillarReader returns a read-only [api.PillarReader] view
+    // pinned at the supplied identifier.
     FixedPillarReader(types.HashHeight) api.PillarReader
 }
 ```
 
 <a name="NewConsensus"></a>
-### func [NewConsensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L53>)
+### func [NewConsensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L70>)
 
 ```go
 func NewConsensus(db db.DB, chain chain.Chain, testing bool) Consensus
 ```
 
-NewConsensus instantiates a new consensus object
+NewConsensus instantiates a new consensus object.
+
+The caller\-supplied db backs the consensus storage subsystem \([storage.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#DB>), holding cached election results and points\). The testing flag suppresses the tick scheduler goroutine so deterministic tests can drive the layer manually.
 
 <a name="Context"></a>
-## type [Context](<https://github.com/zenon-network/go-zenon/blob/master/consensus/context.go#L10-L14>)
+## type [Context](<https://github.com/zenon-network/go-zenon/blob/master/consensus/context.go#L14-L18>)
 
-
+Context bundles the consensus tick parameters used by the election algorithm and the points subsystem: a [common.Ticker](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Ticker>) for time → tick conversion, the [constants.Consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#Consensus>) tuning knobs \(block time, node count, RandCount\), and the chain's genesis time.
 
 ```go
 type Context struct {
@@ -252,120 +303,141 @@ type Context struct {
 ```
 
 <a name="NewConsensusContext"></a>
-### func [NewConsensusContext](<https://github.com/zenon-network/go-zenon/blob/master/consensus/context.go#L16>)
+### func [NewConsensusContext](<https://github.com/zenon-network/go-zenon/blob/master/consensus/context.go#L24>)
 
 ```go
 func NewConsensusContext(genesisTime time.Time) *Context
 ```
 
-
+NewConsensusContext builds a [Context](<#Context>) anchored at genesisTime, with the ticker interval derived from the consensus config: \`BlockTime × NodeCount\` seconds per tick \(the wall\-clock duration of one election cycle\).
 
 <a name="ElectionAlgorithm"></a>
-## type [ElectionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L22-L24>)
+## type [ElectionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L31-L36>)
 
-
+ElectionAlgorithm is the strategy interface the election manager dispatches to. The default implementation \(\[electionAlgorithm.SelectProducers\]\) is weight\-driven with a RandCount\-based promotion rule and a deterministic shuffle.
 
 ```go
 type ElectionAlgorithm interface {
+    // SelectProducers returns the ordered producer plan for one tick,
+    // derived from context.delegations. The result has exactly
+    // [Context.NodeCount] entries.
     SelectProducers(context *AlgorithmConfig) []*types.PillarDelegation
 }
 ```
 
 <a name="ElectionReader"></a>
-## type [ElectionReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L76-L81>)
+## type [ElectionReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L100-L110>)
 
-
+ElectionReader is the read surface of the election manager exposed to the points subsystem and the API layer. Embeds [common.Ticker](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Ticker>) so consumers can convert times ↔ ticks against the same interval the manager uses.
 
 ```go
 type ElectionReader interface {
     common.Ticker
+    // ElectionByTime returns the election covering t, or
+    // [ErrElectionBeforeGenesis] when t predates the chain.
     ElectionByTime(t time.Time) (*electionResult, error)
+    // ElectionByTick returns the election for the supplied tick number.
     ElectionByTick(tick uint64) (*electionResult, error)
+    // DelegationsByTick returns the per-pillar delegation snapshot used
+    // to compute the election for tick.
     DelegationsByTick(tick uint64) ([]*types.PillarDelegationDetail, error)
 }
 ```
 
 <a name="EventListener"></a>
-## type [EventListener](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L23-L25>)
+## type [EventListener](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L36-L41>)
 
-
+EventListener is the contract a subsystem implements to react to \[ProducerEvent\]s. The pillar registers one to learn when it has been elected.
 
 ```go
 type EventListener interface {
+    // NewProducerEvent is called once per tick the consensus layer
+    // observes; the producer's coinbase decides whether the listener
+    // should act on the event.
     NewProducerEvent(ProducerEvent)
 }
 ```
 
 <a name="EventManager"></a>
-## type [EventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L27-L30>)
+## type [EventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L44-L51>)
 
-
+EventManager is the registration surface for \[EventListener\]s.
 
 ```go
 type EventManager interface {
+    // Register adds callback to the broadcast list. Idempotent on
+    // pointer equality is the caller's responsibility.
     Register(callback EventListener)
+    // UnRegister removes callback (by pointer equality) from the
+    // broadcast list. No-op if not registered.
     UnRegister(callback EventListener)
 }
 ```
 
 <a name="Points"></a>
-## type [Points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L13-L18>)
+## type [Points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L17-L25>)
 
-
+Points is the per\-pillar performance subsystem. It tracks two granularities — period \(one election cycle\) and epoch \(24h by default\) — and pre\-computes both as new momentums arrive so RPC callers see hot data.
 
 ```go
 type Points interface {
     // MomentumEventListener is used to precompute points as momentums come, so API calls have hot data
     chain.MomentumEventListener
+    // GetPeriodPoints returns the per-period reader.
     GetPeriodPoints() PointsReader
+    // GetEpochPoints returns the per-epoch reader (a compounded view
+    // over period points).
     GetEpochPoints() PointsReader
 }
 ```
 
 <a name="newPoints"></a>
-### func [newPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L30>)
+### func [newPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L44>)
 
 ```go
 func newPoints(electionReader ElectionReader, epochTicker common.Ticker, ch chain.Chain, db *storage.DB) Points
 ```
 
-
+newPoints wires period and epoch readers and re\-derives the completion cursors via a binary\-probe scan of the storage layer. The probe lets the consensus layer pick up where it left off after a restart without re\-walking every committed period.
 
 <a name="PointsReader"></a>
-## type [PointsReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L107-L111>)
+## type [PointsReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L132-L137>)
 
-PointsReader can read pillar statistics of epoch or period
+PointsReader can read pillar statistics of epoch or period.
 
 ```go
 type PointsReader interface {
     common.Ticker
-    // Returns nil, nil for points which are in the future
+    // GetPoint returns the [storage.Point] for tick. Returns nil, nil
+    // for points that are still in the future.
     GetPoint(tick uint64) (*storage.Point, error)
 }
 ```
 
 <a name="newCompoundPoints"></a>
-### func [newCompoundPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L113>)
+### func [newCompoundPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L146>)
 
 ```go
 func newCompoundPoints(lower PointsReader, chainTicker ChainTicker, db *storage.DB, prefix byte) PointsReader
 ```
 
+newCompoundPoints constructs a [PointsReader](<#PointsReader>) that aggregates a finer\-grained reader \(lower\) into the chainTicker's ticks. Used to roll period points up into epoch points.
 
+Panics on a multiplier mismatch — the caller is responsible for passing a chainTicker whose tick is a whole multiple of the lower reader's tick.
 
 <a name="newPeriodPoints"></a>
-### func [newPeriodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L225>)
+### func [newPeriodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L276>)
 
 ```go
 func newPeriodPoints(electionReader ElectionReader, ticker ChainTicker, db *storage.DB) PointsReader
 ```
 
-
+newPeriodPoints wires a \[periodPoints\] reader.
 
 <a name="ProducerEvent"></a>
-## type [ProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L16-L21>)
+## type [ProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L26-L31>)
 
-
+ProducerEvent is the per\-tick signal the consensus layer broadcasts to subscribers \(notably the [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) producer\). It names the elected pillar's address \(and display name\) and the wall\-clock window the producer is expected to operate in.
 
 ```go
 type ProducerEvent struct {
@@ -377,29 +449,32 @@ type ProducerEvent struct {
 ```
 
 <a name="generateProducers"></a>
-### func [generateProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L38>)
+### func [generateProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L51>)
 
 ```go
 func generateProducers(info *Context, tick uint64, producerAddresses []types.Address) []*ProducerEvent
 ```
 
-
+generateProducers materializes one [ProducerEvent](<#ProducerEvent>) per producer address, slicing the tick's wall\-clock window into BlockTime\-second sub\-windows. Returns nil if the producer\-address count does not match the configured NodeCount.
 
 <a name="Verifier"></a>
-## type [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L12-L14>)
+## type [Verifier](<https://github.com/zenon-network/go-zenon/blob/master/consensus/interfaces.go#L15-L20>)
 
-Verifier is the interface that can verify block consensus.
+Verifier is the interface that can verify block consensus. The [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) consumes it to confirm the producer of an inbound momentum is the pillar elected for that momentum's tick.
 
 ```go
 type Verifier interface {
+    // VerifyMomentumProducer reports whether momentum.Producer matches
+    // the pillar elected for momentum.Timestamp. Returns false (and no
+    // error) on a clean mismatch.
     VerifyMomentumProducer(momentum *nom.Momentum) (bool, error)
 }
 ```
 
 <a name="chainTicker"></a>
-## type [chainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L19-L22>)
+## type [chainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L36-L39>)
 
-
+chainTicker is the [ChainTicker](<#ChainTicker>) implementation: a [common.Ticker](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Ticker>) glued to a [chain.Chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Chain>) so it can read the live frontier.
 
 ```go
 type chainTicker struct {
@@ -409,54 +484,58 @@ type chainTicker struct {
 ```
 
 <a name="newChainTicker"></a>
-### func [newChainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L115>)
+### func [newChainTicker](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L148>)
 
 ```go
 func newChainTicker(chain chain.Chain, ticker common.Ticker) *chainTicker
 ```
 
-
+newChainTicker wires a \[chainTicker\] from chain and ticker.
 
 <a name="chainTicker.GetContent"></a>
-### func \(\*chainTicker\) [GetContent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L66>)
+### func \(\*chainTicker\) [GetContent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L98>)
 
 ```go
 func (ct *chainTicker) GetContent(tick uint64) ([]*nom.Momentum, error)
 ```
 
+GetContent returns every momentum committed within tick's wall\-clock window, in ascending order. Returns an empty slice when no blocks fall in the window \(off\-line tick\) or when start and end resolve to the same height.
 
+Tick 0 anchors at the genesis momentum; later ticks walk between the previous tick's end\-block and this tick's end\-block.
 
 <a name="chainTicker.GetEndBlock"></a>
-### func \(\*chainTicker\) [GetEndBlock](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L51>)
+### func \(\*chainTicker\) [GetEndBlock](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L76>)
 
 ```go
 func (ct *chainTicker) GetEndBlock(tick uint64) (*nom.Momentum, error)
 ```
 
-Returns the head of the previous tick group
+GetEndBlock returns the head of the tick group — the most recent momentum strictly before tick's end time.
+
+Returns the head of the previous tick group.
 
 <a name="chainTicker.HasStarted"></a>
-### func \(\*chainTicker\) [HasStarted](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L37>)
+### func \(\*chainTicker\) [HasStarted](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L59>)
 
 ```go
 func (ct *chainTicker) HasStarted(tick uint64) bool
 ```
 
-
+HasStarted reports whether the chain frontier has reached or passed tick's start time. Panics on overflow as in \[IsFinished\].
 
 <a name="chainTicker.IsFinished"></a>
-### func \(\*chainTicker\) [IsFinished](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L24>)
+### func \(\*chainTicker\) [IsFinished](<https://github.com/zenon-network/go-zenon/blob/master/consensus/chain_ticker.go#L44>)
 
 ```go
 func (ct *chainTicker) IsFinished(tick uint64) bool
 ```
 
-
+IsFinished reports whether the chain frontier has reached or passed tick's end time. Panics on tick values close to math.MaxUint64 — the caller has almost certainly hit an arithmetic overflow.
 
 <a name="compoundPoints"></a>
-## type [compoundPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L129-L138>)
+## type [compoundPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L165-L175>)
 
-
+compoundPoints is the [PointsReader](<#PointsReader>) for the epoch granularity. It generates an epoch point by aggregating the period points contained within the epoch's window.
 
 ```go
 type compoundPoints struct {
@@ -465,34 +544,35 @@ type compoundPoints struct {
     log    common.Logger
     prefix byte
 
-    // number of lower ticks that make a current tick
+    // lowerMultiplier is the number of lower ticks that make a current
+    // tick (e.g., periods per epoch).
     lowerMultiplier uint64
     lower           PointsReader
 }
 ```
 
 <a name="compoundPoints.GetPoint"></a>
-### func \(\*compoundPoints\) [GetPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L140>)
+### func \(\*compoundPoints\) [GetPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L182>)
 
 ```go
 func (compound *compoundPoints) GetPoint(tick uint64) (*storage.Point, error)
 ```
 
-
+GetPoint resolves the point for tick: serves from the database cache when its EndHash still matches the live chain, otherwise regenerates from the lower \(per\-period\) reader. Persists the regenerated point only when the tick is finished, so partially\-built epoch points stay out of the persistent layer.
 
 <a name="compoundPoints.generatePointFromLower"></a>
-### func \(\*compoundPoints\) [generatePointFromLower](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L181>)
+### func \(\*compoundPoints\) [generatePointFromLower](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L228>)
 
 ```go
 func (compound *compoundPoints) generatePointFromLower(tick uint64, endBlock *nom.Momentum) (*storage.Point, error)
 ```
 
-
+generatePointFromLower aggregates lowerMultiplier per\-period points into one compound point: stake\-weighted block counts come from LeftAppend on each lower point, then the per\-pillar weight is averaged across the periods that contributed.
 
 <a name="consensus"></a>
-## type [consensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L23-L35>)
+## type [consensus](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L29-L41>)
 
-
+consensus is the [Consensus](<#Consensus>) implementation. It composes the election manager, the points subsystem, the producer\-event manager, and the tick scheduler into a single subsystem.
 
 ```go
 type consensus struct {
@@ -511,108 +591,110 @@ type consensus struct {
 ```
 
 <a name="consensus.FixedPillarReader"></a>
-### func \(\*consensus\) [FixedPillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L44>)
+### func \(\*consensus\) [FixedPillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L56>)
 
 ```go
 func (cs *consensus) FixedPillarReader(identifier types.HashHeight) api.PillarReader
 ```
 
-
+FixedPillarReader returns an [api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>) pinned at identifier. Used by RPC queries that need a stable historical view.
 
 <a name="consensus.FrontierPillarReader"></a>
-### func \(\*consensus\) [FrontierPillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L37>)
+### func \(\*consensus\) [FrontierPillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L46>)
 
 ```go
 func (cs *consensus) FrontierPillarReader() api.PillarReader
 ```
 
-
+FrontierPillarReader returns an [api.PillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/api/#PillarReader>) pinned at the chain frontier. The returned reader serves the live election \+ points view that the RPC layer surfaces to clients.
 
 <a name="consensus.GetMomentumProducer"></a>
-### func \(\*consensus\) [GetMomentumProducer](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L73>)
+### func \(\*consensus\) [GetMomentumProducer](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L93>)
 
 ```go
 func (cs *consensus) GetMomentumProducer(timestamp time.Time) (*types.Address, error)
 ```
 
-
+GetMomentumProducer returns the pillar elected to produce the momentum at timestamp. Returns an error if no election covers timestamp.
 
 <a name="consensus.Init"></a>
-### func \(\*consensus\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L96>)
+### func \(\*consensus\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L122>)
 
 ```go
 func (cs *consensus) Init() error
 ```
 
-
+Init is currently a no\-op. Reserved for future use; returned for interface symmetry.
 
 <a name="consensus.Register"></a>
-### func \(consensus\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L26>)
+### func \(consensus\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L40>)
 
 ```go
 func (em consensus) Register(listener EventListener)
 ```
 
-
+Register appends listener to the broadcast list. Same\-pointer listeners may be registered multiple times — caller is responsible for idempotency.
 
 <a name="consensus.Start"></a>
-### func \(\*consensus\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L99>)
+### func \(\*consensus\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L129>)
 
 ```go
 func (cs *consensus) Start() error
 ```
 
-
+Start launches the tick scheduler goroutine \(unless \`testing\` is set\) and registers the consensus state listeners with the chain so that points and election cache stay current as new momentums arrive.
 
 <a name="consensus.Stop"></a>
-### func \(\*consensus\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L117>)
+### func \(\*consensus\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L150>)
 
 ```go
 func (cs *consensus) Stop() error
 ```
 
-
+Stop unregisters listeners and signals the scheduler goroutine to exit, then waits for it to return.
 
 <a name="consensus.UnRegister"></a>
-### func \(consensus\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L32>)
+### func \(consensus\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L49>)
 
 ```go
 func (em consensus) UnRegister(listener EventListener)
 ```
 
-
+UnRegister removes the first occurrence of listener \(by pointer equality\) from the broadcast list. No\-op if not registered.
 
 <a name="consensus.VerifyMomentumProducer"></a>
-### func \(\*consensus\) [VerifyMomentumProducer](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L85>)
+### func \(\*consensus\) [VerifyMomentumProducer](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L109>)
 
 ```go
 func (cs *consensus) VerifyMomentumProducer(momentum *nom.Momentum) (bool, error)
 ```
 
-
+VerifyMomentumProducer reports whether momentum.Producer is the elected pillar for momentum.Timestamp. The verifier consumes this to gate momentum acceptance.
 
 <a name="consensus.broadcastNewProducerEvent"></a>
-### func \(consensus\) [broadcastNewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L18>)
+### func \(consensus\) [broadcastNewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L28>)
 
 ```go
 func (em consensus) broadcastNewProducerEvent(event ProducerEvent)
 ```
 
-
+broadcastNewProducerEvent invokes \[EventListener.NewProducerEvent\] on every registered listener in order. Called by the tick scheduler.
 
 <a name="consensus.work"></a>
-### func \(\*consensus\) [work](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L130>)
+### func \(\*consensus\) [work](<https://github.com/zenon-network/go-zenon/blob/master/consensus/consensus.go#L168>)
 
 ```go
 func (cs *consensus) work()
 ```
 
-work runs in a different go routine and broadcasts ProducerEvent to all modules which called Register on EventManager
+work is the per\-tick scheduler. Runs in its own goroutine: waits for the genesis timestamp, then loops over elections, sleeping until each elected producer's start time and broadcasting a [ProducerEvent](<#ProducerEvent>).
+
+work runs in a different go routine and broadcasts ProducerEvent to all modules which called Register on EventManager.
 
 <a name="electionAlgorithm"></a>
-## type [electionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L26-L28>)
+## type [electionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L39-L41>)
 
-
+electionAlgorithm is the canonical [ElectionAlgorithm](<#ElectionAlgorithm>) implementation.
 
 ```go
 type electionAlgorithm struct {
@@ -621,63 +703,71 @@ type electionAlgorithm struct {
 ```
 
 <a name="NewElectionAlgorithm"></a>
-### func [NewElectionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L30>)
+### func [NewElectionAlgorithm](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L46>)
 
 ```go
 func NewElectionAlgorithm(group *Context) *electionAlgorithm
 ```
 
-
+NewElectionAlgorithm wires an \[electionAlgorithm\] over the consensus context. The context supplies NodeCount, RandCount, and the ticker used for time conversion.
 
 <a name="electionAlgorithm.SelectProducers"></a>
-### func \(\*electionAlgorithm\) [SelectProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L42>)
+### func \(\*electionAlgorithm\) [SelectProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L68>)
 
 ```go
 func (ea *electionAlgorithm) SelectProducers(context *AlgorithmConfig) []*types.PillarDelegation
 ```
 
-
+SelectProducers runs the three\-step algorithm: split candidates into the top\-NodeCount group A and the leftovers group B \(\[electionAlgorithm.filterByWeight\]\); promote a configurable number \(RandCount\) from B in place of randomly\-dropped A entries \(\[electionAlgorithm.filterRandom\]\); deterministically shuffle the resulting NodeCount selection \(\[electionAlgorithm.shuffleOrder\]\).
 
 <a name="electionAlgorithm.filterByWeight"></a>
-### func \(\*electionAlgorithm\) [filterByWeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L65>)
+### func \(\*electionAlgorithm\) [filterByWeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L99>)
 
 ```go
 func (ea *electionAlgorithm) filterByWeight(context *AlgorithmConfig) (groupA []*types.PillarDelegation, groupB []*types.PillarDelegation)
 ```
 
-Splits into 2 groups
+filterByWeight partitions context.delegations by stake weight: the top NodeCount entries become group A, the rest group B. When fewer than NodeCount candidates exist all of them are placed in group A and group B is empty.
+
+Splits into 2 groups.
 
 <a name="electionAlgorithm.filterRandom"></a>
-### func \(\*electionAlgorithm\) [filterRandom](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L78>)
+### func \(\*electionAlgorithm\) [filterRandom](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L121>)
 
 ```go
 func (ea *electionAlgorithm) filterRandom(groupA, groupB []*types.PillarDelegation, context *AlgorithmConfig) []*types.PillarDelegation
 ```
 
-Applies RandCount rules
+filterRandom promotes pillars per the RandCount rule. When group A has fewer than NodeCount entries the round is filled with permutations of group A \(so the slate stays full even if pillars are off\-line\). Otherwise, the top \(NodeCount \- RandCount\) entries from group A are kept, and RandCount slots are awarded by uniform random pick from a pool of \(group B \+ the displaced group\-A entries\) — so pillars below the top NodeCount\-by\-weight line still have a chance to produce.
+
+Applies RandCount rules.
 
 <a name="electionAlgorithm.findSeed"></a>
-### func \(\*electionAlgorithm\) [findSeed](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L38>)
+### func \(\*electionAlgorithm\) [findSeed](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L58>)
 
 ```go
 func (ea *electionAlgorithm) findSeed(context *AlgorithmConfig) int64
 ```
 
-Generates a deterministic seed based on the context formula depends on seed, weights and momentumHeight
+findSeed produces the deterministic random seed used by every algorithm step for a given context. The seed depends solely on the proof\-block height so all honest nodes derive the same shuffle.
+
+Generates a deterministic seed based on the context. Formula depends on seed, weights and momentumHeight.
 
 <a name="electionAlgorithm.shuffleOrder"></a>
-### func \(\*electionAlgorithm\) [shuffleOrder](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L53>)
+### func \(\*electionAlgorithm\) [shuffleOrder](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election_algorithm.go#L82>)
 
 ```go
 func (ea *electionAlgorithm) shuffleOrder(producers []*types.PillarDelegation, context *AlgorithmConfig) (result []*types.PillarDelegation)
 ```
 
-Shuffles the order in which momentums are produced, based on seed
+shuffleOrder permutes producers using a seed derived from the proof\-block height so that every node arrives at the same order.
+
+Shuffles the order in which momentums are produced, based on seed.
 
 <a name="electionManager"></a>
-## type [electionManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L68-L75>)
+## type [electionManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L87-L94>)
 
-
+electionManager runs the election algorithm. It caches results per proof\-block hash via [storage.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#DB>) so repeated lookups for the same tick do not re\-derive the producer set.
 
 ```go
 type electionManager struct {
@@ -691,81 +781,81 @@ type electionManager struct {
 ```
 
 <a name="newElectionManager"></a>
-### func [newElectionManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L214>)
+### func [newElectionManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L271>)
 
 ```go
 func newElectionManager(chain chain.Chain, db *storage.DB) *electionManager
 ```
 
-
+newElectionManager wires an \[electionManager\] over chain and db. The genesis timestamp is derived from chain.
 
 <a name="electionManager.DelegationsByTick"></a>
-### func \(\*electionManager\) [DelegationsByTick](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L128>)
+### func \(\*electionManager\) [DelegationsByTick](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L166>)
 
 ```go
 func (em *electionManager) DelegationsByTick(tick uint64) ([]*types.PillarDelegationDetail, error)
 ```
 
-
+DelegationsByTick returns the delegation snapshot used to elect tick — the per\-backer breakdown sourced from the proof block.
 
 <a name="electionManager.DeleteMomentum"></a>
-### func \(\*electionManager\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L209>)
+### func \(\*electionManager\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L264>)
 
 ```go
 func (em *electionManager) DeleteMomentum(*nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum is a no\-op: the election cache is keyed by the proof block's hash, so a rolled\-back momentum invalidates its cache entry implicitly \(subsequent lookups will miss and recompute\).
 
 <a name="electionManager.ElectionByTick"></a>
-### func \(\*electionManager\) [ElectionByTick](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L90>)
+### func \(\*electionManager\) [ElectionByTick](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L125>)
 
 ```go
 func (em *electionManager) ElectionByTick(tick uint64) (*electionResult, error)
 ```
 
-
+ElectionByTick computes \(or fetches from cache\) the election for tick: locates the proof block, runs the election algorithm against the delegation snapshot at that block, and returns the populated \[electionResult\].
 
 <a name="electionManager.ElectionByTime"></a>
-### func \(\*electionManager\) [ElectionByTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L83>)
+### func \(\*electionManager\) [ElectionByTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L113>)
 
 ```go
 func (em *electionManager) ElectionByTime(t time.Time) (*electionResult, error)
 ```
 
-
+ElectionByTime resolves t to a tick and delegates to ElectionByTick.
 
 <a name="electionManager.InsertMomentum"></a>
-### func \(\*electionManager\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L186>)
+### func \(\*electionManager\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L237>)
 
 ```go
 func (em *electionManager) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-InsertMomentum pre\-computes electionData when a tick is completed
+InsertMomentum implements [chain.MomentumEventListener](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#MomentumEventListener>): when a new momentum is committed and its tick has just completed, pre\-compute the next election so the scheduler does not pay the cost on the hot path.
 
 <a name="electionManager.genProofTime"></a>
-### func \(\*electionManager\) [genProofTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L139>)
+### func \(\*electionManager\) [genProofTime](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L183>)
 
 ```go
 func (em *electionManager) genProofTime(tick uint64) time.Time
 ```
 
-
+genProofTime computes the proof timestamp for tick: the end time of tick\-2 \(so producers cannot influence their own elections by reordering blocks within the current or previous tick\). Ticks 0 and 1 use a tiny offset past genesis so the proof block resolves to genesis itself.
 
 <a name="electionManager.generateProducers"></a>
-### func \(\*electionManager\) [generateProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L147>)
+### func \(\*electionManager\) [generateProducers](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L195>)
 
 ```go
 func (em *electionManager) generateProducers(proofBlock *nom.Momentum) (*storage.ElectionData, error)
 ```
 
-
+generateProducers caches and returns the [storage.ElectionData](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#ElectionData>) for the supplied proofBlock. On cache miss, it computes the delegations, runs the [ElectionAlgorithm](<#ElectionAlgorithm>), and persists the result keyed by the proof block's hash.
 
 <a name="electionResult"></a>
-## type [electionResult](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L30-L36>)
+## type [electionResult](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L39-L45>)
 
-
+electionResult captures one tick's election: the wall\-clock window the tick covers, the ordered producer plan \(one [ProducerEvent](<#ProducerEvent>) per block within the tick\), the delegations snapshot the election was computed against, and the tick number itself.
 
 ```go
 type electionResult struct {
@@ -778,18 +868,20 @@ type electionResult struct {
 ```
 
 <a name="genElectionResult"></a>
-### func [genElectionResult](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L58>)
+### func [genElectionResult](<https://github.com/zenon-network/go-zenon/blob/master/consensus/election.go#L74>)
 
 ```go
 func genElectionResult(info *Context, tick uint64, data *storage.ElectionData) *electionResult
 ```
 
-
+genElectionResult assembles an \[electionResult\] from the persisted [storage.ElectionData](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#ElectionData>) for the supplied tick.
 
 <a name="eventManager"></a>
-## type [eventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L7-L10>)
+## type [eventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L14-L17>)
 
+eventManager is the [EventManager](<#EventManager>) implementation: a dynamic list of \[EventListener\]s that the consensus tick scheduler broadcasts \[ProducerEvent\]s to.
 
+Concurrency: every public method takes changes; the manager is safe for concurrent use. Listener callbacks run synchronously on the scheduler's goroutine — heavy work should be deferred.
 
 ```go
 type eventManager struct {
@@ -799,45 +891,45 @@ type eventManager struct {
 ```
 
 <a name="newEventManager"></a>
-### func [newEventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L12>)
+### func [newEventManager](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L20>)
 
 ```go
 func newEventManager() *eventManager
 ```
 
-
+newEventManager returns a fresh manager with no listeners.
 
 <a name="eventManager.Register"></a>
-### func \(\*eventManager\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L26>)
+### func \(\*eventManager\) [Register](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L40>)
 
 ```go
 func (em *eventManager) Register(listener EventListener)
 ```
 
-
+Register appends listener to the broadcast list. Same\-pointer listeners may be registered multiple times — caller is responsible for idempotency.
 
 <a name="eventManager.UnRegister"></a>
-### func \(\*eventManager\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L32>)
+### func \(\*eventManager\) [UnRegister](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L49>)
 
 ```go
 func (em *eventManager) UnRegister(listener EventListener)
 ```
 
-
+UnRegister removes the first occurrence of listener \(by pointer equality\) from the broadcast list. No\-op if not registered.
 
 <a name="eventManager.broadcastNewProducerEvent"></a>
-### func \(\*eventManager\) [broadcastNewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L18>)
+### func \(\*eventManager\) [broadcastNewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/consensus/events.go#L28>)
 
 ```go
 func (em *eventManager) broadcastNewProducerEvent(event ProducerEvent)
 ```
 
-
+broadcastNewProducerEvent invokes \[EventListener.NewProducerEvent\] on every registered listener in order. Called by the tick scheduler.
 
 <a name="periodPoints"></a>
-## type [periodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L217-L223>)
+## type [periodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L267-L273>)
 
-
+periodPoints is the [PointsReader](<#PointsReader>) for the period granularity — one election cycle per tick. It generates points from the live chain using the election results plus the actual block content.
 
 ```go
 type periodPoints struct {
@@ -850,27 +942,27 @@ type periodPoints struct {
 ```
 
 <a name="periodPoints.GetPoint"></a>
-### func \(\*periodPoints\) [GetPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L234>)
+### func \(\*periodPoints\) [GetPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L290>)
 
 ```go
 func (period *periodPoints) GetPoint(tick uint64) (*storage.Point, error)
 ```
 
-
+GetPoint returns the [storage.Point](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#Point>) for tick: serves from the database cache when its EndHash still matches the live chain, otherwise regenerates from the chain content via \[periodPoints.generatePointFromChain\]. Persists the regenerated point only when the tick is finished.
 
 <a name="periodPoints.generatePointFromChain"></a>
-### func \(\*periodPoints\) [generatePointFromChain](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L275>)
+### func \(\*periodPoints\) [generatePointFromChain](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L337>)
 
 ```go
 func (period *periodPoints) generatePointFromChain(tick uint64) (*storage.Point, error)
 ```
 
-
+generatePointFromChain builds a per\-period point from scratch: reads the election result for the tick, walks every momentum in the tick window to count produced\-vs\-expected blocks per pillar, and folds in the delegation weights. The per\-pillar weight is what the epoch\-level reader will later average.
 
 <a name="points"></a>
-## type [points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L20-L28>)
+## type [points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L30-L38>)
 
-
+points is the [Points](<#Points>) implementation. It owns both readers plus per\-granularity completion cursors so \[InsertMomentum\] can advance the pre\-compute frontier in one direction without reprocessing.
 
 ```go
 type points struct {
@@ -885,39 +977,39 @@ type points struct {
 ```
 
 <a name="points.DeleteMomentum"></a>
-### func \(\*points\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L103>)
+### func \(\*points\) [DeleteMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L128>)
 
 ```go
 func (p *points) DeleteMomentum(*nom.DetailedMomentum)
 ```
 
-
+DeleteMomentum is a no\-op: rolled\-back momentums invalidate cached points implicitly via the EndHash check inside \[compoundPoints.GetPoint\] / \[periodPoints.GetPoint\].
 
 <a name="points.GetEpochPoints"></a>
-### func \(\*points\) [GetEpochPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L67>)
+### func \(\*points\) [GetEpochPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L84>)
 
 ```go
 func (p *points) GetEpochPoints() PointsReader
 ```
 
-
+GetEpochPoints returns the per\-epoch [PointsReader](<#PointsReader>).
 
 <a name="points.GetPeriodPoints"></a>
-### func \(\*points\) [GetPeriodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L64>)
+### func \(\*points\) [GetPeriodPoints](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L79>)
 
 ```go
 func (p *points) GetPeriodPoints() PointsReader
 ```
 
-
+GetPeriodPoints returns the per\-period [PointsReader](<#PointsReader>).
 
 <a name="points.InsertMomentum"></a>
-### func \(\*points\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L71>)
+### func \(\*points\) [InsertMomentum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L92>)
 
 ```go
 func (p *points) InsertMomentum(detailed *nom.DetailedMomentum)
 ```
 
-
+InsertMomentum advances the pre\-compute cursors when a new momentum arrives: every period and epoch tick that has now completed has its [storage.Point](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/storage/#Point>) generated and persisted, so subsequent reads do not pay the cost on the hot path.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

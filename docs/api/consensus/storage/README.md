@@ -6,13 +6,31 @@
 import "github.com/zenon-network/go-zenon/consensus/storage"
 ```
 
-Package storage persists consensus state — election results, points, epoch snapshots — to LevelDB.
+Package storage persists consensus state — election results, points, epoch snapshots — to a [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) LevelDB instance with hot LRU caches in front.
 
 ### Overview
 
-Election outputs and per\-pillar points are encoded as protobuf messages and stored alongside the chain database. storage exposes typed accessors over the raw protobuf records.
+storage holds two record kinds:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- ElectionData \(\[election\_data.go\]\) — cached output of one election keyed by the proof block's hash. Lets the election manager skip re\-running the algorithm on repeat lookups.
+- Point \(\[point.go\]\) — per\-tick performance summary. Comes in two granularities \(period vs epoch\) namespaced by [PrefixPeriodPoint](<#PrefixPeriodPoint>) and [PrefixEpochPoint](<#PrefixPeriodPoint>) respectively.
+
+Cache sizes are configured by the caller of [NewConsensusDB](<#NewConsensusDB>) — [github.com/zenon\\\-network/go\\\-zenon/consensus.NewConsensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#NewConsensus>) picks a size that holds roughly one week of points at the chain's configured block\-time and node\-count.
+
+### Key Concepts
+
+- DB — the storage handle. Composes a [common/db.DB](<https://pkg.go.dev/common/db/#DB>) backing store with per\-feature LRU caches.
+- Point — \`\(PrevHash, EndHash, Pillars, TotalWeight\)\`. The hash pair brackets the momentum range the point covers; the pillars map and total weight are aggregable via [Point.LeftAppend](<#Point.LeftAppend>).
+- ElectionData — \`\(Producers, Delegations\)\`. Producers is the ordered slate; delegations is the snapshot the slate was elected against.
+
+### Generated Files
+
+Two protobuf\-generated files \(\`election\_data.pb.go\`, \`point.pb.go\`\) implement the wire format. They are not manually documented and carry the standard generated\-file marker.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) — the only consumer.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — backing versioned LevelDB layer.
 
 ## Index
 
@@ -88,14 +106,19 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="PrefixPeriodPoint"></a>
+<a name="PrefixPeriodPoint"></a>Single\-byte key prefixes used by the consensus storage. Together with the granularity\-specific point caches they let the consensus layer keep period and epoch points \(and election results\) cleanly partitioned in a single LevelDB instance.
 
 ```go
 const (
+    // PrefixPeriodPoint namespaces per-period [Point]s.
     PrefixPeriodPoint = byte(0)
-    PrefixEpochPoint  = byte(1)
-    // Total number of possible points
-    NumPointTypes        = 2
+    // PrefixEpochPoint namespaces per-epoch [Point]s.
+    PrefixEpochPoint = byte(1)
+    // NumPointTypes is the count of point granularities — currently
+    // period and epoch. Used to size the per-prefix cache slice in [DB].
+    NumPointTypes = 2
+    // PrefixElectionResult namespaces cached [ElectionData] keyed by
+    // proof-block hash.
     PrefixElectionResult = byte(10)
 )
 ```
@@ -273,22 +296,22 @@ var file_consensus_storage_point_proto_rawDesc = []byte{
 ```
 
 <a name="CreateElectionResultKey"></a>
-## func [CreateElectionResultKey](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L141>)
+## func [CreateElectionResultKey](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L178>)
 
 ```go
 func CreateElectionResultKey(hash types.Hash) []byte
 ```
 
-
+CreateElectionResultKey returns the database key holding the [ElectionData](<#ElectionData>) for the supplied proof\-block hash: \`PrefixElectionResult || hash\`.
 
 <a name="CreatePointKey"></a>
-## func [CreatePointKey](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L147>)
+## func [CreatePointKey](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L187>)
 
 ```go
 func CreatePointKey(prefix byte, height uint64) []byte
 ```
 
-
+CreatePointKey returns the database key holding the [Point](<#Point>) at \(prefix, height\): \`prefix || big\-endian uint64\`.
 
 <a name="file_consensus_storage_election_data_proto_init"></a>
 ## func [file\\\_consensus\\\_storage\\\_election\\\_data\\\_proto\\\_init](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.pb.go#L195>)
@@ -435,9 +458,9 @@ func (x *ConsensusPointProto) String() string
 
 
 <a name="DB"></a>
-## type [DB](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L22-L26>)
+## type [DB](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L35-L39>)
 
-
+DB is the consensus storage handle: a [common/db.DB](<https://pkg.go.dev/common/db/#DB>) backing store plus per\-feature LRU caches for hot reads. The cache sizes are chosen so that \~1 week of points fit in memory at the configured block\-time and node\-count.
 
 ```go
 type DB struct {
@@ -448,63 +471,63 @@ type DB struct {
 ```
 
 <a name="NewConsensusDB"></a>
-### func [NewConsensusDB](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L28>)
+### func [NewConsensusDB](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L45>)
 
 ```go
 func NewConsensusDB(db db.DB, electionCacheSize int, pointCacheSize int) *DB
 ```
 
-
+NewConsensusDB wires a [DB](<#DB>) over db with separate LRU caches for election results and per\-prefix points. Panics on cache\-construction failure — the LRU library only fails on invalid sizes, which would be a programmer error here.
 
 <a name="DB.DeletePointByHeight"></a>
-### func \(\*DB\) [DeletePointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L78>)
+### func \(\*DB\) [DeletePointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L101>)
 
 ```go
 func (db *DB) DeletePointByHeight(prefix byte, height uint64) error
 ```
 
-
+DeletePointByHeight evicts the cached point and removes the underlying database entry. Used by \[points\] when a stale point's EndHash no longer matches the live chain.
 
 <a name="DB.GetElectionResultByHash"></a>
-### func \(\*DB\) [GetElectionResultByHash](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L98>)
+### func \(\*DB\) [GetElectionResultByHash](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L127>)
 
 ```go
 func (db *DB) GetElectionResultByHash(hash types.Hash) (*ElectionData, error)
 ```
 
-ElectionData
+GetElectionResultByHash returns the cached [ElectionData](<#ElectionData>) for the supplied proof\-block hash, loading from disk on cache miss. Returns \(nil, nil\) when no result has been cached for hash.
 
 <a name="DB.GetPointByHeight"></a>
-### func \(\*DB\) [GetPointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L50>)
+### func \(\*DB\) [GetPointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L69>)
 
 ```go
 func (db *DB) GetPointByHeight(prefix byte, height uint64) (*Point, error)
 ```
 
-Point
+GetPointByHeight returns the cached [Point](<#Point>) at \(prefix, height\), loading from disk on cache miss. Returns \(nil, nil\) when no entry exists at that key.
 
 <a name="DB.StoreElectionResultByHash"></a>
-### func \(\*DB\) [StoreElectionResultByHash](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L126>)
+### func \(\*DB\) [StoreElectionResultByHash](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L160>)
 
 ```go
 func (db *DB) StoreElectionResultByHash(hash types.Hash, data *ElectionData) error
 ```
 
-
+StoreElectionResultByHash persists data keyed by hash and updates the cache. Used by \[electionManager.generateProducers\] to memoize the algorithm output so subsequent ElectionByTick calls do not re\-run the shuffle.
 
 <a name="DB.StorePointByHeight"></a>
-### func \(\*DB\) [StorePointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L82>)
+### func \(\*DB\) [StorePointByHeight](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/db.go#L109>)
 
 ```go
 func (db *DB) StorePointByHeight(prefix byte, height uint64, p *Point) error
 ```
 
-
+StorePointByHeight persists p under \(prefix, height\) and updates the cache. Caller is responsible for only persisting points whose tick is finished — partial points are kept in memory only.
 
 <a name="ElectionData"></a>
-## type [ElectionData](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L11-L14>)
+## type [ElectionData](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L15-L18>)
 
-
+ElectionData is the cached output of one election: the ordered slate of producer addresses for a tick plus the delegation snapshot they were elected against. The tick is keyed by proof\-block hash, not by tick number — see [DB.GetElectionResultByHash](<#DB.GetElectionResultByHash>).
 
 ```go
 type ElectionData struct {
@@ -514,31 +537,31 @@ type ElectionData struct {
 ```
 
 <a name="GenElectionData"></a>
-### func [GenElectionData](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L68>)
+### func [GenElectionData](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L79>)
 
 ```go
 func GenElectionData(producers []types.Address, delegations []*types.PillarDelegation) *ElectionData
 ```
 
-
+GenElectionData builds an [ElectionData](<#ElectionData>) from the supplied producer order and delegation snapshot.
 
 <a name="ElectionData.Marshal"></a>
-### func \(\*ElectionData\) [Marshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L16>)
+### func \(\*ElectionData\) [Marshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L22>)
 
 ```go
 func (d *ElectionData) Marshal() ([]byte, error)
 ```
 
-
+Marshal encodes d as protobuf bytes via the auto\-generated [ElectionDataProto](<#ElectionDataProto>) \(defined in the .pb.go sibling file\).
 
 <a name="ElectionData.Unmarshal"></a>
-### func \(\*ElectionData\) [Unmarshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L37>)
+### func \(\*ElectionData\) [Unmarshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.go#L46>)
 
 ```go
 func (d *ElectionData) Unmarshal(buf []byte) error
 ```
 
-
+Unmarshal decodes buf back into d. Returns an error on protobuf shape mismatch or on an [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>) of the wrong length.
 
 <a name="ElectionDataProto"></a>
 ## type [ElectionDataProto](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/election_data.pb.go#L86-L93>)
@@ -709,15 +732,17 @@ func (x *PillarDelegationProto) String() string
 
 
 <a name="Point"></a>
-## type [Point](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L36-L43>)
+## type [Point](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L54-L63>)
 
-
+Point is the per\-tick performance snapshot: the \(prev, end\) hash pair bracketing the chain range it covers, every pillar's [ProducerDetail](<#ProducerDetail>), and the cumulative weight of the elected slate.
 
 ```go
 type Point struct {
-    // Last hash that is not in this point
+    // PrevHash is the last hash that is not in this point — the
+    // momentum immediately before the point's window.
     PrevHash types.Hash
-    // Last hash that is in this point
+    // EndHash is the last hash that is in this point — the momentum
+    // at the end of the window.
     EndHash     types.Hash
     Pillars     map[string]*ProducerDetail
     TotalWeight *big.Int
@@ -725,63 +750,63 @@ type Point struct {
 ```
 
 <a name="NewEmptyPoint"></a>
-### func [NewEmptyPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L121>)
+### func [NewEmptyPoint](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L157>)
 
 ```go
 func NewEmptyPoint(proofHash types.Hash) *Point
 ```
 
-
+NewEmptyPoint returns a fresh point pinned at proofHash on both sides — used as the seed to which per\-block contributions are appended while building a per\-period or per\-epoch point.
 
 <a name="Point.IsEmpty"></a>
-### func \(\*Point\) [IsEmpty](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L117>)
+### func \(\*Point\) [IsEmpty](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L150>)
 
 ```go
 func (p *Point) IsEmpty() bool
 ```
 
-
+IsEmpty reports whether p covers an empty chain range \(PrevHash == EndHash, e.g., a tick with no blocks\).
 
 <a name="Point.Json"></a>
-### func \(\*Point\) [Json](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L45>)
+### func \(\*Point\) [Json](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L67>)
 
 ```go
 func (p *Point) Json() string
 ```
 
-
+Json renders p as JSON for ad\-hoc inspection. Errors silently produce an empty string.
 
 <a name="Point.LeftAppend"></a>
-### func \(\*Point\) [LeftAppend](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L98>)
+### func \(\*Point\) [LeftAppend](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L128>)
 
 ```go
 func (p *Point) LeftAppend(left *Point) error
 ```
 
-
+LeftAppend extends p backwards to also cover left's window. Requires \`left.EndHash == p.PrevHash\` \(the windows must abut\); returns an error otherwise. After the merge p.PrevHash points at left.PrevHash and pillar counts/weights are summed.
 
 <a name="Point.Marshal"></a>
-### func \(\*Point\) [Marshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L49>)
+### func \(\*Point\) [Marshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L73>)
 
 ```go
 func (p *Point) Marshal() ([]byte, error)
 ```
 
-
+Marshal encodes p as protobuf bytes for persistence.
 
 <a name="Point.Unmarshal"></a>
-### func \(\*Point\) [Unmarshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L71>)
+### func \(\*Point\) [Unmarshal](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L97>)
 
 ```go
 func (p *Point) Unmarshal(buf []byte) error
 ```
 
-
+Unmarshal decodes buf back into p.
 
 <a name="ProducerDetail"></a>
-## type [ProducerDetail](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L13-L17>)
+## type [ProducerDetail](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L17-L21>)
 
-
+ProducerDetail is one pillar's per\-tick performance: how many blocks it was expected to produce, how many it actually produced, and its weight at the tick. Aggregated across ticks via [ProducerDetail.Merge](<#ProducerDetail.Merge>) to roll period points up into epoch points.
 
 ```go
 type ProducerDetail struct {
@@ -792,31 +817,31 @@ type ProducerDetail struct {
 ```
 
 <a name="ProducerDetail.AddNum"></a>
-### func \(\*ProducerDetail\) [AddNum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L31>)
+### func \(\*ProducerDetail\) [AddNum](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L46>)
 
 ```go
 func (detail *ProducerDetail) AddNum(ExpectedNum uint32, FactualNum uint32)
 ```
 
-
+AddNum adjusts only the produced/expected counts on detail without touching weight. Used while building a per\-period [Point](<#Point>) from the election result and the actual block content.
 
 <a name="ProducerDetail.Copy"></a>
-### func \(ProducerDetail\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L19>)
+### func \(ProducerDetail\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L26>)
 
 ```go
 func (detail ProducerDetail) Copy() *ProducerDetail
 ```
 
-
+Copy returns a deep copy of detail; weight is independently allocated so subsequent arithmetic on the copy does not affect the original.
 
 <a name="ProducerDetail.Merge"></a>
-### func \(\*ProducerDetail\) [Merge](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L26>)
+### func \(\*ProducerDetail\) [Merge](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.go#L37>)
 
 ```go
 func (detail *ProducerDetail) Merge(c *ProducerDetail)
 ```
 
-
+Merge folds c into detail in place: counts are summed and the weight is added. Used by [Point.LeftAppend](<#Point.LeftAppend>) to combine per\-period records into epoch records.
 
 <a name="ProducerDetailProto"></a>
 ## type [ProducerDetailProto](<https://github.com/zenon-network/go-zenon/blob/master/consensus/storage/point.pb.go#L23-L32>)

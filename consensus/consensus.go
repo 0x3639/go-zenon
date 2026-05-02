@@ -16,10 +16,16 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// EpochDuration is the wall-clock length of one points-aggregation
+// epoch. Per-pillar performance points are summarized at this cadence
+// and persisted under [storage.PrefixEpochPoint].
 var (
 	EpochDuration = time.Hour * 24
 )
 
+// consensus is the [Consensus] implementation. It composes the
+// election manager, the points subsystem, the producer-event manager,
+// and the tick scheduler into a single subsystem.
 type consensus struct {
 	log     common.Logger
 	genesis time.Time
@@ -34,6 +40,9 @@ type consensus struct {
 	closed chan struct{}
 }
 
+// FrontierPillarReader returns an [api.PillarReader] pinned at the
+// chain frontier. The returned reader serves the live election +
+// points view that the RPC layer surfaces to clients.
 func (cs *consensus) FrontierPillarReader() api.PillarReader {
 	return &API{
 		momentumStore: cs.chain.GetFrontierMomentumStore(),
@@ -41,6 +50,9 @@ func (cs *consensus) FrontierPillarReader() api.PillarReader {
 		points:        cs.points,
 	}
 }
+
+// FixedPillarReader returns an [api.PillarReader] pinned at identifier.
+// Used by RPC queries that need a stable historical view.
 func (cs *consensus) FixedPillarReader(identifier types.HashHeight) api.PillarReader {
 	return &API{
 		momentumStore: cs.chain.GetMomentumStore(identifier),
@@ -49,7 +61,12 @@ func (cs *consensus) FixedPillarReader(identifier types.HashHeight) api.PillarRe
 	}
 }
 
-// NewConsensus instantiates a new consensus object
+// NewConsensus instantiates a new consensus object.
+//
+// The caller-supplied db backs the consensus storage subsystem
+// ([storage.DB], holding cached election results and points). The
+// testing flag suppresses the tick scheduler goroutine so deterministic
+// tests can drive the layer manually.
 func NewConsensus(db db.DB, chain chain.Chain, testing bool) Consensus {
 	genesisTimestamp := chain.GetGenesisMomentum().Timestamp
 	epochTicker := common.NewTicker(*genesisTimestamp, EpochDuration)
@@ -70,6 +87,9 @@ func NewConsensus(db db.DB, chain chain.Chain, testing bool) Consensus {
 	}
 }
 
+// GetMomentumProducer returns the pillar elected to produce the
+// momentum at timestamp. Returns an error if no election covers
+// timestamp.
 func (cs *consensus) GetMomentumProducer(timestamp time.Time) (*types.Address, error) {
 	election, err := cs.electionManager.ElectionByTime(timestamp)
 	if err != nil {
@@ -82,6 +102,10 @@ func (cs *consensus) GetMomentumProducer(timestamp time.Time) (*types.Address, e
 	}
 	return nil, errors.Errorf("couldn't find producer for timestamp")
 }
+
+// VerifyMomentumProducer reports whether momentum.Producer is the
+// elected pillar for momentum.Timestamp. The verifier consumes this
+// to gate momentum acceptance.
 func (cs *consensus) VerifyMomentumProducer(momentum *nom.Momentum) (bool, error) {
 	expected, err := cs.GetMomentumProducer(*momentum.Timestamp)
 	if err != nil {
@@ -93,9 +117,15 @@ func (cs *consensus) VerifyMomentumProducer(momentum *nom.Momentum) (bool, error
 	return false, nil
 }
 
+// Init is currently a no-op. Reserved for future use; returned for
+// interface symmetry.
 func (cs *consensus) Init() error {
 	return nil
 }
+
+// Start launches the tick scheduler goroutine (unless `testing` is
+// set) and registers the consensus state listeners with the chain so
+// that points and election cache stay current as new momentums arrive.
 func (cs *consensus) Start() error {
 	cs.log.Info("starting ...")
 	defer cs.log.Info("started")
@@ -114,6 +144,9 @@ func (cs *consensus) Start() error {
 	cs.chain.Register(cs.electionManager)
 	return nil
 }
+
+// Stop unregisters listeners and signals the scheduler goroutine to
+// exit, then waits for it to return.
 func (cs *consensus) Stop() error {
 	cs.log.Info("stopping ...")
 	defer cs.log.Info("stopped")
@@ -126,7 +159,12 @@ func (cs *consensus) Stop() error {
 	return nil
 }
 
-// work runs in a different go routine and broadcasts ProducerEvent to all modules which called Register on EventManager
+// work is the per-tick scheduler. Runs in its own goroutine: waits for
+// the genesis timestamp, then loops over elections, sleeping until each
+// elected producer's start time and broadcasting a [ProducerEvent].
+//
+// work runs in a different go routine and broadcasts ProducerEvent to
+// all modules which called Register on EventManager.
 func (cs *consensus) work() {
 	// wait for genesis to begin
 	for (cs.chain.GetGenesisMomentum().Timestamp).After(time.Now()) {

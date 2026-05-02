@@ -10,13 +10,23 @@ import (
 	"github.com/zenon-network/go-zenon/consensus/storage"
 )
 
+// Points is the per-pillar performance subsystem. It tracks two
+// granularities — period (one election cycle) and epoch (24h by
+// default) — and pre-computes both as new momentums arrive so RPC
+// callers see hot data.
 type Points interface {
 	// MomentumEventListener is used to precompute points as momentums come, so API calls have hot data
 	chain.MomentumEventListener
+	// GetPeriodPoints returns the per-period reader.
 	GetPeriodPoints() PointsReader
+	// GetEpochPoints returns the per-epoch reader (a compounded view
+	// over period points).
 	GetEpochPoints() PointsReader
 }
 
+// points is the [Points] implementation. It owns both readers plus
+// per-granularity completion cursors so [InsertMomentum] can advance
+// the pre-compute frontier in one direction without reprocessing.
 type points struct {
 	log          common.Logger
 	epochPoints  PointsReader
@@ -27,6 +37,10 @@ type points struct {
 	epochTickMultiplier int64
 }
 
+// newPoints wires period and epoch readers and re-derives the
+// completion cursors via a binary-probe scan of the storage layer.
+// The probe lets the consensus layer pick up where it left off after
+// a restart without re-walking every committed period.
 func newPoints(electionReader ElectionReader, epochTicker common.Ticker, ch chain.Chain, db *storage.DB) Points {
 	periodPoints := newPeriodPoints(electionReader, newChainTicker(ch, electionReader), db)
 	epochPoints := newCompoundPoints(periodPoints, newChainTicker(ch, epochTicker), db, storage.PrefixEpochPoint)
@@ -61,13 +75,20 @@ func newPoints(electionReader ElectionReader, epochTicker common.Ticker, ch chai
 	}
 }
 
+// GetPeriodPoints returns the per-period [PointsReader].
 func (p *points) GetPeriodPoints() PointsReader {
 	return p.periodPoints
 }
+
+// GetEpochPoints returns the per-epoch [PointsReader].
 func (p *points) GetEpochPoints() PointsReader {
 	return p.epochPoints
 }
 
+// InsertMomentum advances the pre-compute cursors when a new momentum
+// arrives: every period and epoch tick that has now completed has
+// its [storage.Point] generated and persisted, so subsequent reads do
+// not pay the cost on the hot path.
 func (p *points) InsertMomentum(detailed *nom.DetailedMomentum) {
 	block := detailed.Momentum
 
@@ -100,16 +121,28 @@ func (p *points) InsertMomentum(detailed *nom.DetailedMomentum) {
 		p.lastCompletedEpoch = epochTick - 1
 	}
 }
+
+// DeleteMomentum is a no-op: rolled-back momentums invalidate cached
+// points implicitly via the EndHash check inside
+// [compoundPoints.GetPoint] / [periodPoints.GetPoint].
 func (p *points) DeleteMomentum(*nom.DetailedMomentum) {
 }
 
-// PointsReader can read pillar statistics of epoch or period
+// PointsReader can read pillar statistics of epoch or period.
 type PointsReader interface {
 	common.Ticker
-	// Returns nil, nil for points which are in the future
+	// GetPoint returns the [storage.Point] for tick. Returns nil, nil
+	// for points that are still in the future.
 	GetPoint(tick uint64) (*storage.Point, error)
 }
 
+// newCompoundPoints constructs a [PointsReader] that aggregates a
+// finer-grained reader (lower) into the chainTicker's ticks. Used to
+// roll period points up into epoch points.
+//
+// Panics on a multiplier mismatch — the caller is responsible for
+// passing a chainTicker whose tick is a whole multiple of the lower
+// reader's tick.
 func newCompoundPoints(lower PointsReader, chainTicker ChainTicker, db *storage.DB, prefix byte) PointsReader {
 	lowerMultiplier, err := lower.TickMultiplier(chainTicker)
 	if err != nil {
@@ -126,17 +159,26 @@ func newCompoundPoints(lower PointsReader, chainTicker ChainTicker, db *storage.
 	}
 }
 
+// compoundPoints is the [PointsReader] for the epoch granularity. It
+// generates an epoch point by aggregating the period points contained
+// within the epoch's window.
 type compoundPoints struct {
 	ChainTicker
 	db     *storage.DB
 	log    common.Logger
 	prefix byte
 
-	// number of lower ticks that make a current tick
+	// lowerMultiplier is the number of lower ticks that make a current
+	// tick (e.g., periods per epoch).
 	lowerMultiplier uint64
 	lower           PointsReader
 }
 
+// GetPoint resolves the point for tick: serves from the database
+// cache when its EndHash still matches the live chain, otherwise
+// regenerates from the lower (per-period) reader. Persists the
+// regenerated point only when the tick is finished, so partially-built
+// epoch points stay out of the persistent layer.
 func (compound *compoundPoints) GetPoint(tick uint64) (*storage.Point, error) {
 	if !compound.HasStarted(tick) {
 		return nil, nil
@@ -178,6 +220,11 @@ func (compound *compoundPoints) GetPoint(tick uint64) (*storage.Point, error) {
 
 	return point, nil
 }
+
+// generatePointFromLower aggregates lowerMultiplier per-period points
+// into one compound point: stake-weighted block counts come from
+// LeftAppend on each lower point, then the per-pillar weight is
+// averaged across the periods that contributed.
 func (compound *compoundPoints) generatePointFromLower(tick uint64, endBlock *nom.Momentum) (*storage.Point, error) {
 	result := storage.NewEmptyPoint(endBlock.Hash)
 	start := tick * compound.lowerMultiplier
@@ -214,6 +261,9 @@ func (compound *compoundPoints) generatePointFromLower(tick uint64, endBlock *no
 	return result, nil
 }
 
+// periodPoints is the [PointsReader] for the period granularity — one
+// election cycle per tick. It generates points from the live chain
+// using the election results plus the actual block content.
 type periodPoints struct {
 	ChainTicker
 	db  *storage.DB
@@ -222,6 +272,7 @@ type periodPoints struct {
 	electionReader ElectionReader
 }
 
+// newPeriodPoints wires a [periodPoints] reader.
 func newPeriodPoints(electionReader ElectionReader, ticker ChainTicker, db *storage.DB) PointsReader {
 	return &periodPoints{
 		ChainTicker:    ticker,
@@ -231,6 +282,11 @@ func newPeriodPoints(electionReader ElectionReader, ticker ChainTicker, db *stor
 	}
 }
 
+// GetPoint returns the [storage.Point] for tick: serves from the
+// database cache when its EndHash still matches the live chain,
+// otherwise regenerates from the chain content via
+// [periodPoints.generatePointFromChain]. Persists the regenerated
+// point only when the tick is finished.
 func (period *periodPoints) GetPoint(tick uint64) (*storage.Point, error) {
 	if !period.HasStarted(tick) {
 		return nil, nil
@@ -272,6 +328,12 @@ func (period *periodPoints) GetPoint(tick uint64) (*storage.Point, error) {
 
 	return point, nil
 }
+
+// generatePointFromChain builds a per-period point from scratch:
+// reads the election result for the tick, walks every momentum in the
+// tick window to count produced-vs-expected blocks per pillar, and
+// folds in the delegation weights. The per-pillar weight is what the
+// epoch-level reader will later average.
 func (period *periodPoints) generatePointFromChain(tick uint64) (*storage.Point, error) {
 	election, err := period.electionReader.ElectionByTick(tick)
 	if err != nil {

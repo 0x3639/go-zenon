@@ -10,9 +10,18 @@ Package api exposes the read\-only consensus query surface used by the RPC layer
 
 ### Overview
 
-api separates queries \(election lookups, points queries, pillar weights\) from mutations so that callers reading consensus state cannot accidentally reach into the scheduler.
+api separates queries \(election lookups, points queries, pillar weights\) from mutations so that callers reading consensus state cannot accidentally reach into the scheduler. The [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) package's \[API\] struct implements this interface; consumers receive a [PillarReader](<#PillarReader>) from either \[consensus.Consensus.FrontierPillarReader\] \(live view\) or \[consensus.Consensus.FixedPillarReader\] \(historical view\).
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- PillarReader — the read\-only handle. Bound to a momentum store and the points / election subsystems behind the scenes.
+- EpochStats — aggregated per\-epoch view across every pillar.
+- EpochPillarStats — per\-pillar, per\-epoch breakdown of produced vs expected blocks plus weight.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>) — implements the [PillarReader](<#PillarReader>) interface.
+- [github.com/zenon\\\-network/go\\\-zenon/rpc/api/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/api/embedded/>) — primary consumer; surfaces these stats over JSON\-RPC.
 
 ## Index
 
@@ -22,9 +31,9 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="EpochPillarStats"></a>
-## type [EpochPillarStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L10-L16>)
+## type [EpochPillarStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L13-L19>)
 
-
+EpochPillarStats summarizes one pillar's performance over a single epoch. Used by the RPC pillar / stats endpoints to surface per\-pillar reliability and reward inputs to clients.
 
 ```go
 type EpochPillarStats struct {
@@ -37,30 +46,39 @@ type EpochPillarStats struct {
 ```
 
 <a name="EpochStats"></a>
-## type [EpochStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L18-L24>)
+## type [EpochStats](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L23-L29>)
 
-
+EpochStats is the aggregated per\-epoch view: every pillar's individual stats keyed by name, plus the totals across the network.
 
 ```go
 type EpochStats struct {
     Epoch       uint64                       `json:"epoch"`
     Pillars     map[string]*EpochPillarStats `json:"pillars"`
     TotalWeight *big.Int                     `json:"totalWeight"`
-    // Total number of blocks generated in an epoch
+    // TotalBlocks is the total number of blocks generated in the epoch.
     TotalBlocks uint64 `json:"totalBlocks"`
 }
 ```
 
 <a name="PillarReader"></a>
-## type [PillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L26-L31>)
+## type [PillarReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/api/pillar_stats.go#L36-L50>)
 
-
+PillarReader is the read\-only consensus surface the RPC layer consumes. Implementations bind to a specific point on the chain \(frontier or fixed identifier\) — see [github.com/zenon\\\-network/go\\\-zenon/consensus.Consensus.FrontierPillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#Consensus.FrontierPillarReader>) and [github.com/zenon\\\-network/go\\\-zenon/consensus.Consensus.FixedPillarReader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#Consensus.FixedPillarReader>).
 
 ```go
 type PillarReader interface {
+    // GetPillarWeights returns the per-pillar election weight at the
+    // most recently completed period. Map key is the pillar's name.
     GetPillarWeights() (map[string]*big.Int, error)
+    // EpochTicker returns the [common.Ticker] consumers use to convert
+    // times ↔ epoch numbers compatibly with the points subsystem.
     EpochTicker() common.Ticker
+    // EpochStats returns aggregated per-pillar statistics for the
+    // epoch. Returns nil when the epoch has not started yet.
     EpochStats(epoch uint64) (*EpochStats, error)
+    // GetPillarDelegationsByEpoch returns the per-epoch averaged
+    // delegation snapshot keyed by pillar name. Used by reward
+    // calculations.
     GetPillarDelegationsByEpoch(epoch uint64) (map[string]*types.PillarDelegationDetail, error)
 }
 ```
