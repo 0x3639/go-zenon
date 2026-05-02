@@ -6,13 +6,30 @@
 import "github.com/zenon-network/go-zenon/chain/account/mailbox"
 ```
 
-Package mailbox tracks unreceived sends destined for each account.
+Package mailbox tracks unreceived sends destined for each recipient account.
 
 ### Overview
 
-In Zenon's send/receive model, a send block sits in the recipient's mailbox until the recipient \(a user or an embedded contract\) authors a matching receive block. mailbox is the index that lets the recipient enumerate its pending sends efficiently.
+mailbox is the [github.com/zenon\\\-network/go\\\-zenon/chain/store.AccountMailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#AccountMailbox>) implementation. In Zenon's send/receive model, a send block sits in the recipient's mailbox until the recipient \(a user or an embedded contract\) authors a matching receive. mailbox persists three indexes per recipient:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- Cumulative\-historical record of every send ever admitted, under \[unreceivedBlockPrefix\].
+- Currently\-pending subset, under \[pendingBlockPrefix\]; entries are removed as they are received.
+- Send\-hash → receive\-header reverse index, under \[blockWhichReceives\], so [chain/store.Momentum.GetBlockWhichReceives](<https://pkg.go.dev/chain/store/#Momentum.GetBlockWhichReceives>) can answer in O\(1\) without re\-walking the chain.
+
+In addition, mailbox owns the per\-recipient sequencer queue \(\[sequencerNumInsertedKey\], \[sequencerHeaderByHeightPrefix\]\): a strict FIFO of inbound sends used by the embedded\-contract receive ordering rule \(see [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>)'s sequencer cursor and [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>)'s sequencer check\).
+
+### Key Concepts
+
+- mailbox struct — implements [store.AccountMailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#AccountMailbox>). Embeds [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) directly so range queries flow through the same versioned layer as the rest of the chain.
+- Pending vs unreceived — \`unreceived\` is cumulative\-historical; \`pending\` is the still\-to\-be\-consumed subset. Iterating \`pending\` gives the live queue.
+- Sequencer queue — strictly append\-only on the writer side; consumers track their position through the per\-account cursor in [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>).
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — interface this package implements.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>) — the per\-account store that holds the sequencer cursor reading this mailbox.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — primary consumer through the sequencer rule.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — the versioned LevelDB layer.
 
 ## Index
 
@@ -39,85 +56,100 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="unreceivedBlockPrefix"></a>
+<a name="unreceivedBlockPrefix"></a>Single\-byte key prefixes used by the mailbox store. Each lives in its own keyspace so iteration over one cannot pick up entries from another.
+
+Note: prefixes 0–2 are reserved by [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) for the frontier identifier and the height/hash indexes; this package starts at 4 to leave a small gap for future common\-db growth.
 
 ```go
 var (
-    unreceivedBlockPrefix         = []byte{4}
-    pendingBlockPrefix            = []byte{5}
-    blockWhichReceives            = []byte{6}
-    sequencerNumInsertedKey       = []byte{7}
+    // unreceivedBlockPrefix marks every send hash that has been admitted
+    // to this account's mailbox awaiting consumption (the cumulative
+    // historical record).
+    unreceivedBlockPrefix = []byte{4}
+    // pendingBlockPrefix marks every send hash currently still pending
+    // consumption (subset of unreceivedBlockPrefix; entries are removed
+    // as they are received).
+    pendingBlockPrefix = []byte{5}
+    // blockWhichReceives maps a send hash to the [types.AccountHeader] of
+    // the receive block that consumed it, used to answer
+    // [chain/store.Momentum.GetBlockWhichReceives] in O(1).
+    blockWhichReceives = []byte{6}
+    // sequencerNumInsertedKey holds the running total of sends pushed
+    // onto the sequencer queue.
+    sequencerNumInsertedKey = []byte{7}
+    // sequencerHeaderByHeightPrefix maps a sequencer position (1-based)
+    // to the [types.AccountHeader] of the send at that position.
     sequencerHeaderByHeightPrefix = []byte{8}
 )
 ```
 
 <a name="NewAccountMailbox"></a>
-## func [NewAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L34>)
+## func [NewAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L43>)
 
 ```go
 func NewAccountMailbox(address types.Address, db db.DB) store.AccountMailbox
 ```
 
-
+NewAccountMailbox wraps db in a [store.AccountMailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#AccountMailbox>) for address.
 
 <a name="getBlockWhichReceivesKey"></a>
-## func [getBlockWhichReceivesKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L50>)
+## func [getBlockWhichReceivesKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L71>)
 
 ```go
 func getBlockWhichReceivesKey(hash types.Hash) []byte
 ```
 
-
+getBlockWhichReceivesKey returns the database key holding the [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) of the receive that consumed the send identified by hash.
 
 <a name="getPendingBlockKey"></a>
-## func [getPendingBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L44>)
+## func [getPendingBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L58>)
 
 ```go
 func getPendingBlockKey(hash types.Hash) []byte
 ```
 
-
+getPendingBlockKey returns the database key marking that hash is still pending consumption.
 
 <a name="getPendingBlocksIterator"></a>
-## func [getPendingBlocksIterator](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L47>)
+## func [getPendingBlocksIterator](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L64>)
 
 ```go
 func getPendingBlocksIterator() []byte
 ```
 
-
+getPendingBlocksIterator returns the prefix that walks every pending send in this mailbox.
 
 <a name="getSequencerHeaderByHeightKey"></a>
-## func [getSequencerHeaderByHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L54>)
+## func [getSequencerHeaderByHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L77>)
 
 ```go
 func getSequencerHeaderByHeightKey(height uint64) []byte
 ```
 
-
+getSequencerHeaderByHeightKey returns the database key holding the [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) at sequencer position height \(1\-based\).
 
 <a name="getUnreceivedBlockKey"></a>
-## func [getUnreceivedBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L41>)
+## func [getUnreceivedBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L52>)
 
 ```go
 func getUnreceivedBlockKey(hash types.Hash) []byte
 ```
 
-
+getUnreceivedBlockKey returns the database key marking that hash has been admitted to the cumulative\-historical mailbox record.
 
 <a name="parseAccountHeader"></a>
-## func [parseAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L14>)
+## func [parseAccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L19>)
 
 ```go
 func parseAccountHeader(data []byte, err error) *types.AccountHeader
 ```
 
-
+parseAccountHeader resolves the \(data, err\) pair from a [db.DB.Get](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB.Get>) call into either a parsed header, nil \(not\-found\), or panics on any other error. Decode failures panic because the only entries stored under the mailbox keys are produced by [types.AccountHeader.Serialize](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader.Serialize>) — a decode failure indicates corrupt state.
 
 <a name="mailbox"></a>
-## type [mailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L29-L32>)
+## type [mailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L37-L40>)
 
-
+mailbox is the [store.AccountMailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#AccountMailbox>) implementation. It embeds the underlying [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) directly so callers operate against the same versioned layer as the rest of the chain.
 
 ```go
 type mailbox struct {
@@ -127,93 +159,93 @@ type mailbox struct {
 ```
 
 <a name="mailbox.Address"></a>
-### func \(\*mailbox\) [Address](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L58>)
+### func \(\*mailbox\) [Address](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L82>)
 
 ```go
 func (m *mailbox) Address() types.Address
 ```
 
-
+Address returns the recipient this mailbox belongs to.
 
 <a name="mailbox.GetBlockWhichReceives"></a>
-### func \(\*mailbox\) [GetBlockWhichReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L81>)
+### func \(\*mailbox\) [GetBlockWhichReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L120>)
 
 ```go
 func (m *mailbox) GetBlockWhichReceives(fromHash types.Hash) *types.AccountHeader
 ```
 
-
+GetBlockWhichReceives returns the receive header that consumed fromHash, or nil if the send is still pending.
 
 <a name="mailbox.GetUnreceivedAccountBlockHashes"></a>
-### func \(\*mailbox\) [GetUnreceivedAccountBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L84>)
+### func \(\*mailbox\) [GetUnreceivedAccountBlockHashes](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L127>)
 
 ```go
 func (m *mailbox) GetUnreceivedAccountBlockHashes(atMost uint64) ([]types.Hash, error)
 ```
 
-
+GetUnreceivedAccountBlockHashes returns up to atMost still\-pending send hashes in iteration order. Used by RPC to surface pending inbound traffic to clients.
 
 <a name="mailbox.MarkAsReceived"></a>
-### func \(\*mailbox\) [MarkAsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L72>)
+### func \(\*mailbox\) [MarkAsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L105>)
 
 ```go
 func (m *mailbox) MarkAsReceived(hash types.Hash) error
 ```
 
-
+MarkAsReceived removes hash from the pending set; the historical unreceived\-block record is preserved for \[GetUnreceivedAccountBlockHashes\] callers that want the cumulative view.
 
 <a name="mailbox.MarkAsUnreceived"></a>
-### func \(\*mailbox\) [MarkAsUnreceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L65>)
+### func \(\*mailbox\) [MarkAsUnreceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L94>)
 
 ```go
 func (m *mailbox) MarkAsUnreceived(hash types.Hash) error
 ```
 
-
+MarkAsUnreceived admits hash to the mailbox: records it under both the historical \[unreceivedBlockPrefix\] index and the \[pendingBlockPrefix\] "still pending" set.
 
 <a name="mailbox.MarkBlockThatReceives"></a>
-### func \(\*mailbox\) [MarkBlockThatReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L75>)
+### func \(\*mailbox\) [MarkBlockThatReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L112>)
 
 ```go
 func (m *mailbox) MarkBlockThatReceives(hash types.Hash, receiveHeader types.AccountHeader) error
 ```
 
-
+MarkBlockThatReceives records that the receive block named by receiveHeader consumed the send identified by hash. Indexed so \[GetBlockWhichReceives\] can answer in O\(1\) without re\-walking the chain.
 
 <a name="mailbox.SequencerByHeight"></a>
-### func \(\*mailbox\) [SequencerByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L128>)
+### func \(\*mailbox\) [SequencerByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L180>)
 
 ```go
 func (m *mailbox) SequencerByHeight(height uint64) *types.AccountHeader
 ```
 
-
+SequencerByHeight returns the queued send at position height \(1\-based\), or nil if it is out of range.
 
 <a name="mailbox.SequencerPushBack"></a>
-### func \(\*mailbox\) [SequencerPushBack](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L121>)
+### func \(\*mailbox\) [SequencerPushBack](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L170>)
 
 ```go
 func (m *mailbox) SequencerPushBack(header types.AccountHeader)
 ```
 
-
+SequencerPushBack appends header to the sequencer queue. Atomic against the queue counter so a concurrent reader will never observe a queue size larger than the entries actually present.
 
 <a name="mailbox.SequencerSize"></a>
-### func \(\*mailbox\) [SequencerSize](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L114>)
+### func \(\*mailbox\) [SequencerSize](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L159>)
 
 ```go
 func (m *mailbox) SequencerSize() uint64
 ```
 
-
+SequencerSize returns the running total of sends pushed onto the sequencer queue since the mailbox was created.
 
 <a name="mailbox.Snapshot"></a>
-### func \(\*mailbox\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L61>)
+### func \(\*mailbox\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/mailbox/mailbox.go#L87>)
 
 ```go
 func (m *mailbox) Snapshot() store.AccountMailbox
 ```
 
-
+Snapshot returns an isolated copy of this view.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

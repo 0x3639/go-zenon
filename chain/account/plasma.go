@@ -8,10 +8,14 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
+// getChainPlasmaKey returns the database key holding this account's
+// chain-plasma counter.
 func getChainPlasmaKey() []byte {
 	return chainPlasmaKey
 }
 
+// GetChainPlasma returns the per-account plasma counter. Missing key
+// returns zero (no error) — fresh accounts simply have no entry yet.
 func (as *accountStore) GetChainPlasma() (*big.Int, error) {
 	data, err := as.DB.Get(getChainPlasmaKey())
 	if err == leveldb.ErrNotFound {
@@ -23,6 +27,9 @@ func (as *accountStore) GetChainPlasma() (*big.Int, error) {
 
 	return big.NewInt(0).SetBytes(data), nil
 }
+
+// AddChainPlasma adds the supplied delta to the per-account counter.
+// Used by the VM to credit plasma earned by fused QSR.
 func (as *accountStore) AddChainPlasma(add uint64) error {
 	plasma, err := as.GetChainPlasma()
 	if err != nil {

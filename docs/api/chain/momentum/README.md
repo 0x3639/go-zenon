@@ -10,9 +10,27 @@ Package momentum stores the global momentum chain and exposes versioned readers 
 
 ### Overview
 
-momentum persists the consensus chain produced by elected pillars, indexed by hash and height. Together with [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>), it forms the dual\-ledger state that [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) orchestrates.
+momentum is the [github.com/zenon\\\-network/go\\\-zenon/chain/store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) implementation. Together with [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>) \(per\-account chains\) and [github.com/zenon\\\-network/go\\\-zenon/chain/account/mailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/mailbox/>) \(per\-recipient queues\), it forms the dual\-ledger storage that [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) orchestrates.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+On top of the raw momentum chain \(\[momentum.go\], \[range.go\]\) the store maintains a small set of cross\-cutting indexes that the verifier, consensus layer, and RPC consume:
+
+- account\-header reverse index — \`hash → AccountHeader\` \(\[account\_block.go\]\); lets \[GetAccountBlockByHash\] resolve a block without knowing the address.
+- block\-confirmation index — \`hash → momentum height\` \(\[confirmed.go\]\); used by the verifier to validate [chain/nom.AccountBlock.MomentumAcknowledged](<https://pkg.go.dev/chain/nom/#AccountBlock.MomentumAcknowledged>) for auto\-generated blocks.
+- per\-account ZNN balance cache \(\[balance.go\]\); duplicated from the account store so consensus delegation math reads in O\(1\) per backer.
+- embedded\-contract read\-throughs \(\[embedded.go\]\) for active pillars, defined sporks, stake amounts, and token info.
+
+### Key Concepts
+
+- momentumStore — the [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) implementation. Embeds [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) so chain identifier and genesis constants are reachable, and embeds [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) directly so range queries flow through the same versioned layer.
+- AddAccountBlockTransaction — single entry point that admits an account block \(with descendants\) into this view, updating every cross\-cutting index in one pass. Skips batched contract sends \(their parent receive carries them\).
+- GetMomentumBeforeTime — estimate\-and\-step plus binary\-search lookup for time\-anchored queries, optimized for the typical case where momentum cadence is roughly even.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — interface this package implements.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>), [github.com/zenon\\\-network/go\\\-zenon/chain/account/mailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/mailbox/>) — per\-account components this view composes.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — the versioned LevelDB layer.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded/definition](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/>) — embedded\-contract storage helpers consumed by \[embedded.go\].
 
 ## Index
 
@@ -67,94 +85,110 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="accountStorePrefix"></a>
+<a name="accountStorePrefix"></a>Single\-byte key prefixes used by the momentum store. Each lives in its own keyspace so iteration over one cannot pick up entries from another.
+
+Prefixes 0–2 are reserved by [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) for the frontier identifier and the height/hash indexes. Prefixes 6–7 are intentionally unused and reserved for future indexes.
 
 ```go
 var (
-    accountStorePrefix            = []byte{3}
-    accountMailboxPrefix          = []byte{4}
+    // accountStorePrefix namespaces every account's chain storage.
+    // Subset(accountStorePrefix||address) yields one account's
+    // [github.com/zenon-network/go-zenon/chain/store.Account] view.
+    accountStorePrefix = []byte{3}
+    // accountMailboxPrefix namespaces every account's mailbox.
+    // Subset(accountMailboxPrefix||address) yields one account's
+    // [github.com/zenon-network/go-zenon/chain/account/mailbox] view.
+    accountMailboxPrefix = []byte{4}
+    // blockConfirmationHeightPrefix maps an account-block hash to the
+    // momentum height that confirmed it.
     blockConfirmationHeightPrefix = []byte{5}
-    accountZNNBalancePrefix       = []byte{8}
-    accountHeaderByHashPrefix     = []byte{9}
+    // accountZNNBalancePrefix caches the per-account ZNN balance,
+    // duplicated from the per-account store so consensus delegation
+    // math can read every backer's balance in O(1).
+    accountZNNBalancePrefix = []byte{8}
+    // accountHeaderByHashPrefix maps an account-block hash to the
+    // serialized [types.AccountHeader] (address + height + hash) so
+    // callers can look up a block without knowing its account.
+    accountHeaderByHashPrefix = []byte{9}
 )
 ```
 
 <a name="NewGenesisStore"></a>
-## func [NewGenesisStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L138>)
+## func [NewGenesisStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L187>)
 
 ```go
 func NewGenesisStore() store.Momentum
 ```
 
-
+NewGenesisStore returns an in\-memory [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) suitable for constructing the genesis transaction — the chain layer uses this during boot before the persistent store has been opened.
 
 <a name="NewStore"></a>
-## func [NewStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L129>)
+## func [NewStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L174>)
 
 ```go
 func NewStore(genesis store.Genesis, db db.DB) store.Momentum
 ```
 
-
+NewStore wraps db in a [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) backed by genesis. Panics if db is nil — the store cannot operate without backing storage.
 
 <a name="getAccountHeaderByHashKey"></a>
-## func [getAccountHeaderByHashKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L11>)
+## func [getAccountHeaderByHashKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L14>)
 
 ```go
 func getAccountHeaderByHashKey(hash types.Hash) []byte
 ```
 
-
+getAccountHeaderByHashKey returns the database key under which the serialized [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) for the supplied account\-block hash is stored.
 
 <a name="getAccountMailboxPrefix"></a>
-## func [getAccountMailboxPrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L24>)
+## func [getAccountMailboxPrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L35>)
 
 ```go
 func getAccountMailboxPrefix(address types.Address) []byte
 ```
 
-
+getAccountMailboxPrefix returns the prefix that namespaces an account's mailbox within the momentum database.
 
 <a name="getAccountStorePrefix"></a>
-## func [getAccountStorePrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L21>)
+## func [getAccountStorePrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L29>)
 
 ```go
 func getAccountStorePrefix(address types.Address) []byte
 ```
 
-
+getAccountStorePrefix returns the prefix that namespaces an account's chain storage within the momentum database.
 
 <a name="getAccountZNNBalance"></a>
-## func [getAccountZNNBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L12>)
+## func [getAccountZNNBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L17>)
 
 ```go
 func getAccountZNNBalance(address types.Address) []byte
 ```
 
-
+getAccountZNNBalance returns the database key holding address's cached ZNN balance at the momentum\-store level. The same value also lives in the per\-account store; the duplicate exists so consensus delegation math can read every backer's balance in O\(1\) without re\-deriving each account view.
 
 <a name="getBlockConfirmationHeightKey"></a>
-## func [getBlockConfirmationHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L10>)
+## func [getBlockConfirmationHeightKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L13>)
 
 ```go
 func getBlockConfirmationHeightKey(hash types.Hash) []byte
 ```
 
-
+getBlockConfirmationHeightKey returns the database key under which the confirmation height of the account block identified by hash is stored.
 
 <a name="parseMomentum"></a>
-## func [parseMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L22>)
+## func [parseMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L29>)
 
 ```go
 func parseMomentum(data []byte, err error) (*nom.Momentum, error)
 ```
 
-
+parseMomentum is the read\-side counterpart to \[momentumStore.SetFrontier\]: resolves the \(data, err\) pair from a \[db.GetEntryBy\*\] call into either a parsed momentum, nil \(not\-found\), or an error.
 
 <a name="momentumStore"></a>
-## type [momentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L16-L19>)
+## type [momentumStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L22-L25>)
 
-
+momentumStore is the [store.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Momentum>) implementation. It composes a [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) \(for chain identifier and genesis\-block constants\) with a versioned [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) holding everything else: per\-account chains, per\-account mailboxes, the cached ZNN balances used for delegation math, the block\-confirmation index, and the account\-header reverse index for hash\-only lookups.
 
 ```go
 type momentumStore struct {
@@ -164,336 +198,345 @@ type momentumStore struct {
 ```
 
 <a name="momentumStore.AddAccountBlockTransaction"></a>
-### func \(\*momentumStore\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L46>)
+### func \(\*momentumStore\) [AddAccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L86>)
 
 ```go
 func (ms *momentumStore) AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch) error
 ```
 
+AddAccountBlockTransaction admits the \(header, patch\) pair into this view, applying the per\-account patch and updating every cross\-cutting index touched by the block:
 
+- Per\-account ZNN balance cache \(consumed by delegation math\).
+- Per\-block confirmation height \(consumed by the verifier's auto\-generated MomentumAcknowledged check\).
+- Account\-header reverse index \(so the block can be looked up by hash alone\).
+- Mailbox queues for sends and receives, including the embedded\-contract sequencer queue when the recipient is a contract.
+
+Patches with empty dumps \(batched contract sends\) are no\-ops here — the parent receive carries them through the chain. See [chain/nom.AccountBlockTransaction](<https://pkg.go.dev/chain/nom/#AccountBlockTransaction>) for the batching shape.
 
 <a name="momentumStore.ComputePillarDelegations"></a>
-### func \(\*momentumStore\) [ComputePillarDelegations](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L59>)
+### func \(\*momentumStore\) [ComputePillarDelegations](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L76>)
 
 ```go
 func (ms *momentumStore) ComputePillarDelegations() ([]*types.PillarDelegationDetail, error)
 ```
 
+ComputePillarDelegations re\-derives every pillar's aggregated delegation weight \(and the per\-backer breakdown\) from the current stake and vote records. Sorted by descending weight per [types.SortPDDByWeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#SortPDDByWeight>) so consumers see the most influential pillars first.
 
+Used by the consensus layer when constructing election snapshots.
 
 <a name="momentumStore.GetAccountBlock"></a>
-### func \(\*momentumStore\) [GetAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L18>)
+### func \(\*momentumStore\) [GetAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L25>)
 
 ```go
 func (ms *momentumStore) GetAccountBlock(header types.AccountHeader) (*nom.AccountBlock, error)
 ```
 
-
+GetAccountBlock looks up the block named by header \(address \+ height\).
 
 <a name="momentumStore.GetAccountBlockByHash"></a>
-### func \(\*momentumStore\) [GetAccountBlockByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L35>)
+### func \(\*momentumStore\) [GetAccountBlockByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L56>)
 
 ```go
 func (ms *momentumStore) GetAccountBlockByHash(hash types.Hash) (*nom.AccountBlock, error)
 ```
 
-
+GetAccountBlockByHash looks up an account block by hash via the hash → header reverse index. Returns \(nil, nil\) when no such block exists.
 
 <a name="momentumStore.GetAccountBlockByHeight"></a>
-### func \(\*momentumStore\) [GetAccountBlockByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L21>)
+### func \(\*momentumStore\) [GetAccountBlockByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L31>)
 
 ```go
 func (ms *momentumStore) GetAccountBlockByHeight(address types.Address, height uint64) (*nom.AccountBlock, error)
 ```
 
-
+GetAccountBlockByHeight is a convenience for callers that already know the address and just need the block at height.
 
 <a name="momentumStore.GetAccountBlocksByHeight"></a>
-### func \(\*momentumStore\) [GetAccountBlocksByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L24>)
+### func \(\*momentumStore\) [GetAccountBlocksByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L37>)
 
 ```go
 func (ms *momentumStore) GetAccountBlocksByHeight(address types.Address, height, count uint64) ([]*nom.AccountBlock, error)
 ```
 
-
+GetAccountBlocksByHeight returns up to count blocks starting at height in the supplied account chain, in ascending order.
 
 <a name="momentumStore.GetAccountDB"></a>
-### func \(\*momentumStore\) [GetAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L32>)
+### func \(\*momentumStore\) [GetAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L47>)
 
 ```go
 func (ms *momentumStore) GetAccountDB(address types.Address) db.DB
 ```
 
-
+GetAccountDB returns the raw [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) subset for address \(snapshotted\), used by callers that read contract storage directly.
 
 <a name="momentumStore.GetAccountMailbox"></a>
-### func \(\*momentumStore\) [GetAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L42>)
+### func \(\*momentumStore\) [GetAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L66>)
 
 ```go
 func (ms *momentumStore) GetAccountMailbox(address types.Address) store.AccountMailbox
 ```
 
-
+GetAccountMailbox returns a snapshotted [store.AccountMailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#AccountMailbox>) for address — read\-only callers see a stable view of the queue.
 
 <a name="momentumStore.GetAccountStore"></a>
-### func \(\*momentumStore\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L35>)
+### func \(\*momentumStore\) [GetAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L54>)
 
 ```go
 func (ms *momentumStore) GetAccountStore(address types.Address) store.Account
 ```
 
-
+GetAccountStore wraps the raw account database in the [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) implementation from [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>).
 
 <a name="momentumStore.GetActivePillars"></a>
-### func \(\*momentumStore\) [GetActivePillars](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L13>)
+### func \(\*momentumStore\) [GetActivePillars](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L15>)
 
 ```go
 func (ms *momentumStore) GetActivePillars() ([]*definition.PillarInfo, error)
 ```
 
-
+GetActivePillars returns every registered pillar that is still active at this view. Reads through the pillar embedded contract.
 
 <a name="momentumStore.GetAllDefinedSporks"></a>
-### func \(\*momentumStore\) [GetAllDefinedSporks](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L126>)
+### func \(\*momentumStore\) [GetAllDefinedSporks](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L152>)
 
 ```go
 func (ms *momentumStore) GetAllDefinedSporks() ([]*definition.Spork, error)
 ```
 
-
+GetAllDefinedSporks returns every spork record \(active and pending\) recorded by the spork embedded contract.
 
 <a name="momentumStore.GetBlockConfirmationHeight"></a>
-### func \(\*momentumStore\) [GetBlockConfirmationHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L14>)
+### func \(\*momentumStore\) [GetBlockConfirmationHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L22>)
 
 ```go
 func (ms *momentumStore) GetBlockConfirmationHeight(hash types.Hash) (uint64, error)
 ```
 
-
+GetBlockConfirmationHeight returns the momentum height that confirmed hash, or zero if the block has not been confirmed in this view. The verifier consumes this value when validating [chain/nom.AccountBlock.MomentumAcknowledged](<https://pkg.go.dev/chain/nom/#AccountBlock.MomentumAcknowledged>) for auto\-generated blocks.
 
 <a name="momentumStore.GetBlockWhichReceives"></a>
-### func \(\*momentumStore\) [GetBlockWhichReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/unreceived.go#L8>)
+### func \(\*momentumStore\) [GetBlockWhichReceives](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/unreceived.go#L13>)
 
 ```go
 func (ms *momentumStore) GetBlockWhichReceives(hash types.Hash) (*nom.AccountBlock, error)
 ```
 
-
+GetBlockWhichReceives returns the receive block that consumed the send identified by hash, or nil if the send is still pending. Resolves in two cheap lookups: send hash → send block \(via the \[accountHeaderByHashPrefix\] reverse index\), then send → receive header \(via the recipient's mailbox\), then receive header → receive block.
 
 <a name="momentumStore.GetFrontierAccountBlock"></a>
-### func \(\*momentumStore\) [GetFrontierAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L15>)
+### func \(\*momentumStore\) [GetFrontierAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L20>)
 
 ```go
 func (ms *momentumStore) GetFrontierAccountBlock(address types.Address) (*nom.AccountBlock, error)
 ```
 
-
+GetFrontierAccountBlock returns the frontier account block of address in this view \(a convenience over [store.Account.Frontier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account.Frontier>)\).
 
 <a name="momentumStore.GetFrontierMomentum"></a>
-### func \(\*momentumStore\) [GetFrontierMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L32>)
+### func \(\*momentumStore\) [GetFrontierMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L41>)
 
 ```go
 func (ms *momentumStore) GetFrontierMomentum() (*nom.Momentum, error)
 ```
 
-
+GetFrontierMomentum returns the most recent momentum in this view, or nil if the chain is empty.
 
 <a name="momentumStore.GetMomentumBeforeTime"></a>
-### func \(\*momentumStore\) [GetMomentumBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/range.go#L12>)
+### func \(\*momentumStore\) [GetMomentumBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/range.go#L19>)
 
 ```go
 func (ms *momentumStore) GetMomentumBeforeTime(timestamp *time.Time) (*nom.Momentum, error)
 ```
 
-
+GetMomentumBeforeTime returns the most recent momentum whose timestamp is strictly before timestamp, or nil when no such momentum exists \(e.g., timestamp predates genesis\). The implementation first uses an estimate\-and\-step search to bracket the target, then falls back to a binary search inside the bracket to pin the exact height — typical chains have very even tick spacing, so the estimate usually lands within a handful of momentums of the answer.
 
 <a name="momentumStore.GetMomentumByHash"></a>
-### func \(\*momentumStore\) [GetMomentumByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L35>)
+### func \(\*momentumStore\) [GetMomentumByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L46>)
 
 ```go
 func (ms *momentumStore) GetMomentumByHash(hash types.Hash) (*nom.Momentum, error)
 ```
 
-
+GetMomentumByHash looks up a momentum by hash.
 
 <a name="momentumStore.GetMomentumByHeight"></a>
-### func \(\*momentumStore\) [GetMomentumByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L45>)
+### func \(\*momentumStore\) [GetMomentumByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L62>)
 
 ```go
 func (ms *momentumStore) GetMomentumByHeight(height uint64) (*nom.Momentum, error)
 ```
 
-
+GetMomentumByHeight looks up a momentum by height.
 
 <a name="momentumStore.GetMomentumsByHash"></a>
-### func \(\*momentumStore\) [GetMomentumsByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L38>)
+### func \(\*momentumStore\) [GetMomentumsByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L53>)
 
 ```go
 func (ms *momentumStore) GetMomentumsByHash(blockHash types.Hash, higher bool, count uint64) ([]*nom.Momentum, error)
 ```
 
-
+GetMomentumsByHash returns up to count momentums starting at the momentum identified by blockHash, walking forward \(higher == true\) or backward.
 
 <a name="momentumStore.GetMomentumsByHeight"></a>
-### func \(\*momentumStore\) [GetMomentumsByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L48>)
+### func \(\*momentumStore\) [GetMomentumsByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L69>)
 
 ```go
 func (ms *momentumStore) GetMomentumsByHeight(height uint64, higher bool, count uint64) ([]*nom.Momentum, error)
 ```
 
-
+GetMomentumsByHeight returns up to count momentums starting at height, walking forward or backward depending on \`higher\`. Used by sync to stream chunks of the momentum chain to peers.
 
 <a name="momentumStore.GetStakeBeneficialAmount"></a>
-### func \(\*momentumStore\) [GetStakeBeneficialAmount](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L106>)
+### func \(\*momentumStore\) [GetStakeBeneficialAmount](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L126>)
 
 ```go
 func (ms *momentumStore) GetStakeBeneficialAmount(addr types.Address) (*big.Int, error)
 ```
 
-
+GetStakeBeneficialAmount returns the total stake amount addr is the beneficial owner of \(the input to per\-account staking rewards\). Reads through the plasma embedded contract.
 
 <a name="momentumStore.GetTokenInfoByTs"></a>
-### func \(\*momentumStore\) [GetTokenInfoByTs](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L118>)
+### func \(\*momentumStore\) [GetTokenInfoByTs](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L141>)
 
 ```go
 func (ms *momentumStore) GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definition.TokenInfo, error)
 ```
 
-
+GetTokenInfoByTs returns the issuance metadata for the token identified by ts. Reads through the token embedded contract.
 
 <a name="momentumStore.Identifier"></a>
-### func \(\*momentumStore\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L116>)
+### func \(\*momentumStore\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L159>)
 
 ```go
 func (ms *momentumStore) Identifier() types.HashHeight
 ```
 
-
+Identifier returns the \(Hash, Height\) of the frontier momentum in this view, or [types.ZeroHashHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZeroHashHeight>) for an empty momentum chain.
 
 <a name="momentumStore.IsSporkActive"></a>
-### func \(\*momentumStore\) [IsSporkActive](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L134>)
+### func \(\*momentumStore\) [IsSporkActive](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L165>)
 
 ```go
 func (ms *momentumStore) IsSporkActive(implemented *types.ImplementedSpork) (bool, error)
 ```
 
-
+IsSporkActive reports whether the spork named by implemented has been activated at this view's frontier height. Always returns false when the chain is at genesis \(height == 1\) — spork activation can only happen at height ≥ 2.
 
 <a name="momentumStore.PrefetchMomentum"></a>
-### func \(\*momentumStore\) [PrefetchMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L64>)
+### func \(\*momentumStore\) [PrefetchMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L88>)
 
 ```go
 func (ms *momentumStore) PrefetchMomentum(momentum *nom.Momentum) (*nom.DetailedMomentum, error)
 ```
 
-
+PrefetchMomentum bundles momentum together with the full account blocks it commits to, returning the [nom.DetailedMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#DetailedMomentum>) form the verifier consumes.
 
 <a name="momentumStore.SetFrontier"></a>
-### func \(\*momentumStore\) [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L13>)
+### func \(\*momentumStore\) [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L17>)
 
 ```go
 func (ms *momentumStore) SetFrontier(momentum *nom.Momentum) error
 ```
 
-
+SetFrontier writes momentum as the new frontier of the momentum chain via the shared [db.SetFrontier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#SetFrontier>) helper \(which atomically updates the frontier identifier, the hash → height index, and the height → bytes record\).
 
 <a name="momentumStore.Snapshot"></a>
-### func \(\*momentumStore\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L28>)
+### func \(\*momentumStore\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L41>)
 
 ```go
 func (ms *momentumStore) Snapshot() store.Momentum
 ```
 
-
+Snapshot returns an isolated copy of this view; subsequent writes are captured separately and won't reach the source.
 
 <a name="momentumStore.addAccountBlockHeader"></a>
-### func \(\*momentumStore\) [addAccountBlockHeader](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L28>)
+### func \(\*momentumStore\) [addAccountBlockHeader](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/account_block.go#L45>)
 
 ```go
 func (ms *momentumStore) addAccountBlockHeader(header types.AccountHeader) error
 ```
 
-
+addAccountBlockHeader writes header into the \[accountHeaderByHashPrefix\] reverse index so future \[momentumStore.GetAccountBlockByHash\] calls can locate the block without knowing the address.
 
 <a name="momentumStore.binarySearchBeforeTime"></a>
-### func \(\*momentumStore\) [binarySearchBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/range.go#L82>)
+### func \(\*momentumStore\) [binarySearchBeforeTime](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/range.go#L94>)
 
 ```go
 func (ms *momentumStore) binarySearchBeforeTime(start, end *nom.Momentum, timeNanosecond int64) (*nom.Momentum, error)
 ```
 
-
+binarySearchBeforeTime resolves \[start, end\] to the momentum immediately preceding timeNanosecond, given that start.Timestamp \< timeNanosecond and end.Timestamp \>= timeNanosecond. Used by \[GetMomentumBeforeTime\] after the estimate\-and\-step phase.
 
 <a name="momentumStore.computeBackers"></a>
-### func \(\*momentumStore\) [computeBackers](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L29>)
+### func \(\*momentumStore\) [computeBackers](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L38>)
 
 ```go
 func (ms *momentumStore) computeBackers(infos []*definition.DelegationInfo) (*map[string]map[types.Address]*big.Int, error)
 ```
 
-
+computeBackers groups delegations by pillar name and resolves each backer's cached ZNN balance. Returns a \`pillar\-name → backer → balance\` map suitable for \[momentumStore.ComputePillarDelegations\].
 
 <a name="momentumStore.getAccountMailbox"></a>
-### func \(\*momentumStore\) [getAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L39>)
+### func \(\*momentumStore\) [getAccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/ledger_store.go#L60>)
 
 ```go
 func (ms *momentumStore) getAccountMailbox(address types.Address) store.AccountMailbox
 ```
 
-
+getAccountMailbox returns the live \(non\-snapshotted\) mailbox for address — used internally where the caller needs to mutate.
 
 <a name="momentumStore.getAllDelegations"></a>
-### func \(\*momentumStore\) [getAllDelegations](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L21>)
+### func \(\*momentumStore\) [getAllDelegations](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L26>)
 
 ```go
 func (ms *momentumStore) getAllDelegations() ([]*definition.DelegationInfo, error)
 ```
 
-
+getAllDelegations returns every delegation record \(backer → pillar\) currently on record. Used as the input to \[momentumStore.computeBackers\].
 
 <a name="momentumStore.getEmbeddedStore"></a>
-### func \(\*momentumStore\) [getEmbeddedStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L157>)
+### func \(\*momentumStore\) [getEmbeddedStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/embedded.go#L191>)
 
 ```go
 func (ms *momentumStore) getEmbeddedStore(address types.Address) (store.Account, error)
 ```
 
-
+getEmbeddedStore returns the [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) view for an embedded contract address. Thin wrapper used to keep contract\-storage reads uniform across the per\-contract helpers above.
 
 <a name="momentumStore.getMomentumsByRange"></a>
-### func \(\*momentumStore\) [getMomentumsByRange](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L80>)
+### func \(\*momentumStore\) [getMomentumsByRange](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/momentum.go#L105>)
 
 ```go
 func (ms *momentumStore) getMomentumsByRange(from, to uint64) ([]*nom.Momentum, error)
 ```
 
-
+getMomentumsByRange returns the momentums with heights in \[from, to\).
 
 <a name="momentumStore.getZnnBalance"></a>
-### func \(\*momentumStore\) [getZnnBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L16>)
+### func \(\*momentumStore\) [getZnnBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L23>)
 
 ```go
 func (ms *momentumStore) getZnnBalance(address types.Address) (*big.Int, error)
 ```
 
-
+getZnnBalance returns address's cached ZNN balance, or zero \(no error\) if the cache has no entry yet.
 
 <a name="momentumStore.setBlockConfirmationHeight"></a>
-### func \(\*momentumStore\) [setBlockConfirmationHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L24>)
+### func \(\*momentumStore\) [setBlockConfirmationHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/confirmed.go#L36>)
 
 ```go
 func (ms *momentumStore) setBlockConfirmationHeight(hash types.Hash, height uint64) error
 ```
 
-
+setBlockConfirmationHeight records the momentum height at which hash was confirmed. Called by \[momentumStore.AddAccountBlockTransaction\] for every block \(and descendant\) admitted.
 
 <a name="momentumStore.setZnnBalance"></a>
-### func \(\*momentumStore\) [setZnnBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L26>)
+### func \(\*momentumStore\) [setZnnBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/momentum/balance.go#L37>)
 
 ```go
 func (ms *momentumStore) setZnnBalance(address types.Address, balance *big.Int) error
 ```
 
-
+setZnnBalance overwrites address's cached ZNN balance. Called by \[momentumStore.AddAccountBlockTransaction\] every time an account block for address is admitted.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

@@ -6,13 +6,38 @@
 import "github.com/zenon-network/go-zenon/chain/store"
 ```
 
-Package store holds the storage primitives shared by the account and momentum stores.
+Package store defines the read/write interfaces every chain consumer uses to query state at a specific point on either ledger.
 
 ### Overview
 
-store factors out the common index/encoding/iteration logic used by [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>) and [github.com/zenon\\\-network/go\\\-zenon/chain/momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/momentum/>) so that both ledgers share consistent patch semantics over LevelDB.
+store is interface\-only: the implementations live under [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>) and [github.com/zenon\\\-network/go\\\-zenon/chain/momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/momentum/>). Splitting definitions out lets the chain layer compose them without circular imports and gives the verifier a stable, narrow surface to mock against in tests.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- Account — read/write view of one account's chain pinned at a specific \(hash, height\). Includes balance and plasma caches plus the per\-account "received" set used to reject double\-receives.
+- AccountMailbox — per\-recipient FIFO of inbound sends awaiting consumption. The embedded\-contract sequencer rule reads this.
+- Momentum — read/write view of the global momentum chain pinned at a specific frontier. The unifying view that answers every chain\-state question \(which momentum, which account block, embedded\-contract state, balances, etc.\).
+- Genesis — the read\-only subset every momentum view exposes \(chain identifier, the genesis momentum / transaction, and the spork\-controlling address\).
+
+### Usage
+
+Consumers obtain views through the chain layer, never by constructing implementations directly:
+
+```
+mview := chain.GetMomentumStore(hashHeight)
+frontier, _ := mview.GetFrontierMomentum()
+aview := mview.GetAccountStore(address)
+balance, _ := aview.GetBalance(types.ZnnTokenStandard)
+```
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — the orchestrator that hands out views.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/>) — implements [Account](<#Account>).
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account/mailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/mailbox/>) — implements [AccountMailbox](<#AccountMailbox>).
+- [github.com/zenon\\\-network/go\\\-zenon/chain/momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/momentum/>) — implements [Momentum](<#Momentum>) and [Genesis](<#Genesis>).
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — primary consumer of these interfaces.
+- [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>), \[.../vm/embedded\] — read contract state through \[Account.Storage\] and [Momentum](<#Momentum>) queries.
 
 ## Index
 
@@ -23,122 +48,246 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="Account"></a>
-## type [Account](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L11-L38>)
+## type [Account](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L17-L78>)
 
+Account is the read/write surface for a single account's chain. The chain layer hands one out per \`\(address, point\-in\-time\)\` so consumers operate against an isolated, versioned snapshot of that account's history.
 
+Concurrency: snapshots taken via \[Account.Snapshot\] are not goroutine\-safe; callers should derive a fresh snapshot per goroutine.
 
 ```go
 type Account interface {
+    // Identifier returns the (Hash, Height) of this account chain's
+    // frontier in the view — i.e., the last account block visible here.
     Identifier() types.HashHeight
+    // Address returns the account this store belongs to.
     Address() *types.Address
 
+    // Storage returns the underlying [db.DB] for the account so embedded
+    // contracts and the VM can read/write contract storage directly.
     Storage() db.DB
 
+    // Frontier returns the frontier account block for this view.
     Frontier() (*nom.AccountBlock, error)
+    // ByHash looks up a block in this account chain by hash.
     ByHash(hash types.Hash) (*nom.AccountBlock, error)
+    // ByHeight looks up the block at height in this account chain.
     ByHeight(height uint64) (*nom.AccountBlock, error)
+    // MoreByHeight returns up to count blocks starting at height in
+    // ascending height order.
     MoreByHeight(height, count uint64) ([]*nom.AccountBlock, error)
 
+    // GetBalance returns the cached balance for the supplied token. Used
+    // by the verifier and VM to short-circuit overdraft checks without
+    // re-walking the chain.
     GetBalance(zts types.ZenonTokenStandard) (*big.Int, error)
+    // SetBalance overwrites the cached balance for the supplied token.
     SetBalance(zts types.ZenonTokenStandard, balance *big.Int) error
+    // GetBalanceMap returns the cached balances for every token this
+    // account holds.
     GetBalanceMap() (map[types.ZenonTokenStandard]*big.Int, error)
 
+    // GetChainPlasma returns the per-account plasma counter the
+    // rate-limiter uses.
     GetChainPlasma() (*big.Int, error)
-    AddChainPlasma(uint64) error
+    // AddChainPlasma adds delta to the per-account plasma counter.
+    AddChainPlasma(delta uint64) error
 
+    // MarkAsReceived records that hash (a send block referenced by
+    // FromBlockHash) has been consumed; subsequent receives of the same
+    // hash are rejected by the verifier.
     MarkAsReceived(hash types.Hash) error
+    // IsReceived reports whether hash has already been consumed.
     IsReceived(hash types.Hash) bool
 
+    // SequencerFront returns the next inbound send the account is
+    // expected to consume per the embedded-contract sequencer rule, or
+    // nil when the mailbox is empty for this account.
     SequencerFront(mailbox AccountMailbox) *types.AccountHeader
+    // SequencerPopFront drops the head of the sequencer queue; called by
+    // the chain layer after a contract receive has been committed.
     SequencerPopFront()
 
+    // Apply replays patch onto this account view. Returns the first
+    // error encountered.
     Apply(patch db.Patch) error
+    // Snapshot returns an isolated copy of this view; subsequent writes
+    // go into the snapshot, not the source.
     Snapshot() Account
+    // Changes returns the patch describing every write made to this view
+    // since it was created.
     Changes() (db.Patch, error)
 }
 ```
 
 <a name="AccountMailbox"></a>
-## type [AccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L40-L54>)
+## type [AccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L84-L117>)
 
-
+AccountMailbox is the per\-recipient queue of inbound sends awaiting consumption. Together with the sequencer rules in [Account](<#Account>) it lets embedded contracts process inbound traffic in a deterministic, FIFO order that every node agrees on.
 
 ```go
 type AccountMailbox interface {
+    // Address returns the recipient address whose mailbox this is.
     Address() types.Address
+    // Snapshot returns an isolated copy of the mailbox.
     Snapshot() AccountMailbox
 
+    // MarkAsUnreceived records that hash (a send block) has been
+    // admitted to the mailbox awaiting consumption.
     MarkAsUnreceived(hash types.Hash) error
+    // MarkAsReceived records that hash has been consumed; the verifier
+    // uses this state to reject double-receives.
     MarkAsReceived(hash types.Hash) error
+    // MarkBlockThatReceives records that the receive block named by
+    // receiveHeader consumed the send identified by hash. Used to answer
+    // [Momentum.GetBlockWhichReceives] without re-walking the chain.
     MarkBlockThatReceives(hash types.Hash, receiveHeader types.AccountHeader) error
 
+    // GetBlockWhichReceives returns the receive header that consumed
+    // fromHash, or nil if the send is still unreceived.
     GetBlockWhichReceives(fromHash types.Hash) *types.AccountHeader
+    // GetUnreceivedAccountBlockHashes returns up to atMost still-unreceived
+    // inbound send hashes in their canonical order.
     GetUnreceivedAccountBlockHashes(atMost uint64) ([]types.Hash, error)
 
+    // SequencerPushBack appends header to the sequencer queue (the FIFO
+    // of pending sends) and is called when a new send to this address is
+    // confirmed.
     SequencerPushBack(types.AccountHeader)
+    // SequencerSize returns the number of pending sends in the queue.
     SequencerSize() uint64
+    // SequencerByHeight returns the queued send at position height (1-based),
+    // or nil if it is out of range.
     SequencerByHeight(uint64) *types.AccountHeader
 }
 ```
 
 <a name="Genesis"></a>
-## type [Genesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/genesis.go#L8-L14>)
+## type [Genesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/genesis.go#L12-L27>)
 
-
+Genesis is the read\-only surface for genesis\-time invariants every momentum store must expose. Embedded into [Momentum](<#Momentum>) so callers always have access to the chain identifier and the genesis\-block / spork\-address constants without needing a separate handle.
 
 ```go
 type Genesis interface {
+    // ChainIdentifier returns the network this chain belongs to (alphanet,
+    // testnet, etc.) — bound into every block and momentum for replay
+    // protection.
     ChainIdentifier() uint64
+    // IsGenesisMomentum reports whether hash names the genesis momentum.
     IsGenesisMomentum(hash types.Hash) bool
+    // GetGenesisMomentum returns the genesis momentum.
     GetGenesisMomentum() *nom.Momentum
+    // GetGenesisTransaction returns the genesis [nom.MomentumTransaction]
+    // — momentum plus the patch describing the initial state.
     GetGenesisTransaction() *nom.MomentumTransaction
+    // GetSporkAddress returns the address authorized to create / activate
+    // sporks. May be nil when the chain has no spork governance configured.
     GetSporkAddress() *types.Address
 }
 ```
 
 <a name="Momentum"></a>
-## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/momentum.go#L13-L59>)
+## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/momentum.go#L24-L126>)
 
+Momentum is the read/write surface for the global momentum chain at a specific point in time. It is the unifying view consumers use: any chain\-state question \(which momentum, which account block, what's the active spork set, who are the active pillars, what's the balance of X\) is answered through a [Momentum](<#Momentum>).
 
+Embeds [Genesis](<#Genesis>) so the chain identifier and genesis constants are always reachable from a momentum view.
+
+Concurrency: snapshots taken via \[Momentum.Snapshot\] are not goroutine\-safe; derive a fresh snapshot per goroutine.
 
 ```go
 type Momentum interface {
     Genesis
 
+    // Identifier returns the (Hash, Height) of the frontier momentum in
+    // this view.
     Identifier() types.HashHeight
+    // GetFrontierMomentum returns the frontier momentum in this view.
     GetFrontierMomentum() (*nom.Momentum, error)
+    // GetMomentumByHash looks up a momentum by hash.
     GetMomentumByHash(types.Hash) (*nom.Momentum, error)
+    // GetMomentumByHeight looks up a momentum by height.
     GetMomentumByHeight(uint64) (*nom.Momentum, error)
 
+    // GetAccountBlock looks up the block named by header (address +
+    // hash + height).
     GetAccountBlock(types.AccountHeader) (*nom.AccountBlock, error)
+    // GetFrontierAccountBlock returns the frontier block of the
+    // supplied account chain.
     GetFrontierAccountBlock(types.Address) (*nom.AccountBlock, error)
+    // GetAccountBlockByHash looks up an account block by hash without
+    // needing the address.
     GetAccountBlockByHash(types.Hash) (*nom.AccountBlock, error)
+    // GetAccountBlockByHeight looks up the block at height in the
+    // supplied account chain.
     GetAccountBlockByHeight(types.Address, uint64) (*nom.AccountBlock, error)
 
+    // GetAccountBlocksByHeight returns up to count blocks starting at
+    // height in the supplied account chain, in ascending order.
     GetAccountBlocksByHeight(address types.Address, height, count uint64) ([]*nom.AccountBlock, error)
+    // GetMomentumsByHash returns up to count momentums starting at the
+    // momentum identified by blockHash, walking forward (higher == true)
+    // or backward.
     GetMomentumsByHash(blockHash types.Hash, higher bool, count uint64) ([]*nom.Momentum, error)
+    // GetMomentumsByHeight returns up to count momentums starting at
+    // height, walking forward or backward by `higher`.
     GetMomentumsByHeight(height uint64, higher bool, count uint64) ([]*nom.Momentum, error)
+    // GetMomentumBeforeTime returns the most recent momentum whose
+    // timestamp is before timestamp; useful for time-anchored queries.
     GetMomentumBeforeTime(timestamp *time.Time) (*nom.Momentum, error)
+    // PrefetchMomentum bundles momentum together with the full account
+    // blocks it commits to, returning the [nom.DetailedMomentum] form
+    // the verifier consumes.
     PrefetchMomentum(momentum *nom.Momentum) (*nom.DetailedMomentum, error)
 
+    // GetBlockWhichReceives returns the receive block that consumed the
+    // send identified by hash, or nil if the send is still pending.
     GetBlockWhichReceives(hash types.Hash) (*nom.AccountBlock, error)
 
+    // GetBlockConfirmationHeight returns the momentum height at which
+    // hash was confirmed (the height the verifier uses to validate
+    // MomentumAcknowledged for auto-generated blocks).
     GetBlockConfirmationHeight(hash types.Hash) (uint64, error)
 
+    // GetAllDefinedSporks returns every spork record (active and pending)
+    // recorded by the spork contract.
     GetAllDefinedSporks() ([]*definition.Spork, error)
+    // GetActivePillars returns the registered pillar set whose
+    // registration is still active.
     GetActivePillars() ([]*definition.PillarInfo, error)
-    IsSporkActive(*types.ImplementedSpork) (bool, error)
+    // IsSporkActive reports whether the spork referenced by spork has
+    // been activated at this view's height.
+    IsSporkActive(spork *types.ImplementedSpork) (bool, error)
+    // GetStakeBeneficialAmount returns the total stake amount addr is
+    // the beneficial owner of (the input to per-account staking rewards).
     GetStakeBeneficialAmount(addr types.Address) (*big.Int, error)
+    // GetTokenInfoByTs returns the issuance metadata for the token
+    // identified by ts.
     GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definition.TokenInfo, error)
+    // ComputePillarDelegations re-derives every pillar's aggregated
+    // delegation weight (and the per-backer breakdown) from the current
+    // stake and vote records. Used by the consensus layer when
+    // constructing election snapshots.
     ComputePillarDelegations() ([]*types.PillarDelegationDetail, error)
 
+    // GetAccountStore returns the [Account] view for address pinned at
+    // this momentum's identifier.
     GetAccountStore(address types.Address) Account
+    // GetAccountDB returns the raw [db.DB] for address — used by code
+    // that reads contract storage directly (e.g., RPC range queries).
     GetAccountDB(address types.Address) db.DB
+    // GetAccountMailbox returns the mailbox for address pinned at this
+    // view.
     GetAccountMailbox(address types.Address) AccountMailbox
 
+    // Snapshot returns an isolated copy of this view.
     Snapshot() Momentum
+    // Changes returns the patch capturing every write made to this view
+    // since it was created.
     Changes() (db.Patch, error)
 
+    // AddAccountBlockTransaction admits the (header, patch) pair into
+    // this view, marking the named account block as part of the
+    // in-progress momentum's content.
     AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch) error
 }
 ```

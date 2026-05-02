@@ -11,10 +11,15 @@ import (
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 )
 
+// log is the per-submodule logger used by the genesis loader.
 var (
 	log = common.ChainLogger.New("submodule", "genesis")
 )
 
+// MakeEmbeddedGenesisConfig builds a [store.Genesis] from the
+// alphanet-genesis JSON embedded in this binary at build time. Returns
+// [ErrNoEmbeddedGenesis] when the binary was built without an embedded
+// genesis (e.g., a stripped libznn build).
 func MakeEmbeddedGenesisConfig() (store.Genesis, error) {
 	if embeddedGenesis == nil {
 		return nil, ErrNoEmbeddedGenesis
@@ -22,6 +27,14 @@ func MakeEmbeddedGenesisConfig() (store.Genesis, error) {
 	return NewGenesis(embeddedGenesis), nil
 }
 
+// ReadGenesisConfigFromFile loads a JSON-encoded [GenesisConfig] from
+// genesisFile, validates it via [CheckGenesis], and returns the
+// resulting [store.Genesis]. An empty path returns (nil, nil) — the
+// caller should fall back to the embedded genesis.
+//
+// On any failure the function logs at `Crit` level and returns one of
+// [ErrInvalidGenesisPath], [ErrIncompleteGenesisJson],
+// [ErrInvalidGenesisJson], or [ErrInvalidGenesisConfig].
 func ReadGenesisConfigFromFile(genesisFile string) (store.Genesis, error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -59,6 +72,10 @@ func ReadGenesisConfigFromFile(genesisFile string) (store.Genesis, error) {
 	}
 }
 
+// GenesisConfig is the JSON-shaped genesis description: the chain
+// identifier, opaque ExtraData, the genesis timestamp, the
+// spork-controlling address, the per-embedded-contract configs, and the
+// catalog of genesis-receive blocks that seed user balances.
 type GenesisConfig struct {
 	ChainIdentifier     uint64
 	ExtraData           string
@@ -74,33 +91,49 @@ type GenesisConfig struct {
 	GenesisBlocks *GenesisBlocksConfig
 }
 
+// PillarContractConfig is the genesis seed for the pillar contract:
+// initial pillar registrations, their delegations, and any legacy
+// (chain-migration) pillar entries.
 type PillarContractConfig struct {
 	Pillars       []*definition.PillarInfo
 	Delegations   []*definition.DelegationInfo
 	LegacyEntries []*definition.LegacyPillarEntry
 }
 
+// TokenContractConfig is the genesis seed for the token contract:
+// initial token issuances.
 type TokenContractConfig struct {
 	Tokens []*definition.TokenInfo
 }
 
+// PlasmaContractConfig is the genesis seed for the plasma contract:
+// initial fusion entries.
 type PlasmaContractConfig struct {
 	Fusions []*definition.FusionInfo
 }
 
+// SwapContractConfig is the genesis seed for the swap contract: the
+// legacy-chain redemption entries available at launch.
 type SwapContractConfig struct {
 	Entries []*definition.SwapAssets
 }
 
+// GenesisBlocksConfig is the catalog of genesis-receive blocks that
+// seed user balances at chain birth. Each entry produces one
+// [nom.BlockTypeGenesisReceive] block on the supplied address.
 type GenesisBlocksConfig struct {
 	Blocks []*GenesisBlockConfig
 }
 
+// GenesisBlockConfig describes one genesis-receive: the recipient
+// address and its initial balance per ZTS.
 type GenesisBlockConfig struct {
 	Address     types.Address
 	BalanceList map[types.ZenonTokenStandard]*big.Int
 }
 
+// SporkConfig is the genesis seed for the spork contract — used by
+// chains that launch with one or more sporks already defined.
 type SporkConfig struct {
 	Sporks []*definition.Spork
 }

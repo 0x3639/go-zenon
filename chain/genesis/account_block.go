@@ -13,13 +13,30 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// mockStable is the placeholder [chain.StableChain] handed to the
+// account pool during genesis assembly: it returns a fresh in-memory
+// database for every account so the pool can stage initial state
+// without a real chain backing it.
 type mockStable struct {
 }
 
+// GetStableAccountDB returns a fresh in-memory [db.DB] for any address —
+// genesis assembly never reads previous state, so an empty store is the
+// correct answer.
 func (m *mockStable) GetStableAccountDB(address types.Address) db.DB {
 	return db.NewMemDB()
 }
 
+// newGenesisAccountBlocks materializes the genesis account-block set
+// from cfg by running each embedded contract's seeding routine in
+// order, then layering on every additional balance block. Returns the
+// populated [chain.AccountPool] that
+// [github.com/zenon-network/go-zenon/chain/genesis.newGenesisMomentum]
+// then snapshots into the genesis momentum.
+//
+// Order matters: embedded contracts (Pillar, Token, Plasma, Swap, and
+// optionally Spork) are seeded first so they appear at known heights
+// in their account chains; arbitrary genesis balance blocks follow.
 func newGenesisAccountBlocks(cfg *GenesisConfig) chain.AccountPool {
 	pool := chain.NewAccountPool(new(mockStable))
 
@@ -48,6 +65,11 @@ func newGenesisAccountBlocks(cfg *GenesisConfig) chain.AccountPool {
 	return pool
 }
 
+// wrap turns an in-progress [vm_context.AccountVmContext] (already
+// populated with the address's seeded storage) into a complete
+// [nom.AccountBlockTransaction] of type [nom.BlockTypeGenesisReceive]:
+// applies any matching genesis balances, computes the changes hash and
+// the canonical block hash, and pairs the block with its patch.
 func wrap(cfg *GenesisConfig, context vm_context.AccountVmContext) *nom.AccountBlockTransaction {
 	address := *context.Address()
 	block := &nom.AccountBlock{
@@ -79,12 +101,19 @@ func wrap(cfg *GenesisConfig, context vm_context.AccountVmContext) *nom.AccountB
 	}
 }
 
+// newContext returns a fresh genesis-time
+// [vm_context.AccountVmContext] for address, plus a handle on its
+// underlying storage view.
 func newContext(address types.Address) (vm_context.AccountVmContext, db.DB) {
 	context := vm_context.NewGenesisAccountContext(address)
 	contextStorage := context.Storage()
 	return context, contextStorage
 }
 
+// genesisPillarContractConfig seeds the pillar embedded contract: every
+// configured pillar's registration record (and producing-key index),
+// every delegation record, and every legacy pillar entry are written
+// into the contract's storage namespace.
 func genesisPillarContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction {
 	config := cfg.PillarConfig
 	context, contextStorage := newContext(types.PillarContract)
@@ -105,6 +134,10 @@ func genesisPillarContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransactio
 
 	return wrap(cfg, context)
 }
+
+// genesisTokenContractConfig seeds the token embedded contract: every
+// configured token's issuance record is written into the contract's
+// storage namespace.
 func genesisTokenContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction {
 	config := cfg.TokenConfig
 	context, contextStorage := newContext(types.TokenContract)
@@ -115,6 +148,10 @@ func genesisTokenContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 
 	return wrap(cfg, context)
 }
+
+// genesisPlasmaContractConfig seeds the plasma embedded contract: every
+// configured fusion entry is saved, and the per-beneficiary cumulative
+// fused-amount index is rebuilt from those entries.
 func genesisPlasmaContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction {
 	config := cfg.PlasmaConfig
 	context, contextStorage := newContext(types.PlasmaContract)
@@ -139,6 +176,9 @@ func genesisPlasmaContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransactio
 
 	return wrap(cfg, context)
 }
+
+// genesisSwapContractConfig seeds the swap embedded contract with the
+// configured legacy-chain redemption entries.
 func genesisSwapContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction {
 	config := cfg.SwapConfig
 	context, contextStorage := newContext(types.SwapContract)
@@ -149,6 +189,9 @@ func genesisSwapContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction 
 
 	return wrap(cfg, context)
 }
+
+// genesisSporkContractConfig seeds the spork embedded contract with the
+// configured initial spork records (when the genesis defines any).
 func genesisSporkContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction {
 	config := cfg.SporkConfig
 	context, contextStorage := newContext(types.SporkContract)
@@ -159,6 +202,11 @@ func genesisSporkContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 
 	return wrap(cfg, context)
 }
+
+// genesisBalanceBlocksConfig returns one genesis-receive block per
+// non-embedded address in [GenesisConfig.GenesisBlocks]. Embedded
+// addresses listed in alreadySet are skipped because their seeding has
+// already happened via the per-contract helpers above.
 func genesisBalanceBlocksConfig(cfg *GenesisConfig, alreadySet map[types.Address]interface{}) []*nom.AccountBlockTransaction {
 	list := make([]*nom.AccountBlockTransaction, 0, len(cfg.GenesisBlocks.Blocks))
 	for _, genesisBlock := range cfg.GenesisBlocks.Blocks {

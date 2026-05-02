@@ -9,6 +9,15 @@ import (
 	"github.com/zenon-network/go-zenon/vm"
 )
 
+// newGenesisMomentum constructs the genesis [nom.MomentumTransaction]
+// from genesisConfig and the seeded account pool: assembles a
+// height-1 momentum referencing every seeded account block, then runs
+// the VM's [vm.Supervisor.GenerateGenesisMomentum] to derive the matching
+// state patch. The genesis momentum is the only momentum that does not
+// flow through the verifier — its content is fixed by the embedded
+// configuration.
+//
+// Panics on supervisor failure — a malformed genesis is unrecoverable.
 func newGenesisMomentum(genesisConfig *GenesisConfig, pool chain.AccountPool) *nom.MomentumTransaction {
 	timestamp := time.Unix(genesisConfig.GenesisTimestampSec, 0)
 	blocks := pool.GetAllUncommittedAccountBlocks()

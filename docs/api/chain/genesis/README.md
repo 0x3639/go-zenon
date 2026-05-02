@@ -6,13 +6,41 @@
 import "github.com/zenon-network/go-zenon/chain/genesis"
 ```
 
-Package genesis provides the embedded alphanet genesis configuration and chain\-identifier compatibility checks.
+Package genesis provides the embedded alphanet genesis configuration, the JSON\-shaped runtime config loader, and the consistency checks that bind the two together.
 
 ### Overview
 
-genesis seeds the initial state on a fresh data directory: the genesis momentum, the embedded\-contract receive blocks that mint initial token supplies, and the chain identifier that distinguishes mainnet from local test networks. On every node boot it cross\-checks the on\-disk chain against the embedded genesis to detect database mismatches.
+genesis is the [github.com/zenon\\\-network/go\\\-zenon/chain/store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) implementation. It seeds the initial state on a fresh data directory — the genesis momentum, the embedded\-contract receive blocks that mint initial token supplies and pillar registrations, and the chain identifier that distinguishes one network from another. On every node boot the chain layer cross\-checks the on\-disk frontier against the embedded genesis, refusing to start when they disagree.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+Genesis assembly runs entirely in\-memory at boot time via \[account\_block.go\] \(per\-contract seeding\) and \[momentum.go\] \(assembly into a height\-1 momentum\). The genesis momentum is the only momentum that does not flow through [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>).
+
+### Key Concepts
+
+- GenesisConfig — the JSON\-shaped genesis description. Includes per\-embedded\-contract configs \(PillarConfig, TokenConfig, PlasmaConfig, SwapConfig, optional SporkConfig\) and the catalog of genesis\-receive blocks that seed user balances.
+- Embedded genesis — the canonical alphanet [GenesisConfig](<#GenesisConfig>), baked into the binary via the auto\-generated \[embeddedGenesisStr\] in embedded\_genesis\_string.go. Surfaced by [MakeEmbeddedGenesisConfig](<#MakeEmbeddedGenesisConfig>).
+- File genesis — a runtime override loaded by [ReadGenesisConfigFromFile](<#ReadGenesisConfigFromFile>); used by test networks and by node operators who want to spin up custom chains.
+- Consistency checks \(\[shared\_tests.go\]\) — rules every genesis must satisfy: token\-supply totals, pillar balance totals, plasma\-fusion totals, swap entry well\-formedness, required\-field presence.
+
+### Usage
+
+Most binaries use the embedded genesis:
+
+```
+g, err := genesis.MakeEmbeddedGenesisConfig()
+```
+
+Tests and custom chains load from disk:
+
+```
+g, err := genesis.ReadGenesisConfigFromFile("testnet.json")
+```
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — interface this package implements.
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — orchestrates the genesis store alongside the live momentum chain.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/genesis/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/mock/>) — the test\-only fork of this package that tests use to compose synthetic genesis configurations.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded/definition](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/>) — supplies the per\-contract record types \(PillarInfo, TokenInfo, FusionInfo, SwapAssets, Spork, etc.\) that seeding writes.
 
 ## Index
 
@@ -59,15 +87,25 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Variables
 
-<a name="ErrInvalidGenesisPath"></a>
+<a name="ErrInvalidGenesisPath"></a>Sentinel errors returned by the genesis loader. Callers should branch on these rather than parsing error strings.
 
 ```go
 var (
-    ErrInvalidGenesisPath    = errors.New("can't open genesis file")
-    ErrInvalidGenesisJson    = errors.New("malformed genesis json structure")
+    // ErrInvalidGenesisPath is returned when the genesis file cannot be
+    // opened (missing, unreadable, etc.).
+    ErrInvalidGenesisPath = errors.New("can't open genesis file")
+    // ErrInvalidGenesisJson is returned when JSON parsing fails for
+    // reasons other than truncation.
+    ErrInvalidGenesisJson = errors.New("malformed genesis json structure")
+    // ErrIncompleteGenesisJson is returned when the file is truncated
+    // (decoder reports unexpected EOF / EOF).
     ErrIncompleteGenesisJson = errors.New("incomplete genesis json")
-    ErrInvalidGenesisConfig  = errors.New("invalid genesis config. Failed to pass tests")
+    // ErrInvalidGenesisConfig is returned when [CheckGenesis] rejects
+    // the parsed config (balance / fusion / supply mismatch).
+    ErrInvalidGenesisConfig = errors.New("invalid genesis config. Failed to pass tests")
 
+    // ErrNoEmbeddedGenesis is returned by [MakeEmbeddedGenesisConfig]
+    // when the binary was built without an embedded genesis JSON.
     ErrNoEmbeddedGenesis = errors.New("the codebase has no embedded genesis")
 )
 ```
@@ -110439,7 +110477,7 @@ var (
 )
 ```
 
-<a name="log"></a>
+<a name="log"></a>log is the per\-submodule logger used by the genesis loader.
 
 ```go
 var (
@@ -110448,207 +110486,213 @@ var (
 ```
 
 <a name="CheckFieldsExist"></a>
-## func [CheckFieldsExist](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L60>)
+## func [CheckFieldsExist](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L71>)
 
 ```go
 func CheckFieldsExist(g *GenesisConfig) error
 ```
 
-
+CheckFieldsExist verifies that every required top\-level field of g is present.
 
 <a name="CheckGenesis"></a>
-## func [CheckGenesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L41>)
+## func [CheckGenesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L50>)
 
 ```go
 func CheckGenesis(g *GenesisConfig) error
 ```
 
-
+CheckGenesis runs every consistency check on g in order: required\-fields presence, plasma fusion totals against the plasma contract balance, swap entry well\-formedness, pillar deposit totals against the pillar contract balance, and per\-token total\-supply reconciliation. Returns the first failure encountered.
 
 <a name="CheckGenesisCheckSum"></a>
-## func [CheckGenesisCheckSum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L159>)
+## func [CheckGenesisCheckSum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L192>)
 
 ```go
 func CheckGenesisCheckSum(g *GenesisConfig, expected types.Hash) error
 ```
 
-CheckGenesisCheckSum ensures that the hash of the account blocks don't change during the build.
+CheckGenesisCheckSum ensures that the hash of the account blocks don't change during the build: rebuilds the genesis from g and compares the resulting genesis\-momentum hash to expected. Used by release tests to verify that incidental refactors do not change the committed alphanet state.
 
 <a name="CheckPillarBalance"></a>
-## func [CheckPillarBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L109>)
+## func [CheckPillarBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L133>)
 
 ```go
 func CheckPillarBalance(g *GenesisConfig) error
 ```
 
-
+CheckPillarBalance verifies the ZNN deposited into the pillar contract by the genesis\-receive matches the sum of every registered pillar's stake amount.
 
 <a name="CheckPlasmaInfo"></a>
-## func [CheckPlasmaInfo](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L81>)
+## func [CheckPlasmaInfo](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L96>)
 
 ```go
 func CheckPlasmaInfo(g *GenesisConfig) error
 ```
 
-
+CheckPlasmaInfo verifies the QSR locked into the plasma contract by the genesis\-receive block matches the sum of every fusion entry's amount.
 
 <a name="CheckSwapAccount"></a>
-## func [CheckSwapAccount](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L95>)
+## func [CheckSwapAccount](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L115>)
 
 ```go
 func CheckSwapAccount(g *GenesisConfig) error
 ```
 
-
+CheckSwapAccount verifies the swap contract's genesis\-receive declares zero ZNN and zero QSR \(legacy\-chain claims pull from the contract's mint authority, not from a pre\-funded balance\) and that every entry has both ZNN and QSR amounts populated.
 
 <a name="CheckTokenTotalSupply"></a>
-## func [CheckTokenTotalSupply](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L120>)
+## func [CheckTokenTotalSupply](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L149>)
 
 ```go
 func CheckTokenTotalSupply(g *GenesisConfig) error
 ```
 
-
+CheckTokenTotalSupply verifies that for every token declared in [TokenContractConfig](<#TokenContractConfig>), the sum of balances assigned to that token across every genesis\-receive equals the declared total supply, and that no token is given out without being declared.
 
 <a name="MakeEmbeddedGenesisConfig"></a>
-## func [MakeEmbeddedGenesisConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L18>)
+## func [MakeEmbeddedGenesisConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L23>)
 
 ```go
 func MakeEmbeddedGenesisConfig() (store.Genesis, error)
 ```
 
-
+MakeEmbeddedGenesisConfig builds a [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) from the alphanet\-genesis JSON embedded in this binary at build time. Returns [ErrNoEmbeddedGenesis](<#ErrInvalidGenesisPath>) when the binary was built without an embedded genesis \(e.g., a stripped libznn build\).
 
 <a name="NewGenesis"></a>
-## func [NewGenesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L14>)
+## func [NewGenesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L22>)
 
 ```go
 func NewGenesis(config *GenesisConfig) store.Genesis
 ```
 
-
+NewGenesis builds the genesis\-time [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) from config: runs every embedded contract's seeding logic against an in\-memory account pool, assembles the genesis momentum from the resulting account blocks, and stores the whole bundle.
 
 <a name="ReadGenesisConfigFromFile"></a>
-## func [ReadGenesisConfigFromFile](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L25>)
+## func [ReadGenesisConfigFromFile](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L38>)
 
 ```go
 func ReadGenesisConfigFromFile(genesisFile string) (store.Genesis, error)
 ```
 
+ReadGenesisConfigFromFile loads a JSON\-encoded [GenesisConfig](<#GenesisConfig>) from genesisFile, validates it via [CheckGenesis](<#CheckGenesis>), and returns the resulting [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>). An empty path returns \(nil, nil\) — the caller should fall back to the embedded genesis.
 
+On any failure the function logs at \`Crit\` level and returns one of [ErrInvalidGenesisPath](<#ErrInvalidGenesisPath>), [ErrIncompleteGenesisJson](<#ErrInvalidGenesisPath>), [ErrInvalidGenesisJson](<#ErrInvalidGenesisPath>), or [ErrInvalidGenesisConfig](<#ErrInvalidGenesisPath>).
 
 <a name="checkAccountBalance"></a>
-## func [checkAccountBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L12>)
+## func [checkAccountBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/shared_tests.go#L16>)
 
 ```go
 func checkAccountBalance(g *GenesisConfig, addr types.Address, required map[types.ZenonTokenStandard]*big.Int) error
 ```
 
-
+checkAccountBalance verifies that the genesis\-receive block for addr declares exactly the balances in required: every token in required is present in the matching genesis block, every token in the block is listed in required, and the amounts agree.
 
 <a name="genesisBalanceBlocksConfig"></a>
-## func [genesisBalanceBlocksConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L162>)
+## func [genesisBalanceBlocksConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L210>)
 
 ```go
 func genesisBalanceBlocksConfig(cfg *GenesisConfig, alreadySet map[types.Address]interface{}) []*nom.AccountBlockTransaction
 ```
 
-
+genesisBalanceBlocksConfig returns one genesis\-receive block per non\-embedded address in \[GenesisConfig.GenesisBlocks\]. Embedded addresses listed in alreadySet are skipped because their seeding has already happened via the per\-contract helpers above.
 
 <a name="genesisPillarContractConfig"></a>
-## func [genesisPillarContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L88>)
+## func [genesisPillarContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L117>)
 
 ```go
 func genesisPillarContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 ```
 
-
+genesisPillarContractConfig seeds the pillar embedded contract: every configured pillar's registration record \(and producing\-key index\), every delegation record, and every legacy pillar entry are written into the contract's storage namespace.
 
 <a name="genesisPlasmaContractConfig"></a>
-## func [genesisPlasmaContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L118>)
+## func [genesisPlasmaContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L155>)
 
 ```go
 func genesisPlasmaContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 ```
 
-
+genesisPlasmaContractConfig seeds the plasma embedded contract: every configured fusion entry is saved, and the per\-beneficiary cumulative fused\-amount index is rebuilt from those entries.
 
 <a name="genesisSporkContractConfig"></a>
-## func [genesisSporkContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L152>)
+## func [genesisSporkContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L195>)
 
 ```go
 func genesisSporkContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 ```
 
-
+genesisSporkContractConfig seeds the spork embedded contract with the configured initial spork records \(when the genesis defines any\).
 
 <a name="genesisSwapContractConfig"></a>
-## func [genesisSwapContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L142>)
+## func [genesisSwapContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L182>)
 
 ```go
 func genesisSwapContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 ```
 
-
+genesisSwapContractConfig seeds the swap embedded contract with the configured legacy\-chain redemption entries.
 
 <a name="genesisTokenContractConfig"></a>
-## func [genesisTokenContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L108>)
+## func [genesisTokenContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L141>)
 
 ```go
 func genesisTokenContractConfig(cfg *GenesisConfig) *nom.AccountBlockTransaction
 ```
 
-
+genesisTokenContractConfig seeds the token embedded contract: every configured token's issuance record is written into the contract's storage namespace.
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/embedded_genesis.go#L9>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/embedded_genesis.go#L13>)
 
 ```go
 func init()
 ```
 
-
+init parses the embedded genesis JSON string \(when this build carries one\) into the package\-level \[embeddedGenesis\] handle. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on parse failure — a malformed embedded genesis is a build defect.
 
 <a name="newContext"></a>
-## func [newContext](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L82>)
+## func [newContext](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L107>)
 
 ```go
 func newContext(address types.Address) (vm_context.AccountVmContext, db.DB)
 ```
 
-
+newContext returns a fresh genesis\-time [vm\\\_context.AccountVmContext](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext>) for address, plus a handle on its underlying storage view.
 
 <a name="newGenesisAccountBlocks"></a>
-## func [newGenesisAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L23>)
+## func [newGenesisAccountBlocks](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L40>)
 
 ```go
 func newGenesisAccountBlocks(cfg *GenesisConfig) chain.AccountPool
 ```
 
+newGenesisAccountBlocks materializes the genesis account\-block set from cfg by running each embedded contract's seeding routine in order, then layering on every additional balance block. Returns the populated [chain.AccountPool](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#AccountPool>) that [github.com/zenon\\\-network/go\\\-zenon/chain/genesis.newGenesisMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis.newGenesisMomentum/>) then snapshots into the genesis momentum.
 
+Order matters: embedded contracts \(Pillar, Token, Plasma, Swap, and optionally Spork\) are seeded first so they appear at known heights in their account chains; arbitrary genesis balance blocks follow.
 
 <a name="newGenesisMomentum"></a>
-## func [newGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/momentum.go#L12>)
+## func [newGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/momentum.go#L21>)
 
 ```go
 func newGenesisMomentum(genesisConfig *GenesisConfig, pool chain.AccountPool) *nom.MomentumTransaction
 ```
 
+newGenesisMomentum constructs the genesis [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>) from genesisConfig and the seeded account pool: assembles a height\-1 momentum referencing every seeded account block, then runs the VM's [vm.Supervisor.GenerateGenesisMomentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#Supervisor.GenerateGenesisMomentum>) to derive the matching state patch. The genesis momentum is the only momentum that does not flow through the verifier — its content is fixed by the embedded configuration.
 
+Panics on supervisor failure — a malformed genesis is unrecoverable.
 
 <a name="wrap"></a>
-## func [wrap](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L51>)
+## func [wrap](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L73>)
 
 ```go
 func wrap(cfg *GenesisConfig, context vm_context.AccountVmContext) *nom.AccountBlockTransaction
 ```
 
-
+wrap turns an in\-progress [vm\\\_context.AccountVmContext](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext>) \(already populated with the address's seeded storage\) into a complete [nom.AccountBlockTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlockTransaction>) of type [nom.BlockTypeGenesisReceive](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeGenesisReceive>): applies any matching genesis balances, computes the changes hash and the canonical block hash, and pairs the block with its patch.
 
 <a name="GenesisBlockConfig"></a>
-## type [GenesisBlockConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L99-L102>)
+## type [GenesisBlockConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L130-L133>)
 
-
+GenesisBlockConfig describes one genesis\-receive: the recipient address and its initial balance per ZTS.
 
 ```go
 type GenesisBlockConfig struct {
@@ -110658,9 +110702,9 @@ type GenesisBlockConfig struct {
 ```
 
 <a name="GenesisBlocksConfig"></a>
-## type [GenesisBlocksConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L95-L97>)
+## type [GenesisBlocksConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L124-L126>)
 
-
+GenesisBlocksConfig is the catalog of genesis\-receive blocks that seed user balances at chain birth. Each entry produces one [nom.BlockTypeGenesisReceive](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#BlockTypeGenesisReceive>) block on the supplied address.
 
 ```go
 type GenesisBlocksConfig struct {
@@ -110669,9 +110713,9 @@ type GenesisBlocksConfig struct {
 ```
 
 <a name="GenesisConfig"></a>
-## type [GenesisConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L62-L75>)
+## type [GenesisConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L79-L92>)
 
-
+GenesisConfig is the JSON\-shaped genesis description: the chain identifier, opaque ExtraData, the genesis timestamp, the spork\-controlling address, the per\-embedded\-contract configs, and the catalog of genesis\-receive blocks that seed user balances.
 
 ```go
 type GenesisConfig struct {
@@ -110690,7 +110734,7 @@ type GenesisConfig struct {
 }
 ```
 
-<a name="embeddedGenesis"></a>
+<a name="embeddedGenesis"></a>embeddedGenesis holds the parsed alphanet [GenesisConfig](<#GenesisConfig>) for builds that compile in \[embeddedGenesisStr\]. Nil for builds without an embedded genesis \(in which case [MakeEmbeddedGenesisConfig](<#MakeEmbeddedGenesisConfig>) returns [ErrNoEmbeddedGenesis](<#ErrInvalidGenesisPath>)\).
 
 ```go
 var (
@@ -110699,9 +110743,9 @@ var (
 ```
 
 <a name="PillarContractConfig"></a>
-## type [PillarContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L77-L81>)
+## type [PillarContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L97-L101>)
 
-
+PillarContractConfig is the genesis seed for the pillar contract: initial pillar registrations, their delegations, and any legacy \(chain\-migration\) pillar entries.
 
 ```go
 type PillarContractConfig struct {
@@ -110712,9 +110756,9 @@ type PillarContractConfig struct {
 ```
 
 <a name="PlasmaContractConfig"></a>
-## type [PlasmaContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L87-L89>)
+## type [PlasmaContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L111-L113>)
 
-
+PlasmaContractConfig is the genesis seed for the plasma contract: initial fusion entries.
 
 ```go
 type PlasmaContractConfig struct {
@@ -110723,9 +110767,9 @@ type PlasmaContractConfig struct {
 ```
 
 <a name="SporkConfig"></a>
-## type [SporkConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L104-L106>)
+## type [SporkConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L137-L139>)
 
-
+SporkConfig is the genesis seed for the spork contract — used by chains that launch with one or more sporks already defined.
 
 ```go
 type SporkConfig struct {
@@ -110734,9 +110778,9 @@ type SporkConfig struct {
 ```
 
 <a name="SwapContractConfig"></a>
-## type [SwapContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L91-L93>)
+## type [SwapContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L117-L119>)
 
-
+SwapContractConfig is the genesis seed for the swap contract: the legacy\-chain redemption entries available at launch.
 
 ```go
 type SwapContractConfig struct {
@@ -110745,9 +110789,9 @@ type SwapContractConfig struct {
 ```
 
 <a name="TokenContractConfig"></a>
-## type [TokenContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L83-L85>)
+## type [TokenContractConfig](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/config.go#L105-L107>)
 
-
+TokenContractConfig is the genesis seed for the token contract: initial token issuances.
 
 ```go
 type TokenContractConfig struct {
@@ -110756,9 +110800,9 @@ type TokenContractConfig struct {
 ```
 
 <a name="genesis"></a>
-## type [genesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L9-L12>)
+## type [genesis](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L13-L16>)
 
-
+genesis is the [store.Genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Genesis>) implementation: it caches the fully\-assembled genesis [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>) \(momentum \+ initial state patch\) so callers can fetch the genesis momentum, hash, or transaction in O\(1\).
 
 ```go
 type genesis struct {
@@ -110768,54 +110812,54 @@ type genesis struct {
 ```
 
 <a name="genesis.ChainIdentifier"></a>
-### func \(\*genesis\) [ChainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L24>)
+### func \(\*genesis\) [ChainIdentifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L34>)
 
 ```go
 func (g *genesis) ChainIdentifier() uint64
 ```
 
-
+ChainIdentifier returns the chain identifier for the network this genesis describes.
 
 <a name="genesis.GetGenesisMomentum"></a>
-### func \(\*genesis\) [GetGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L30>)
+### func \(\*genesis\) [GetGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L44>)
 
 ```go
 func (g *genesis) GetGenesisMomentum() *nom.Momentum
 ```
 
-
+GetGenesisMomentum returns the genesis momentum.
 
 <a name="genesis.GetGenesisTransaction"></a>
-### func \(\*genesis\) [GetGenesisTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L33>)
+### func \(\*genesis\) [GetGenesisTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L50>)
 
 ```go
 func (g *genesis) GetGenesisTransaction() *nom.MomentumTransaction
 ```
 
-
+GetGenesisTransaction returns the full genesis [nom.MomentumTransaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#MomentumTransaction>) — momentum plus the patch that produces the initial state.
 
 <a name="genesis.GetSporkAddress"></a>
-### func \(\*genesis\) [GetSporkAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L36>)
+### func \(\*genesis\) [GetSporkAddress](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L56>)
 
 ```go
 func (g *genesis) GetSporkAddress() *types.Address
 ```
 
-
+GetSporkAddress returns the configured spork\-controlling address for this network. May be nil when the chain has no spork governance set up.
 
 <a name="genesis.IsGenesisMomentum"></a>
-### func \(\*genesis\) [IsGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L27>)
+### func \(\*genesis\) [IsGenesisMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/genesis.go#L39>)
 
 ```go
 func (g *genesis) IsGenesisMomentum(hash types.Hash) bool
 ```
 
-
+IsGenesisMomentum reports whether hash names the genesis momentum.
 
 <a name="mockStable"></a>
-## type [mockStable](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L16-L17>)
+## type [mockStable](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L20-L21>)
 
-
+mockStable is the placeholder [chain.StableChain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#StableChain>) handed to the account pool during genesis assembly: it returns a fresh in\-memory database for every account so the pool can stage initial state without a real chain backing it.
 
 ```go
 type mockStable struct {
@@ -110823,12 +110867,12 @@ type mockStable struct {
 ```
 
 <a name="mockStable.GetStableAccountDB"></a>
-### func \(\*mockStable\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L19>)
+### func \(\*mockStable\) [GetStableAccountDB](<https://github.com/zenon-network/go-zenon/blob/master/chain/genesis/account_block.go#L26>)
 
 ```go
 func (m *mockStable) GetStableAccountDB(address types.Address) db.DB
 ```
 
-
+GetStableAccountDB returns a fresh in\-memory [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) for any address — genesis assembly never reads previous state, so an empty store is the correct answer.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

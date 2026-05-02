@@ -10,9 +10,28 @@ Package account stores the per\-account block chain and exposes versioned reader
 
 ### Overview
 
-Each account on the network maintains its own ordered chain of account blocks. account is the storage layer that persists those chains to LevelDB, indexes them by hash and height, and serves point\-in\-time reads through [github.com/zenon\\\-network/go\\\-zenon/common/db.Manager](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Manager>) patches.
+account is the [github.com/zenon\\\-network/go\\\-zenon/chain/store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) implementation. Each account on the network owns one chain of \[github.com/zenon\-network/go\-zenon/chain/nom.AccountBlock\]s; account persists those chains to the underlying versioned LevelDB and serves point\-in\-time reads through [github.com/zenon\\\-network/go\\\-zenon/common/db.Manager](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Manager>) patches.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+In addition to the raw chain, the account store keeps three caches that the verifier and VM read in their hot paths:
+
+- Per\-token balance \(\[balance.go\]\).
+- Per\-account chain\-plasma counter \(\[plasma.go\]\).
+- "Already received" set keyed by the originating send's hash \(\[received.go\]\). Together with the per\-recipient mailbox in [github.com/zenon\\\-network/go\\\-zenon/chain/account/mailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/mailbox/>) this is how the verifier rejects double\-receives.
+
+The embedded\-contract sequencer cursor lives here too \(\[sequencer.go\]\): it tracks how far this account has consumed from the address's mailbox.
+
+### Key Concepts
+
+- accountStore — the [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) implementation. Embeds [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) directly so range queries and snapshots flow through the same versioned layer as the rest of the chain.
+- Storage namespace — embedded contracts reach into per\-account storage via \[accountStore.Storage\] \(a [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) view rooted at \[storageKeyPrefix\]\) wrapped in [db.DisableNotFound](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DisableNotFound>) so callers can branch on \`len\(value\) == 0\`.
+- Sequencer cursor — single uint64 stored under \[sequencerLastReceivedKey\]; advances by one for every committed embedded\-contract receive.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/store](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/>) — interface this package implements.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/account/mailbox](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/account/mailbox/>) — the per\-recipient pending\-send queue this store reads through the sequencer logic.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — the versioned LevelDB layer; account uses [db.SetFrontier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#SetFrontier>), [db.GetEntryByHash](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#GetEntryByHash>), and [db.GetEntryByHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#GetEntryByHeight>) so its on\-disk layout matches the rest of the chain.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — block model the store serializes.
 
 ## Index
 
@@ -49,96 +68,109 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="ReceiveStatusUnknown"></a>
+<a name="ReceiveStatusUnknown"></a>Receive\-status sentinels stored under \[receivedBlockPrefix\]. Values other than [Received](<#ReceiveStatusUnknown>) are treated as "not received yet"; only the presence of a tombstone\-marker matters at the lookup site.
 
 ```go
 const (
+    // ReceiveStatusUnknown is the implicit value before a send is
+    // recorded as received. Equivalent to the key being absent.
     ReceiveStatusUnknown uint64 = iota
+    // Received marks a send hash that the account has consumed.
     Received
 )
 ```
 
 ## Variables
 
-<a name="balanceKeyPrefix"></a>
+<a name="balanceKeyPrefix"></a>Single\-byte key prefixes used by the account store. Each lives in its own keyspace so iteration over one cannot pick up entries from another.
+
+Note: prefixes 0–2 are reserved by [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) for the frontier identifier and the height/hash indexes; this package starts at 3.
 
 ```go
 var (
-    balanceKeyPrefix         = []byte{3}
-    storageKeyPrefix         = []byte{4}
-    chainPlasmaKey           = []byte{5}
-    receivedBlockPrefix      = []byte{6}
+    // balanceKeyPrefix namespaces the per-token balance cache.
+    balanceKeyPrefix = []byte{3}
+    // storageKeyPrefix namespaces the embedded-contract storage area
+    // surfaced through [accountStore.Storage].
+    storageKeyPrefix = []byte{4}
+    // chainPlasmaKey holds the per-account chain-plasma counter.
+    chainPlasmaKey = []byte{5}
+    // receivedBlockPrefix marks send hashes the account has already
+    // consumed (used to reject double-receives).
+    receivedBlockPrefix = []byte{6}
+    // sequencerLastReceivedKey holds the height of the last sequencer
+    // entry consumed by an embedded-contract receive.
     sequencerLastReceivedKey = []byte{7}
 )
 ```
 
 <a name="NewAccountStore"></a>
-## func [NewAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L37>)
+## func [NewAccountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L55>)
 
 ```go
 func NewAccountStore(address types.Address, db db.DB) store.Account
 ```
 
-
+NewAccountStore wraps db in a [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) for address. Panics if db is nil — the store cannot operate without backing storage.
 
 <a name="getBalanceKey"></a>
-## func [getBalanceKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L12>)
+## func [getBalanceKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L14>)
 
 ```go
 func getBalanceKey(zts types.ZenonTokenStandard) []byte
 ```
 
-
+getBalanceKey returns the database key holding the cached balance for zts on this account.
 
 <a name="getBalancePrefix"></a>
-## func [getBalancePrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L15>)
+## func [getBalancePrefix](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L20>)
 
 ```go
 func getBalancePrefix() []byte
 ```
 
-
+getBalancePrefix returns the iterator prefix that walks every cached balance for this account.
 
 <a name="getChainPlasmaKey"></a>
-## func [getChainPlasmaKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L11>)
+## func [getChainPlasmaKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L13>)
 
 ```go
 func getChainPlasmaKey() []byte
 ```
 
-
+getChainPlasmaKey returns the database key holding this account's chain\-plasma counter.
 
 <a name="getStorageIterator"></a>
-## func [getStorageIterator](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L10>)
+## func [getStorageIterator](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L12>)
 
 ```go
 func getStorageIterator() []byte
 ```
 
-
+getStorageIterator returns the key prefix that namespaces an account's embedded\-contract storage area within the account database.
 
 <a name="parseAccountBlock"></a>
-## func [parseAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L21>)
+## func [parseAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L28>)
 
 ```go
 func parseAccountBlock(data []byte, err error) (*nom.AccountBlock, error)
 ```
 
-
+parseAccountBlock is the read\-side counterpart of \[accountStore.SetFrontier\]: resolves the \(data, err\) pair from a \[db.GetEntryBy\*\] call into either a parsed block, nil \(not\-found\), or an error.
 
 <a name="receivedBlockKey"></a>
-## func [receivedBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L10>)
+## func [receivedBlockKey](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L12>)
 
 ```go
 func receivedBlockKey(hash types.Hash) []byte
 ```
 
-
+receivedBlockKey returns the database key marking that hash \(a send block referenced via FromBlockHash\) has been consumed.
 
 <a name="accountStore"></a>
-## type [accountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L14-L17>)
+## type [accountStore](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L19-L22>)
 
-
+accountStore is the [store.Account](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/store/#Account>) implementation. It embeds [db.DB](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DB>) directly so range queries flow through the same versioned layer as the rest of the chain; per\-feature key namespaces live in keys.go.
 
 ```go
 type accountStore struct {
@@ -148,174 +180,178 @@ type accountStore struct {
 ```
 
 <a name="accountStore.AddChainPlasma"></a>
-### func \(\*accountStore\) [AddChainPlasma](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L26>)
+### func \(\*accountStore\) [AddChainPlasma](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L33>)
 
 ```go
 func (as *accountStore) AddChainPlasma(add uint64) error
 ```
 
-
+AddChainPlasma adds the supplied delta to the per\-account counter. Used by the VM to credit plasma earned by fused QSR.
 
 <a name="accountStore.Address"></a>
-### func \(\*accountStore\) [Address](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L19>)
+### func \(\*accountStore\) [Address](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L25>)
 
 ```go
 func (as *accountStore) Address() *types.Address
 ```
 
-
+Address returns a pointer to the address this account store belongs to.
 
 <a name="accountStore.ByHash"></a>
-### func \(\*accountStore\) [ByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L38>)
+### func \(\*accountStore\) [ByHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L49>)
 
 ```go
 func (as *accountStore) ByHash(hash types.Hash) (*nom.AccountBlock, error)
 ```
 
-
+ByHash looks up a block in this account chain by hash.
 
 <a name="accountStore.ByHeight"></a>
-### func \(\*accountStore\) [ByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L41>)
+### func \(\*accountStore\) [ByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L54>)
 
 ```go
 func (as *accountStore) ByHeight(height uint64) (*nom.AccountBlock, error)
 ```
 
-
+ByHeight looks up the block at height in this account chain.
 
 <a name="accountStore.Frontier"></a>
-### func \(\*accountStore\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L35>)
+### func \(\*accountStore\) [Frontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L44>)
 
 ```go
 func (as *accountStore) Frontier() (*nom.AccountBlock, error)
 ```
 
-
+Frontier returns the frontier block of this account chain, or nil if the chain is empty.
 
 <a name="accountStore.GetBalance"></a>
-### func \(\*accountStore\) [GetBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L19>)
+### func \(\*accountStore\) [GetBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L27>)
 
 ```go
 func (as *accountStore) GetBalance(zts types.ZenonTokenStandard) (*big.Int, error)
 ```
 
-
+GetBalance returns the cached balance for zts. A missing key returns zero \(no error\) — accounts that have never held the token simply have no entry.
 
 <a name="accountStore.GetBalanceMap"></a>
-### func \(\*accountStore\) [GetBalanceMap](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L36>)
+### func \(\*accountStore\) [GetBalanceMap](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L50>)
 
 ```go
 func (as *accountStore) GetBalanceMap() (map[types.ZenonTokenStandard]*big.Int, error)
 ```
 
-
+GetBalanceMap returns every cached balance for this account, keyed by token. The 1\-byte prefix is stripped from each key during iteration.
 
 <a name="accountStore.GetChainPlasma"></a>
-### func \(\*accountStore\) [GetChainPlasma](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L15>)
+### func \(\*accountStore\) [GetChainPlasma](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/plasma.go#L19>)
 
 ```go
 func (as *accountStore) GetChainPlasma() (*big.Int, error)
 ```
 
-
+GetChainPlasma returns the per\-account plasma counter. Missing key returns zero \(no error\) — fresh accounts simply have no entry yet.
 
 <a name="accountStore.Identifier"></a>
-### func \(\*accountStore\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L28>)
+### func \(\*accountStore\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L44>)
 
 ```go
 func (as *accountStore) Identifier() types.HashHeight
 ```
 
-
+Identifier returns the \(Hash, Height\) of the frontier block in this view, or [types.ZeroHashHeight](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZeroHashHeight>) if the account chain is empty.
 
 <a name="accountStore.IsReceived"></a>
-### func \(\*accountStore\) [IsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L17>)
+### func \(\*accountStore\) [IsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L26>)
 
 ```go
 func (as *accountStore) IsReceived(hash types.Hash) bool
 ```
 
-
+IsReceived reports whether hash has been recorded as received. Panics \(via [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>)\) on a database error other than not\-found — IsReceived is called from hot verification paths where errors are bugs.
 
 <a name="accountStore.MarkAsReceived"></a>
-### func \(\*accountStore\) [MarkAsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L14>)
+### func \(\*accountStore\) [MarkAsReceived](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/received.go#L19>)
 
 ```go
 func (as *accountStore) MarkAsReceived(hash types.Hash) error
 ```
 
-
+MarkAsReceived records that the send identified by hash has been consumed; subsequent attempts to receive the same hash will be rejected by [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>).
 
 <a name="accountStore.MoreByHeight"></a>
-### func \(\*accountStore\) [MoreByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L45>)
+### func \(\*accountStore\) [MoreByHeight](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L60>)
 
 ```go
 func (as *accountStore) MoreByHeight(height, count uint64) ([]*nom.AccountBlock, error)
 ```
 
-
+MoreByHeight returns up to count blocks starting at height in ascending order. Missing blocks contribute nil entries to the slice.
 
 <a name="accountStore.SequencerFront"></a>
-### func \(\*accountStore\) [SequencerFront](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L19>)
+### func \(\*accountStore\) [SequencerFront](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L28>)
 
 ```go
 func (as *accountStore) SequencerFront(mailbox store.AccountMailbox) *types.AccountHeader
 ```
 
+SequencerFront returns the [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) of the next inbound send this account is expected to consume per the embedded\-contract sequencer rule, or nil if the mailbox queue is empty for this account.
 
+Panics if mailbox.Address\(\) does not match this account — passing the wrong mailbox is a programmer error.
 
 <a name="accountStore.SequencerPopFront"></a>
-### func \(\*accountStore\) [SequencerPopFront](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L30>)
+### func \(\*accountStore\) [SequencerPopFront](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L46>)
 
 ```go
 func (as *accountStore) SequencerPopFront()
 ```
 
+SequencerPopFront advances the sequencer cursor by one. Called by the chain layer after a contract receive has been committed so the next receive sees the head of the queue advance.
 
+Panics on a database error — sequencer mutations are committed inside the chain insert lock and an IO failure here is a fatal condition.
 
 <a name="accountStore.SetBalance"></a>
-### func \(\*accountStore\) [SetBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L30>)
+### func \(\*accountStore\) [SetBalance](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/balance.go#L41>)
 
 ```go
 func (as *accountStore) SetBalance(zts types.ZenonTokenStandard, balance *big.Int) error
 ```
 
-
+SetBalance overwrites the cached balance for zts. The balance is stored as a big\-endian unsigned integer.
 
 <a name="accountStore.SetFrontier"></a>
-### func \(\*accountStore\) [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L12>)
+### func \(\*accountStore\) [SetFrontier](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/account_block.go#L16>)
 
 ```go
 func (as *accountStore) SetFrontier(block *nom.AccountBlock) error
 ```
 
-
+SetFrontier writes block as the new frontier of this account chain via the shared [db.SetFrontier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#SetFrontier>) helper \(which updates the frontier identifier, the hash → height index, and the height → bytes record in one atomic batch\).
 
 <a name="accountStore.Snapshot"></a>
-### func \(\*accountStore\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L25>)
+### func \(\*accountStore\) [Snapshot](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L38>)
 
 ```go
 func (as *accountStore) Snapshot() store.Account
 ```
 
-
+Snapshot returns an isolated copy of this view; subsequent writes are captured separately and won't reach the source.
 
 <a name="accountStore.Storage"></a>
-### func \(\*accountStore\) [Storage](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L22>)
+### func \(\*accountStore\) [Storage](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/store.go#L32>)
 
 ```go
 func (as *accountStore) Storage() db.DB
 ```
 
-
+Storage returns the contract\-storage subset of the account database \(under \[storageKeyPrefix\]\) wrapped in [db.DisableNotFound](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#DisableNotFound>) so callers can branch on \`len\(value\) == 0\` rather than a typed error.
 
 <a name="accountStore.sequencerFrontIndex"></a>
-### func \(\*accountStore\) [sequencerFrontIndex](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L11>)
+### func \(\*accountStore\) [sequencerFrontIndex](<https://github.com/zenon-network/go-zenon/blob/master/chain/account/sequencer.go#L14>)
 
 ```go
 func (as *accountStore) sequencerFrontIndex() uint64
 ```
 
-
+sequencerFrontIndex returns the height of the last sequencer entry already consumed by this account; new receives must consume the entry at sequencerFrontIndex \+ 1.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

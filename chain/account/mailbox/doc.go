@@ -1,12 +1,49 @@
-// Package mailbox tracks unreceived sends destined for each account.
+// Package mailbox tracks unreceived sends destined for each recipient
+// account.
 //
 // # Overview
 //
-// In Zenon's send/receive model, a send block sits in the recipient's mailbox
-// until the recipient (a user or an embedded contract) authors a matching
-// receive block. mailbox is the index that lets the recipient enumerate its
-// pending sends efficiently.
+// mailbox is the [github.com/zenon-network/go-zenon/chain/store.AccountMailbox]
+// implementation. In Zenon's send/receive model, a send block sits in
+// the recipient's mailbox until the recipient (a user or an embedded
+// contract) authors a matching receive. mailbox persists three indexes
+// per recipient:
 //
-// Per-package documentation is being filled in incrementally. See
-// docs/STYLE.md for the full template applied in subsequent PRs.
+//   - Cumulative-historical record of every send ever admitted, under
+//     [unreceivedBlockPrefix].
+//   - Currently-pending subset, under [pendingBlockPrefix]; entries are
+//     removed as they are received.
+//   - Send-hash → receive-header reverse index, under
+//     [blockWhichReceives], so [chain/store.Momentum.GetBlockWhichReceives]
+//     can answer in O(1) without re-walking the chain.
+//
+// In addition, mailbox owns the per-recipient sequencer queue
+// ([sequencerNumInsertedKey], [sequencerHeaderByHeightPrefix]): a strict
+// FIFO of inbound sends used by the embedded-contract receive ordering
+// rule (see [github.com/zenon-network/go-zenon/chain/account]'s
+// sequencer cursor and [github.com/zenon-network/go-zenon/verifier]'s
+// sequencer check).
+//
+// # Key Concepts
+//
+//   - mailbox struct — implements [store.AccountMailbox]. Embeds
+//     [db.DB] directly so range queries flow through the same versioned
+//     layer as the rest of the chain.
+//   - Pending vs unreceived — `unreceived` is cumulative-historical;
+//     `pending` is the still-to-be-consumed subset. Iterating `pending`
+//     gives the live queue.
+//   - Sequencer queue — strictly append-only on the writer side;
+//     consumers track their position through the per-account cursor in
+//     [github.com/zenon-network/go-zenon/chain/account].
+//
+// # Related Packages
+//
+//   - [github.com/zenon-network/go-zenon/chain/store] — interface this
+//     package implements.
+//   - [github.com/zenon-network/go-zenon/chain/account] — the per-account
+//     store that holds the sequencer cursor reading this mailbox.
+//   - [github.com/zenon-network/go-zenon/verifier] — primary consumer
+//     through the sequencer rule.
+//   - [github.com/zenon-network/go-zenon/common/db] — the versioned
+//     LevelDB layer.
 package mailbox

@@ -10,6 +10,8 @@ import (
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 )
 
+// GetActivePillars returns every registered pillar that is still active
+// at this view. Reads through the pillar embedded contract.
 func (ms *momentumStore) GetActivePillars() ([]*definition.PillarInfo, error) {
 	sd, err := ms.getEmbeddedStore(types.PillarContract)
 	if err != nil {
@@ -18,6 +20,9 @@ func (ms *momentumStore) GetActivePillars() ([]*definition.PillarInfo, error) {
 
 	return definition.GetPillarsList(sd.Storage(), true, definition.AnyPillarType)
 }
+
+// getAllDelegations returns every delegation record (backer → pillar)
+// currently on record. Used as the input to [momentumStore.computeBackers].
 func (ms *momentumStore) getAllDelegations() ([]*definition.DelegationInfo, error) {
 	sd, err := ms.getEmbeddedStore(types.PillarContract)
 	if err != nil {
@@ -26,6 +31,10 @@ func (ms *momentumStore) getAllDelegations() ([]*definition.DelegationInfo, erro
 
 	return definition.GetDelegationsList(sd.Storage())
 }
+
+// computeBackers groups delegations by pillar name and resolves each
+// backer's cached ZNN balance. Returns a `pillar-name → backer → balance`
+// map suitable for [momentumStore.ComputePillarDelegations].
 func (ms *momentumStore) computeBackers(infos []*definition.DelegationInfo) (*map[string]map[types.Address]*big.Int, error) {
 	result := map[string]map[types.Address]*big.Int{}
 
@@ -56,6 +65,14 @@ func (ms *momentumStore) computeBackers(infos []*definition.DelegationInfo) (*ma
 	}
 	return &result, nil
 }
+
+// ComputePillarDelegations re-derives every pillar's aggregated
+// delegation weight (and the per-backer breakdown) from the current
+// stake and vote records. Sorted by descending weight per
+// [types.SortPDDByWeight] so consumers see the most influential pillars
+// first.
+//
+// Used by the consensus layer when constructing election snapshots.
 func (ms *momentumStore) ComputePillarDelegations() ([]*types.PillarDelegationDetail, error) {
 	delegations, _ := ms.getAllDelegations()
 	backers, err := ms.computeBackers(delegations)
@@ -103,6 +120,9 @@ func (ms *momentumStore) ComputePillarDelegations() ([]*types.PillarDelegationDe
 	return pillarDelegationDetails, nil
 }
 
+// GetStakeBeneficialAmount returns the total stake amount addr is the
+// beneficial owner of (the input to per-account staking rewards). Reads
+// through the plasma embedded contract.
 func (ms *momentumStore) GetStakeBeneficialAmount(addr types.Address) (*big.Int, error) {
 	sd, err := ms.getEmbeddedStore(types.PlasmaContract)
 	if err != nil {
@@ -115,6 +135,9 @@ func (ms *momentumStore) GetStakeBeneficialAmount(addr types.Address) (*big.Int,
 	}
 	return fused.Amount, nil
 }
+
+// GetTokenInfoByTs returns the issuance metadata for the token
+// identified by ts. Reads through the token embedded contract.
 func (ms *momentumStore) GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definition.TokenInfo, error) {
 	sd, err := ms.getEmbeddedStore(types.TokenContract)
 	if err != nil {
@@ -123,6 +146,9 @@ func (ms *momentumStore) GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definit
 
 	return definition.GetTokenInfo(sd.Storage(), ts)
 }
+
+// GetAllDefinedSporks returns every spork record (active and pending)
+// recorded by the spork embedded contract.
 func (ms *momentumStore) GetAllDefinedSporks() ([]*definition.Spork, error) {
 	sd, err := ms.getEmbeddedStore(types.SporkContract)
 	if err != nil {
@@ -131,6 +157,11 @@ func (ms *momentumStore) GetAllDefinedSporks() ([]*definition.Spork, error) {
 
 	return definition.GetAllSporks(sd.Storage()), nil
 }
+
+// IsSporkActive reports whether the spork named by implemented has been
+// activated at this view's frontier height. Always returns false when
+// the chain is at genesis (height == 1) — spork activation can only
+// happen at height ≥ 2.
 func (ms *momentumStore) IsSporkActive(implemented *types.ImplementedSpork) (bool, error) {
 	frontier, err := ms.GetFrontierMomentum()
 	if err != nil {
@@ -154,6 +185,9 @@ func (ms *momentumStore) IsSporkActive(implemented *types.ImplementedSpork) (boo
 	return false, nil
 }
 
+// getEmbeddedStore returns the [store.Account] view for an embedded
+// contract address. Thin wrapper used to keep contract-storage reads
+// uniform across the per-contract helpers above.
 func (ms *momentumStore) getEmbeddedStore(address types.Address) (store.Account, error) {
 	return ms.GetAccountStore(address), nil
 }

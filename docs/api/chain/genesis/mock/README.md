@@ -6,13 +6,29 @@
 import "github.com/zenon-network/go-zenon/chain/genesis/mock"
 ```
 
-Package g provides a programmable mock genesis used by the embedded contract test suite.
+Package g provides a programmable mock genesis used by the embedded\-contract test suite.
 
 ### Overview
 
-Tests build a genesis with arbitrary balances, pillar registrations, stake entries, and spork states by composing this package's helpers, then hand the result to [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>) to spin up an in\-memory node initialized at that synthetic state.
+Tests build a genesis with arbitrary balances, pillar registrations, stake entries, and spork states by composing this package's deterministic fixtures, then hand the result to [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>) to spin up an in\-memory node initialized at that synthetic state.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+The package name is \`g\` \(a single\-letter package name\) to keep call sites short — tests refer to the keypairs and pillar names as \`g.Pillar1\`, \`g.User1\`, and so on. The single\-letter name is unusual for production code but acceptable here because every consumer is a test file.
+
+### Key Fixtures
+
+- Pillar1..Pillar8 — deterministic pillar keypairs.
+- User1..User10 — deterministic user keypairs.
+- Spork — the spork\-controlling keypair.
+- Pillar1Name..Pillar8Name — fixed display names matched to the pillar keypairs.
+- PillarKeys, AllKeyPairs — convenience slices for iteration.
+- EmbeddedGenesis — the canonical [genesis.GenesisConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/#GenesisConfig>) every test starts from.
+- genesisTimestamp, Zexp — anchor constants for time and balance arithmetic.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/>) — the production genesis loader; this package's [EmbeddedGenesis](<#Secp1PrvKey>) conforms to its [genesis.GenesisConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/#GenesisConfig>) schema.
+- [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>) — consumes this genesis to construct an in\-memory test node.
+- [github.com/zenon\\\-network/go\\\-zenon/wallet](<https://pkg.go.dev/github.com/zenon-network/go-zenon/wallet/>) — supplies the deterministic key derivation that produces the fixtures.
 
 ## Index
 
@@ -22,31 +38,44 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="genesisTimestamp"></a>
+<a name="genesisTimestamp"></a>Test\-only constants used to anchor every mock\-genesis fixture in this package.
 
 ```go
 const (
-    // Sunday, September 9, 2001 1:46:40
+    // genesisTimestamp is the Unix timestamp every mock genesis claims as
+    // its birth time. Sunday, September 9, 2001 1:46:40 UTC — the
+    // well-known "1000000000" pop-culture epoch.
     genesisTimestamp = 1000000000
-    // 10 ^ 8
+    // Zexp is 10^8, the power-of-ten scale factor convenience used in
+    // test balance arithmetic.
     Zexp = 100000000
 )
 ```
 
 ## Variables
 
-<a name="Secp1PrvKey"></a>
+<a name="Secp1PrvKey"></a>Test fixtures: deterministic keypairs, pillar names, and the canonical mock genesis. Every value here is fixed across runs so test golden output remains stable.
 
 ```go
 var (
-    Secp1PrvKey    = hexutil.MustDecode("0x7e412f0a36c21518519013a0f9b498f6bbd36b4c9861573e0662680d06cd2a40")
-    Secp1PubKeyB64 = base64.StdEncoding.EncodeToString(hexutil.MustDecode("0x047306c325fa7216723bee068c0f2ba1438217c22a0736df41434ac32ba38c04f55c8e3ef9be61377f191016df05ab0fcca8a0b9b505371101c460c59aeede6ab6"))
-    Secp1KeyIdHex  = "c955c2b650452d670179068995a51132463e2d13f7519d64ff283af99dd14b43"
 
-    Secp2PrvKey    = hexutil.MustDecode("0xd7ef0ace1c32429605291c09fe4fb3c3dc7dde472e203b29c0911e199713c66e")
+    // Secp1PrvKey is the first secp256k1 test private key.
+    Secp1PrvKey = hexutil.MustDecode("0x7e412f0a36c21518519013a0f9b498f6bbd36b4c9861573e0662680d06cd2a40")
+    // Secp1PubKeyB64 is the matching base64-encoded uncompressed public key.
+    Secp1PubKeyB64 = base64.StdEncoding.EncodeToString(hexutil.MustDecode("0x047306c325fa7216723bee068c0f2ba1438217c22a0736df41434ac32ba38c04f55c8e3ef9be61377f191016df05ab0fcca8a0b9b505371101c460c59aeede6ab6"))
+    // Secp1KeyIdHex is the hex-encoded swap-key-id derived from Secp1.
+    Secp1KeyIdHex = "c955c2b650452d670179068995a51132463e2d13f7519d64ff283af99dd14b43"
+
+    // Secp2PrvKey is the second secp256k1 test private key.
+    Secp2PrvKey = hexutil.MustDecode("0xd7ef0ace1c32429605291c09fe4fb3c3dc7dde472e203b29c0911e199713c66e")
+    // Secp2PubKeyB64 is the matching base64-encoded uncompressed public key.
     Secp2PubKeyB64 = base64.StdEncoding.EncodeToString(hexutil.MustDecode("0x047e21bcfbb9bba1da40e373922d8a14c19d11bd3b58eb0c2700f29655e389e70c9291e32d929b54ae6efc04ad3e3a82c1ebd8222ccc0e29ea1c4c3fb97f80f4fe"))
 
-    Spork, _   = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678900"))
+    // Spork is the test spork-controlling keypair.
+    Spork, _ = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678900"))
+    // Pillar1..Pillar8 are deterministic pillar test keypairs derived
+    // from a single seed via [wallet.DeriveWithIndex]. Tests that need
+    // multiple producers cycle through these.
     Pillar1, _ = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678901"))
     Pillar2, _ = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678901"))
     Pillar3, _ = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678901"))
@@ -56,6 +85,8 @@ var (
     Pillar7, _ = wallet.DeriveWithIndex(7, hexutil.MustDecode("0x01234567890123456789012345678901"))
     Pillar8, _ = wallet.DeriveWithIndex(8, hexutil.MustDecode("0x01234567890123456789012345678901"))
 
+    // User1..User10 are deterministic user-account test keypairs derived
+    // from a single seed. Tests that need many distinct users use them.
     User1, _  = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678902"))
     User2, _  = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678902"))
     User3, _  = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678902"))
@@ -67,6 +98,10 @@ var (
     User9, _  = wallet.DeriveWithIndex(9, hexutil.MustDecode("0x01234567890123456789012345678902"))
     User10, _ = wallet.DeriveWithIndex(10, hexutil.MustDecode("0x01234567890123456789012345678902"))
 
+    // Pillar1Name..Pillar8Name are the fixed display names tied to
+    // Pillar1..Pillar8. Names are arbitrary; the `TEST-` prefix
+    // distinguishes test fixtures from any production pillar names that
+    // might collide in a shared environment.
     Pillar1Name = "TEST-pillar-1"
     Pillar2Name = "TEST-pillar-cool"
     Pillar3Name = "TEST-pillar-znn"
@@ -76,6 +111,8 @@ var (
     Pillar7Name = "TEST-pillar-community-7"
     Pillar8Name = "TEST-pillar-eight-eclipse"
 
+    // PillarKeys is the slice of every pillar keypair in canonical
+    // pillar order (1..8); used by tests that iterate through pillars.
     PillarKeys = []*wallet.KeyPair{
         Pillar1,
         Pillar2,
@@ -87,6 +124,9 @@ var (
         Pillar8,
     }
 
+    // AllKeyPairs is every keypair the mock genesis knows about: pillars
+    // first, then users, then the spork key. Tests that need exhaustive
+    // coverage iterate over this slice.
     AllKeyPairs = []*wallet.KeyPair{
         Pillar1,
         Pillar2,
@@ -109,6 +149,13 @@ var (
         Spork,
     }
 
+    // EmbeddedGenesis is the canonical mock [genesis.GenesisConfig] used
+    // by the embedded-contract test suite. It seeds three active pillars
+    // (Pillar1..3) with delegations from Pillar1..3 themselves and from
+    // User1..5, plus the standard ZNN/QSR token issuances and the
+    // fusion/swap entries the tests rely on. Tests that need to mutate
+    // the genesis copy this struct first; the package-level value is
+    // not safe to mutate.
     EmbeddedGenesis = &genesis.GenesisConfig{
         ChainIdentifier:     100,
         ExtraData:           "This is the genesis config used for testing",
