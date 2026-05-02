@@ -274,7 +274,7 @@ func beforeAction(ctx *cli.Context) error
 
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L39>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/templates.go#L7>)
 
 ```go
 func init()

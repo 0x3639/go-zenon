@@ -6,13 +6,66 @@
 import "github.com/zenon-network/go-zenon/chain/nom"
 ```
 
-Package nom defines the on\-chain block model: account blocks, momentums, and the transaction wrappers that bind blocks to their atomic state changes.
+Package nom defines the on\-chain block model: account blocks, momentums, momentum content, the per\-block plasma nonce, and the database transaction wrappers that bind blocks to their atomic state changes.
 
 ### Overview
 
-nom is the schema layer everything else depends on. It owns block types \(\`UserSend\`, \`UserReceive\`, \`ContractSend\`, \`ContractReceive\`, \`GenesisReceive\`\), canonical hashing, Ed25519 signature attachment, and the \`\*Transaction\` types that pair a block with its [common/db.Patch](<https://pkg.go.dev/common/db/#Patch>).
+nom is the schema layer everything downstream depends on. Every other package in the codebase — chain, consensus, verifier, vm, embedded, rpc, protocol, p2p — speaks in terms of [AccountBlock](<#AccountBlock>) and [Momentum](<#Momentum>). nom owns:
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+- The block\-type enumeration \([BlockTypeUserSend](<#BlockTypeGenesisReceive>), [BlockTypeUserReceive](<#BlockTypeGenesisReceive>), [BlockTypeContractSend](<#BlockTypeGenesisReceive>), [BlockTypeContractReceive](<#BlockTypeGenesisReceive>), [BlockTypeGenesisReceive](<#BlockTypeGenesisReceive>)\).
+- Canonical hashing for both block kinds \([AccountBlock.ComputeHash](<#AccountBlock.ComputeHash>), [Momentum.ComputeHash](<#Momentum.ComputeHash>), [MomentumContent.Hash](<#MomentumContent.Hash>)\).
+- Ed25519 producer derivation and caching.
+- Protobuf and JSON serialization, including the [AccountBlockMarshal](<#AccountBlockMarshal>) wire\-friendly twin used by RPC.
+- The [db.Transaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Transaction>) wrappers \([AccountBlockTransaction](<#AccountBlockTransaction>), [MomentumTransaction](<#MomentumTransaction>)\) the chain layer uses to commit blocks atomically alongside their state patch.
+
+### Key Concepts
+
+- Account block — one transaction on a single account's chain. Send blocks transfer; receive blocks consume a matching send. Every transfer on the network is a \(send, receive\) pair.
+- Momentum — a consensus block produced by an elected pillar, committing to a sorted list of \[types.AccountHeader\]s and the patch hash those blocks produced. See [github.com/zenon\\\-network/go\\\-zenon/ARCHITECTURE.md](<https://pkg.go.dev/github.com/zenon-network/go-zenon/ARCHITECTURE.md/>) for the dual\-ledger model.
+- Descendant blocks — [BlockTypeContractSend](<#BlockTypeGenesisReceive>) account blocks emitted by an embedded contract while receiving a triggering send. They nest inside the parent receive block via \[AccountBlock.DescendantBlocks\] and contribute to the parent's hash through [AccountBlock.DescendantBlocksHash](<#AccountBlock.DescendantBlocksHash>).
+- Plasma — per\-block resource cost. Paid via fused QSR \(\[AccountBlock.FusedPlasma\]\) or via PoW \(\[AccountBlock.Difficulty\]\+\[Nonce\]\).
+- Momentum acknowledgement — every account block names a \[AccountBlock.MomentumAcknowledged\] pinning the most recent momentum the author had observed; the verifier uses it to bound reorgs.
+- Changes hash — each block carries the hash of the state patch its execution produced, binding state to consensus.
+- Producer caching — both [AccountBlock](<#AccountBlock>) and [Momentum](<#Momentum>) derive the producer address from \[PublicKey\] lazily and cache it. The cache is not synchronized; [Momentum.EnsureCache](<#Momentum.EnsureCache>) primes it after deserialization.
+
+### Usage
+
+Build, hash, and serialize:
+
+```
+ab := &nom.AccountBlock{ /* fields */ }
+ab.Hash = ab.ComputeHash()
+bytes, err := ab.Serialize()
+```
+
+Decode from the wire:
+
+```
+ab, err := nom.DeserializeAccountBlock(bytes)
+```
+
+Wrap for atomic commit:
+
+```
+tx := &nom.AccountBlockTransaction{Block: ab, Changes: patch}
+if err := mgr.Add(tx); err != nil { /* handle */ }
+```
+
+### Invariants
+
+- For any [AccountBlock](<#AccountBlock>), the stored Hash equals [AccountBlock.ComputeHash](<#AccountBlock.ComputeHash>).
+- For any [Momentum](<#Momentum>), the stored Hash equals [Momentum.ComputeHash](<#Momentum.ComputeHash>).
+- Every send eventually has exactly one matching receive \(cross\-chain invariant; enforced by the verifier and chain\).
+- [MomentumContent](<#MomentumContent>) is sorted by canonical header bytes so producers building from the same account\-block set agree on the same content hash.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — the \[Address\], \[Hash\], \[HashHeight\], \[AccountHeader\], and \[ZenonTokenStandard\] types this package builds blocks from.
+- [github.com/zenon\\\-network/go\\\-zenon/common/db](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/>) — defines [db.Patch](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Patch>) and [db.Transaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Transaction>) / [db.Commit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Commit>) this package implements.
+- [github.com/zenon\\\-network/go\\\-zenon/common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>) — provides the byte helpers used to compose canonical hash inputs.
+- [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — orchestrates the account and momentum stores and inserts these blocks.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — validates blocks against the canonical hash and signature.
+- [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — populates \[AccountBlock.DescendantBlocks\] when a contract receive emits further sends.
 
 ## Index
 
@@ -121,16 +174,27 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="BlockTypeGenesisReceive"></a>
+<a name="BlockTypeGenesisReceive"></a>Account\-block kinds. Send and receive blocks always come in pairs: \`BlockTypeUserSend\` is matched by \`BlockTypeUserReceive\` \(or \`BlockTypeContractReceive\` when the recipient is an embedded contract\); \`BlockTypeContractSend\` is matched by \`BlockTypeUserReceive\` / \`BlockTypeContractReceive\` depending on the recipient.
+
+\`BlockTypeGenesisReceive\` is the special\-case block used by genesis to seed initial state — it is a receive block with no matching send.
 
 ```go
 const (
+    // BlockTypeGenesisReceive marks the genesis-time receive block; used
+    // only by [github.com/zenon-network/go-zenon/chain/genesis] to seed
+    // initial token supplies and embedded-contract state.
     BlockTypeGenesisReceive = 1 // receive
 
-    BlockTypeUserSend    = 2 // send
+    // BlockTypeUserSend marks a send authored by a user account.
+    BlockTypeUserSend = 2 // send
+    // BlockTypeUserReceive marks a receive authored by a user account.
     BlockTypeUserReceive = 3 // receive
 
-    BlockTypeContractSend    = 4 // send
+    // BlockTypeContractSend marks a send emitted by an embedded contract
+    // during the receive of a triggering send (a [DescendantBlocks] entry).
+    BlockTypeContractSend = 4 // send
+    // BlockTypeContractReceive marks the receive an embedded contract
+    // authors when consuming an inbound send.
     BlockTypeContractReceive = 5 // receive
 )
 ```
@@ -146,7 +210,7 @@ const (
 )
 ```
 
-<a name="AccountBlockHeaderRawLen"></a>
+<a name="AccountBlockHeaderRawLen"></a>AccountBlockHeaderRawLen is the byte length of a single [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) when serialized via [types.AccountHeader.Bytes](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader.Bytes>): 20\-byte address \+ 32\-byte hash \+ 8 bytes of height.
 
 ```go
 const AccountBlockHeaderRawLen = types.AddressSize + types.HashSize + 8 // (+8 from height)
@@ -169,7 +233,7 @@ var (
 var File_chain_nom_protobuf_proto protoreflect.FileDescriptor
 ```
 
-<a name="emptyEd25519PublicKey"></a>
+<a name="emptyEd25519PublicKey"></a>emptyEd25519PublicKey is the all\-zeros \(nil\-equivalent\) public key used as a sentinel by [Momentum.EnsureCache](<#Momentum.EnsureCache>) to skip producer derivation when the public key has not been populated yet \(e.g., on a freshly deserialized momentum from a peer before signature verification\).
 
 ```go
 var (
@@ -317,40 +381,40 @@ var file_chain_nom_protobuf_proto_rawDesc = []byte{
 ```
 
 <a name="AccountBlockHeaderComparer"></a>
-## func [AccountBlockHeaderComparer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L51>)
+## func [AccountBlockHeaderComparer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L77>)
 
 ```go
 func AccountBlockHeaderComparer(list []*types.AccountHeader) func(a, b int) bool
 ```
 
-
+AccountBlockHeaderComparer returns a less function that orders headers by their canonical byte form \(\`address || height || hash\`\). This is the canonical sort used wherever account headers must be hashed in a deterministic order across producers.
 
 <a name="DeProtoMomentumContent"></a>
-## func [DeProtoMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L22>)
+## func [DeProtoMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L35>)
 
 ```go
 func DeProtoMomentumContent(content []*types.AccountHeaderProto) []*types.AccountHeader
 ```
 
-
+DeProtoMomentumContent decodes a slice of \[types.AccountHeaderProto\]s back into the corresponding [types.AccountHeader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeader>) slice. Used by [DeProtoMomentum](<#DeProtoMomentum>).
 
 <a name="IsReceiveBlock"></a>
-## func [IsReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L215>)
+## func [IsReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L325>)
 
 ```go
 func IsReceiveBlock(blockType uint64) bool
 ```
 
-
+IsReceiveBlock reports whether blockType is one of the receive variants \(including [BlockTypeGenesisReceive](<#BlockTypeGenesisReceive>)\).
 
 <a name="IsSendBlock"></a>
-## func [IsSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L212>)
+## func [IsSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L319>)
 
 ```go
 func IsSendBlock(blockType uint64) bool
 ```
 
-
+IsSendBlock reports whether blockType is one of the send variants.
 
 <a name="file_chain_nom_protobuf_proto_init"></a>
 ## func [file\\\_chain\\\_nom\\\_protobuf\\\_proto\\\_init](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/protobuf.pb.go#L502>)
@@ -380,9 +444,20 @@ func init()
 
 
 <a name="AccountBlock"></a>
-## type [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L83-L119>)
+## type [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L155-L191>)
 
+AccountBlock is one transaction on a single account's chain. Send blocks transfer tokens \(or invoke a contract\); receive blocks consume a matching send. Every transfer on the network is therefore a \(send, receive\) pair.
 
+Field grouping:
+
+- Identity: Version, ChainIdentifier, BlockType, Hash, PreviousHash, Height. PreviousHash \+ Height position the block in its account chain; ChainIdentifier prevents replay across networks.
+- Send payload: ToAddress, Amount, TokenStandard, and the optional Data field \(ABI\-encoded contract call\).
+- Receive payload: FromBlockHash points back to the send this block consumes.
+- Contract output: DescendantBlocks holds [BlockTypeContractSend](<#BlockTypeGenesisReceive>) blocks emitted while receiving a triggering send. Their hashes contribute to the parent block's hash.
+- Plasma: FusedPlasma \+ \(Difficulty, Nonce\) cover the per\-block resource cost. BasePlasma is the minimum required; TotalPlasma is the actual budget supplied. BasePlasma and TotalPlasma are not part of the canonical hash.
+- Acknowledgement: MomentumAcknowledged pins the most recent momentum the author has observed; the verifier uses it to bound chain reorgs.
+- State commitment: ChangesHash is the hash of the patch the receive produced; not part of the canonical hash but bound through the \[Momentum.ChangesHash\] aggregate.
+- Authentication: PublicKey \+ Signature; producer is a cached derived value \(see [AccountBlock.Producer](<#AccountBlock.Producer>)\).
 
 ```go
 type AccountBlock struct {
@@ -425,153 +500,157 @@ type AccountBlock struct {
 ```
 
 <a name="DeProtoAccountBlock"></a>
-### func [DeProtoAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L259>)
+### func [DeProtoAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L374>)
 
 ```go
 func DeProtoAccountBlock(pb *AccountBlockProto) *AccountBlock
 ```
 
-
+DeProtoAccountBlock decodes an [AccountBlockProto](<#AccountBlockProto>) back into an [AccountBlock](<#AccountBlock>), recursively reconstructing the descendants tree.
 
 <a name="DeserializeAccountBlock"></a>
-### func [DeserializeAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L295>)
+### func [DeserializeAccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L416>)
 
 ```go
 func DeserializeAccountBlock(data []byte) (*AccountBlock, error)
 ```
 
-
+DeserializeAccountBlock decodes protobuf bytes into an [AccountBlock](<#AccountBlock>). Returns an error if the bytes are not a valid encoded [AccountBlockProto](<#AccountBlockProto>).
 
 <a name="AccountBlock.ComputeHash"></a>
-### func \(\*AccountBlock\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L176>)
+### func \(\*AccountBlock\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L271>)
 
 ```go
 func (ab *AccountBlock) ComputeHash() types.Hash
 ```
 
+ComputeHash returns the canonical hash of ab. The hash binds every field the protocol considers part of the block's identity — explicitly excluding \[BasePlasma\], \[TotalPlasma\], \[ChangesHash\], \[PublicKey\], and \[Signature\], which are added as part of execution and authentication.
 
+Invariant: an account block's stored Hash always equals ComputeHash\(\).
 
 <a name="AccountBlock.Copy"></a>
-### func \(\*AccountBlock\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L145>)
+### func \(\*AccountBlock\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L230>)
 
 ```go
 func (ab *AccountBlock) Copy() *AccountBlock
 ```
 
-
+Copy returns a deep copy of ab — every slice, map, and big.Int is re\-allocated, including the recursive DescendantBlocks tree.
 
 <a name="AccountBlock.DescendantBlocksHash"></a>
-### func \(\*AccountBlock\) [DescendantBlocksHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L169>)
+### func \(\*AccountBlock\) [DescendantBlocksHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L257>)
 
 ```go
 func (ab *AccountBlock) DescendantBlocksHash() types.Hash
 ```
 
-
+DescendantBlocksHash hashes the concatenation of every descendant block's hash. This rolls the descendants into the parent's canonical hash so that altering any descendant invalidates the parent.
 
 <a name="AccountBlock.Header"></a>
-### func \(\*AccountBlock\) [Header](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L136>)
+### func \(\*AccountBlock\) [Header](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L218>)
 
 ```go
 func (ab *AccountBlock) Header() types.AccountHeader
 ```
 
-
+Header returns the \(Address, Hash, Height\) triple used by momentums to commit to the set of account blocks they finalize.
 
 <a name="AccountBlock.Identifier"></a>
-### func \(\*AccountBlock\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L121>)
+### func \(\*AccountBlock\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L195>)
 
 ```go
 func (ab *AccountBlock) Identifier() types.HashHeight
 ```
 
-
+Identifier returns the \(Hash, Height\) pair locating ab in its account chain. Implements [db.Commit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Commit>).
 
 <a name="AccountBlock.IsReceiveBlock"></a>
-### func \(\*AccountBlock\) [IsReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L209>)
+### func \(\*AccountBlock\) [IsReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L314>)
 
 ```go
 func (ab *AccountBlock) IsReceiveBlock() bool
 ```
 
-
+IsReceiveBlock reports whether ab is a receive block.
 
 <a name="AccountBlock.IsSendBlock"></a>
-### func \(\*AccountBlock\) [IsSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L206>)
+### func \(\*AccountBlock\) [IsSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L309>)
 
 ```go
 func (ab *AccountBlock) IsSendBlock() bool
 ```
 
-
+IsSendBlock reports whether ab is a send block.
 
 <a name="AccountBlock.MarshalJSON"></a>
-### func \(\*AccountBlock\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L406>)
+### func \(\*AccountBlock\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L542>)
 
 ```go
 func (ab *AccountBlock) MarshalJSON() ([]byte, error)
 ```
 
-
+MarshalJSON renders ab through [AccountBlockMarshal](<#AccountBlockMarshal>) so amounts and the nonce serialize as strings. Implements [json.Marshaler](<https://pkg.go.dev/encoding/json/#Marshaler>).
 
 <a name="AccountBlock.Previous"></a>
-### func \(\*AccountBlock\) [Previous](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L127>)
+### func \(\*AccountBlock\) [Previous](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L206>)
 
 ```go
 func (ab *AccountBlock) Previous() types.HashHeight
 ```
 
-
+Previous returns the previous\-block locator. For descendant\-bearing blocks the locator points to the previous of the first descendant — the effective head before this transaction was applied. Implements [db.Commit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Commit>).
 
 <a name="AccountBlock.Producer"></a>
-### func \(\*AccountBlock\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L197>)
+### func \(\*AccountBlock\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L299>)
 
 ```go
 func (ab *AccountBlock) Producer() types.Address
 ```
 
+Producer returns the [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>) derived from \[PublicKey\] \(memoized after the first call\). For send blocks this is the sender's account address; for receive blocks authored by users it is the receiver's.
 
+Concurrency: the cache is not synchronized; callers that share an [AccountBlock](<#AccountBlock>) across goroutines should call Producer first or treat the cache field as racy.
 
 <a name="AccountBlock.Proto"></a>
-### func \(\*AccountBlock\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L219>)
+### func \(\*AccountBlock\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L331>)
 
 ```go
 func (ab *AccountBlock) Proto() *AccountBlockProto
 ```
 
-
+Proto wraps ab in an [AccountBlockProto](<#AccountBlockProto>) for protobuf serialization. Recursively encodes every entry of \[DescendantBlocks\].
 
 <a name="AccountBlock.Serialize"></a>
-### func \(\*AccountBlock\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L292>)
+### func \(\*AccountBlock\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L410>)
 
 ```go
 func (ab *AccountBlock) Serialize() ([]byte, error)
 ```
 
-
+Serialize encodes ab as protobuf bytes — the on\-disk and on\-the\-wire representation.
 
 <a name="AccountBlock.ToNomMarshalJson"></a>
-### func \(\*AccountBlock\) [ToNomMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L341>)
+### func \(\*AccountBlock\) [ToNomMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L470>)
 
 ```go
 func (ab *AccountBlock) ToNomMarshalJson() *AccountBlockMarshal
 ```
 
-
+ToNomMarshalJson projects ab into the JSON\-friendly twin, stringifying \[AccountBlock.Amount\] and hex\-encoding \[AccountBlock.Nonce\]. The descendant slice is shared by reference.
 
 <a name="AccountBlock.UnmarshalJSON"></a>
-### func \(\*AccountBlock\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L409>)
+### func \(\*AccountBlock\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L549>)
 
 ```go
 func (ab *AccountBlock) UnmarshalJSON(data []byte) error
 ```
 
-
+UnmarshalJSON parses ab from JSON via [AccountBlockMarshal](<#AccountBlockMarshal>). Returns an error if the JSON is malformed or the nonce hex is invalid. Implements [json.Unmarshaler](<https://pkg.go.dev/encoding/json/#Unmarshaler>).
 
 <a name="AccountBlockMarshal"></a>
-## type [AccountBlockMarshal](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L303-L339>)
+## type [AccountBlockMarshal](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L429-L465>)
 
-
+AccountBlockMarshal is the JSON\-friendly twin of [AccountBlock](<#AccountBlock>). It renders \[AccountBlock.Amount\] and \[AccountBlock.Nonce\] as strings so they round\-trip cleanly through JavaScript and other languages without big\-integer support, and is produced/consumed transparently by [AccountBlock.MarshalJSON](<#AccountBlock.MarshalJSON>) / [AccountBlock.UnmarshalJSON](<#AccountBlock.UnmarshalJSON>).
 
 ```go
 type AccountBlockMarshal struct {
@@ -614,13 +693,13 @@ type AccountBlockMarshal struct {
 ```
 
 <a name="AccountBlockMarshal.FromNomMarshalJson"></a>
-### func \(\*AccountBlockMarshal\) [FromNomMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L373>)
+### func \(\*AccountBlockMarshal\) [FromNomMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L507>)
 
 ```go
 func (ab *AccountBlockMarshal) FromNomMarshalJson() *AccountBlock
 ```
 
-
+FromNomMarshalJson is the inverse of [AccountBlock.ToNomMarshalJson](<#AccountBlock.ToNomMarshalJson>): converts the JSON\-friendly twin back into an [AccountBlock](<#AccountBlock>). Errors while parsing the hex nonce are ignored — the resulting block simply has a zero nonce — matching the original \(lenient\) behavior expected by RPC consumers.
 
 <a name="AccountBlockProto"></a>
 ## type [AccountBlockProto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/protobuf.pb.go#L24-L51>)
@@ -902,9 +981,9 @@ func (x *AccountBlockProto) String() string
 
 
 <a name="AccountBlockTransaction"></a>
-## type [AccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L28-L31>)
+## type [AccountBlockTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L49-L52>)
 
-
+AccountBlockTransaction is the [db.Transaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Transaction>) wrapper around an account block and the [db.Patch](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Patch>) capturing the state changes it caused. Used by the chain layer to commit an account block \(and any contract descendants\) atomically.
 
 ```go
 type AccountBlockTransaction struct {
@@ -914,27 +993,27 @@ type AccountBlockTransaction struct {
 ```
 
 <a name="AccountBlockTransaction.GetCommits"></a>
-### func \(\*AccountBlockTransaction\) [GetCommits](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L33>)
+### func \(\*AccountBlockTransaction\) [GetCommits](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L58>)
 
 ```go
 func (t *AccountBlockTransaction) GetCommits() []db.Commit
 ```
 
-
+GetCommits returns the descendant blocks first followed by the outer block, in the order required by the database manager \(descendants must commit before the parent so their state is visible when the parent finalizes\).
 
 <a name="AccountBlockTransaction.StealChanges"></a>
-### func \(\*AccountBlockTransaction\) [StealChanges](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L41>)
+### func \(\*AccountBlockTransaction\) [StealChanges](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L70>)
 
 ```go
 func (t *AccountBlockTransaction) StealChanges() db.Patch
 ```
 
-
+StealChanges hands ownership of the patch to the caller and clears the field on the transaction. Used by the database manager to avoid copying the patch.
 
 <a name="DetailedMomentum"></a>
-## type [DetailedMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L53-L56>)
+## type [DetailedMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L86-L89>)
 
-
+DetailedMomentum bundles a [Momentum](<#Momentum>) with the full [AccountBlock](<#AccountBlock>) bodies it commits to. RPC handlers return this when callers want a momentum together with the transactions it finalized.
 
 ```go
 type DetailedMomentum struct {
@@ -944,9 +1023,17 @@ type DetailedMomentum struct {
 ```
 
 <a name="Momentum"></a>
-## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L32-L51>)
+## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L62-L81>)
 
+Momentum is a consensus block: an entry on the global momentum chain produced by the elected pillar for the current tick. Each momentum commits to a list of account\-block headers \(\[Content\]\) and to the patch hash those blocks produced \(\[ChangesHash\]\), giving a single root the network agrees on per tick.
 
+Field grouping:
+
+- Identity: Version, ChainIdentifier, Hash, PreviousHash, Height.
+- Time: TimestampUnix is canonical; Timestamp is a derived [time.Time](<https://pkg.go.dev/time/#Time>) cached for convenience and excluded from the hash.
+- Content: Data is opaque per\-momentum metadata; Content is the list of \[types.AccountHeader\]s anchored.
+- State commitment: ChangesHash binds the aggregate state delta of this momentum's account blocks.
+- Authentication: PublicKey \+ Signature; producer is a cached derived value \(see [Momentum.Producer](<#Momentum.Producer>)\).
 
 ```go
 type Momentum struct {
@@ -972,130 +1059,134 @@ type Momentum struct {
 ```
 
 <a name="DeProtoMomentum"></a>
-### func [DeProtoMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L117>)
+### func [DeProtoMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L175>)
 
 ```go
 func DeProtoMomentum(pb *MomentumProto) *Momentum
 ```
 
-
+DeProtoMomentum decodes a [MomentumProto](<#MomentumProto>) back into a [Momentum](<#Momentum>) and primes the lazy caches via [Momentum.EnsureCache](<#Momentum.EnsureCache>).
 
 <a name="DeserializeMomentum"></a>
-### func [DeserializeMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L142>)
+### func [DeserializeMomentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L206>)
 
 ```go
 func DeserializeMomentum(data []byte) (*Momentum, error)
 ```
 
-
+DeserializeMomentum decodes protobuf bytes into a [Momentum](<#Momentum>). Returns an error if the bytes are not a valid encoded [MomentumProto](<#MomentumProto>).
 
 <a name="Momentum.ComputeHash"></a>
-### func \(\*Momentum\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L58>)
+### func \(\*Momentum\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L97>)
 
 ```go
 func (m *Momentum) ComputeHash() types.Hash
 ```
 
+ComputeHash returns the canonical hash of m. Binds the version, chain identifier, previous hash, height, timestamp, \[Data\] hash, \[Content\] hash, and \[ChangesHash\]. Does not include \[PublicKey\] / \[Signature\]; those authenticate the hash, they don't extend it.
 
+Invariant: a momentum's stored Hash always equals ComputeHash\(\).
 
 <a name="Momentum.EnsureCache"></a>
-### func \(\*Momentum\) [EnsureCache](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L91>)
+### func \(\*Momentum\) [EnsureCache](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L145>)
 
 ```go
 func (m *Momentum) EnsureCache()
 ```
 
-
+EnsureCache populates the lazily\-derived fields \(\[Timestamp\] and the \[Producer\] cache\) so subsequent reads are race\-free. Called by [DeProtoMomentum](<#DeProtoMomentum>) after deserialization.
 
 <a name="Momentum.Identifier"></a>
-### func \(\*Momentum\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L71>)
+### func \(\*Momentum\) [Identifier](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L112>)
 
 ```go
 func (m *Momentum) Identifier() types.HashHeight
 ```
 
-
+Identifier returns the \(Hash, Height\) pair locating m on the momentum chain. Implements [db.Commit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Commit>).
 
 <a name="Momentum.Previous"></a>
-### func \(\*Momentum\) [Previous](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L77>)
+### func \(\*Momentum\) [Previous](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L121>)
 
 ```go
 func (m *Momentum) Previous() types.HashHeight
 ```
 
-
+Previous returns the predecessor momentum's \[HashHeight\]. Implements [db.Commit](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Commit>).
 
 <a name="Momentum.Producer"></a>
-### func \(\*Momentum\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L84>)
+### func \(\*Momentum\) [Producer](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L134>)
 
 ```go
 func (m *Momentum) Producer() types.Address
 ```
 
+Producer returns the address of the pillar that signed the momentum, memoizing the result on first call. Used by the verifier to confirm the producer matches the elected pillar for the momentum's tick.
 
+Concurrency: the cache is not synchronized; treat as racy across goroutines unless [Momentum.EnsureCache](<#Momentum.EnsureCache>) has been called first.
 
 <a name="Momentum.Proto"></a>
-### func \(\*Momentum\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L102>)
+### func \(\*Momentum\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L157>)
 
 ```go
 func (m *Momentum) Proto() *MomentumProto
 ```
 
-
+Proto wraps m in a [MomentumProto](<#MomentumProto>) for protobuf serialization.
 
 <a name="Momentum.Serialize"></a>
-### func \(\*Momentum\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L134>)
+### func \(\*Momentum\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L195>)
 
 ```go
 func (m *Momentum) Serialize() ([]byte, error)
 ```
 
-
+Serialize encodes m as protobuf bytes — the on\-disk and on\-the\-wire representation.
 
 <a name="MomentumContent"></a>
-## type [MomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L12>)
+## type [MomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L19>)
 
-
+MomentumContent is the ordered list of \[types.AccountHeader\]s a [Momentum](<#Momentum>) commits to. The list is sorted by canonical header bytes \(see [AccountBlockHeaderComparer](<#AccountBlockHeaderComparer>)\) so different producers building a momentum from the same account\-block set agree on the same hash.
 
 ```go
 type MomentumContent []*types.AccountHeader
 ```
 
 <a name="NewMomentumContent"></a>
-### func [NewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L41>)
+### func [NewMomentumContent](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L63>)
 
 ```go
 func NewMomentumContent(blocks []*AccountBlock) MomentumContent
 ```
 
-
+NewMomentumContent builds the [MomentumContent](<#MomentumContent>) for the supplied account blocks: extracts each block's header and sorts the result by canonical bytes so the resulting hash is order\-independent.
 
 <a name="MomentumContent.Bytes"></a>
-### func \(\*MomentumContent\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L29>)
+### func \(\*MomentumContent\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L45>)
 
 ```go
 func (mc *MomentumContent) Bytes() []byte
 ```
 
-
+Bytes returns the concatenation of every header's canonical byte form. Used as the input to [MomentumContent.Hash](<#MomentumContent.Hash>).
 
 <a name="MomentumContent.Hash"></a>
-### func \(\*MomentumContent\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L37>)
+### func \(\*MomentumContent\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L56>)
 
 ```go
 func (mc *MomentumContent) Hash() types.Hash
 ```
 
-
+Hash returns the digest committed to by [Momentum.ComputeHash](<#Momentum.ComputeHash>) as the content commitment.
 
 <a name="MomentumContent.Proto"></a>
-### func \(\*MomentumContent\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L14>)
+### func \(\*MomentumContent\) [Proto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum_content.go#L23>)
 
 ```go
 func (mc *MomentumContent) Proto() []*types.AccountHeaderProto
 ```
 
-
+Proto encodes mc as a slice of [types.AccountHeaderProto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#AccountHeaderProto>) for protobuf serialization.
 
 <a name="MomentumProto"></a>
 ## type [MomentumProto](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/protobuf.pb.go#L239-L255>)
@@ -1267,9 +1358,9 @@ func (x *MomentumProto) String() string
 
 
 <a name="MomentumTransaction"></a>
-## type [MomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L18-L21>)
+## type [MomentumTransaction](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L26-L29>)
 
-
+MomentumTransaction is the [db.Transaction](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Transaction>) wrapper around a momentum and the [db.Patch](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/db/#Patch>) capturing the state changes its content produced. Used by the chain layer to commit a momentum atomically with its derived state.
 
 ```go
 type MomentumTransaction struct {
@@ -1279,27 +1370,27 @@ type MomentumTransaction struct {
 ```
 
 <a name="MomentumTransaction.GetCommits"></a>
-### func \(\*MomentumTransaction\) [GetCommits](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L23>)
+### func \(\*MomentumTransaction\) [GetCommits](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L34>)
 
 ```go
 func (t *MomentumTransaction) GetCommits() []db.Commit
 ```
 
-
+GetCommits returns the single momentum as the only commit in the transaction; the account blocks the momentum references are committed separately by their own \[AccountBlockTransaction\]s.
 
 <a name="MomentumTransaction.StealChanges"></a>
-### func \(\*MomentumTransaction\) [StealChanges](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L26>)
+### func \(\*MomentumTransaction\) [StealChanges](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/momentum.go#L39>)
 
 ```go
 func (t *MomentumTransaction) StealChanges() db.Patch
 ```
 
-
+StealChanges hands the patch to the caller and clears the field.
 
 <a name="Nonce"></a>
-## type [Nonce](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L47-L49>)
+## type [Nonce](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L79-L81>)
 
-
+Nonce is the 8\-byte plasma proof\-of\-work nonce. Together with \[AccountBlock.Difficulty\] it lets a sender pay plasma cost via PoW instead of fused QSR.
 
 ```go
 type Nonce struct {
@@ -1308,48 +1399,48 @@ type Nonce struct {
 ```
 
 <a name="DeSerializeNonce"></a>
-### func [DeSerializeNonce](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L74>)
+### func [DeSerializeNonce](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L119>)
 
 ```go
 func DeSerializeNonce(bytes []byte) Nonce
 ```
 
-
+DeSerializeNonce decodes 8 raw bytes into a [Nonce](<#Nonce>). Panics on length mismatch — the protobuf shape is fixed at 8 bytes, so a mismatch indicates a corrupt message.
 
 <a name="Nonce.Copy"></a>
-### func \(\*Nonce\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L51>)
+### func \(\*Nonce\) [Copy](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L84>)
 
 ```go
 func (n *Nonce) Copy() Nonce
 ```
 
-
+Copy returns a deep copy of n.
 
 <a name="Nonce.MarshalText"></a>
-### func \(\*Nonce\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L56>)
+### func \(\*Nonce\) [MarshalText](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L93>)
 
 ```go
 func (n *Nonce) MarshalText() ([]byte, error)
 ```
 
-
+MarshalText emits the nonce as lowercase hex. Implements [encoding.TextMarshaler](<https://pkg.go.dev/encoding/#TextMarshaler>) so JSON encoders render the nonce as a string \(the binary form would not round\-trip cleanly through JSON\).
 
 <a name="Nonce.Serialize"></a>
-### func \(\*Nonce\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L71>)
+### func \(\*Nonce\) [Serialize](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L112>)
 
 ```go
 func (n *Nonce) Serialize() []byte
 ```
 
-
+Serialize returns a fresh slice over the nonce bytes.
 
 <a name="Nonce.UnmarshalText"></a>
-### func \(\*Nonce\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L59>)
+### func \(\*Nonce\) [UnmarshalText](<https://github.com/zenon-network/go-zenon/blob/master/chain/nom/account_block.go#L99>)
 
 ```go
 func (n *Nonce) UnmarshalText(input []byte) error
 ```
 
-
+UnmarshalText parses a hex\-encoded 8\-byte nonce. Returns an error on malformed hex or wrong length.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
