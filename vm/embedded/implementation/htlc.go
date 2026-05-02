@@ -47,6 +47,11 @@ func checkHtlc(param definition.CreateHtlcParam) error {
 	return nil
 }
 
+// CreateHtlcMethod creates a new hashed-timelock entry: locks
+// the caller's transferred amount behind (hashLock, expirationTime)
+// for the named hashLocked recipient. The recipient may unlock by
+// revealing the preimage before expiration; afterwards the
+// caller may [ReclaimHtlcMethod] the funds.
 type CreateHtlcMethod struct {
 	MethodName string
 }
@@ -118,6 +123,8 @@ func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	return nil, nil
 }
 
+// ReclaimHtlcMethod refunds an HTLC entry to the original sender
+// once expirationTime has elapsed without a successful unlock.
 type ReclaimHtlcMethod struct {
 	MethodName string
 }
@@ -187,6 +194,10 @@ func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 	}, nil
 }
 
+// UnlockHtlcMethod claims an HTLC by revealing the preimage. The
+// caller must be the hashLocked recipient (or have proxy-unlock
+// permission via [AllowHtlcProxyUnlockMethod]) and the preimage
+// must hash to the entry's hashLock under its declared hash type.
 type UnlockHtlcMethod struct {
 	MethodName string
 }
@@ -277,6 +288,9 @@ func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 	}, nil
 }
 
+// DenyHtlcProxyUnlockMethod sets the per-account proxy-unlock
+// flag to false (default), so only the hashLocked recipient may
+// unlock entries.
 type DenyHtlcProxyUnlockMethod struct {
 	MethodName string
 }
@@ -316,6 +330,9 @@ func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmCon
 	return nil, nil
 }
 
+// AllowHtlcProxyUnlockMethod sets the per-account proxy-unlock
+// flag to true, so any caller in possession of the preimage may
+// unlock entries on this account's behalf.
 type AllowHtlcProxyUnlockMethod struct {
 	MethodName string
 }

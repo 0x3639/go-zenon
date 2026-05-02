@@ -1,5 +1,5 @@
-// Package implementation contains the executable behavior for each embedded
-// contract.
+// Package implementation contains the executable behavior for
+// each embedded contract.
 //
 // # Overview
 //

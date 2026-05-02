@@ -1,5 +1,5 @@
-// Package definition holds the ABI definitions and Go type wrappers for each
-// embedded contract.
+// Package definition holds the ABI definitions and Go type
+// wrappers for each embedded contract.
 //
 // # Overview
 //

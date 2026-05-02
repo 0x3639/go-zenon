@@ -412,7 +412,7 @@ var (
 )
 ```
 
-<a name="commonLog"></a>
+<a name="commonLog"></a>commonLog is the shared logger for the cross\-contract helpers in this file \(update rate\-limiting, reward bookkeeping, embedded\-account QSR escrow, vote handling\).
 
 ```go
 var (
@@ -517,7 +517,7 @@ func CanPerformAction(context vm_context.AccountVmContext) (*definition.BridgeIn
 
 
 <a name="CanPerformEpochUpdate"></a>
-## func [CanPerformEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L59>)
+## func [CanPerformEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L62>)
 
 ```go
 func CanPerformEpochUpdate(context vm_context.AccountVmContext, epoch *definition.LastEpochUpdate) error
@@ -528,7 +528,7 @@ CanPerformEpochUpdate checks if embedded contract can perform an epoch update, u
 - returns util.EpochUpdateNotDue if not due
 
 <a name="CanPerformUpdate"></a>
-## func [CanPerformUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L21>)
+## func [CanPerformUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L24>)
 
 ```go
 func CanPerformUpdate(context vm_context.AccountVmContext) error
@@ -584,7 +584,7 @@ func CheckOrchestratorInfoInitialized(context vm_context.AccountVmContext) (*def
 
 
 <a name="CheckSecurityInitialized"></a>
-## func [CheckSecurityInitialized](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L476>)
+## func [CheckSecurityInitialized](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L485>)
 
 ```go
 func CheckSecurityInitialized(context vm_context.AccountVmContext) (*definition.SecurityInfoVariable, error)
@@ -766,7 +766,7 @@ func SignRetrieveAssetsMessage(address types.Address, prv []byte, pub string) (s
 SignRetrieveAssetsMessage signs the canonical assets\-retrieval message for tests. Production signers \(clients\) build the same message and sign with the legacy private key.
 
 <a name="TimeChallenge"></a>
-## func [TimeChallenge](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L439>)
+## func [TimeChallenge](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L448>)
 
 ```go
 func TimeChallenge(context vm_context.AccountVmContext, methodName string, hash []byte, delay uint64) (*definition.TimeChallengeInfo, error)
@@ -775,7 +775,7 @@ func TimeChallenge(context vm_context.AccountVmContext, methodName string, hash 
 
 
 <a name="addReward"></a>
-## func [addReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L92>)
+## func [addReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L101>)
 
 ```go
 func addReward(context vm_context.AccountVmContext, epoch uint64, reward definition.RewardDeposit)
@@ -784,7 +784,7 @@ func addReward(context vm_context.AccountVmContext, epoch uint64, reward definit
 
 
 <a name="checkAcceleratorVotes"></a>
-## func [checkAcceleratorVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L253>)
+## func [checkAcceleratorVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L260>)
 
 ```go
 func checkAcceleratorVotes(context vm_context.AccountVmContext, id types.Hash, numPillars uint32) bool
@@ -793,7 +793,7 @@ func checkAcceleratorVotes(context vm_context.AccountVmContext, id types.Hash, n
 
 
 <a name="checkAndConsumeQsr"></a>
-## func [checkAndConsumeQsr](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L177>)
+## func [checkAndConsumeQsr](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L186>)
 
 ```go
 func checkAndConsumeQsr(context vm_context.AccountVmContext, ownerAddress types.Address, requiredAmount *big.Int) error
@@ -805,7 +805,7 @@ Used for registration
 - consumes the required amount
 
 <a name="checkAndPerformUpdate"></a>
-## func [checkAndPerformUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L43>)
+## func [checkAndPerformUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L46>)
 
 ```go
 func checkAndPerformUpdate(context vm_context.AccountVmContext) error
@@ -817,7 +817,7 @@ Generic function, used to limits calls to the update method once every UpdateMin
 - returns util.ErrUpdateTooRecent if not due
 
 <a name="checkAndPerformUpdateEpoch"></a>
-## func [checkAndPerformUpdateEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L75>)
+## func [checkAndPerformUpdateEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L78>)
 
 ```go
 func checkAndPerformUpdateEpoch(context vm_context.AccountVmContext, epoch *definition.LastEpochUpdate) error
@@ -946,7 +946,7 @@ func computeDetailedPillarReward(context vm_context.AccountVmContext, epoch uint
 distributed reward for all pillars in one epoch
 
 <a name="computeLiquidityRewardsForEpoch"></a>
-## func [computeLiquidityRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L57>)
+## func [computeLiquidityRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L62>)
 
 ```go
 func computeLiquidityRewardsForEpoch(context vm_context.AccountVmContext, epoch uint64) ([]*nom.AccountBlock, error)
@@ -955,7 +955,7 @@ func computeLiquidityRewardsForEpoch(context vm_context.AccountVmContext, epoch 
 
 
 <a name="computeLiquidityStakeRewardsForEpoch"></a>
-## func [computeLiquidityStakeRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L541>)
+## func [computeLiquidityStakeRewardsForEpoch](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L566>)
 
 ```go
 func computeLiquidityStakeRewardsForEpoch(context vm_context.AccountVmContext, epoch uint64) ([]*nom.AccountBlock, error)
@@ -991,7 +991,7 @@ func computeStakeRewardsForEpoch(context vm_context.AccountVmContext, epoch uint
 computeStakeRewardsForEpoch divides the per\-epoch QSR pool proportionally to each stake's \[getWeightedStake\] contribution. Revoked\-and\-past\-end stakes are deleted to keep storage bounded.
 
 <a name="getWeightedLiquidityStake"></a>
-## func [getWeightedLiquidityStake](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L526>)
+## func [getWeightedLiquidityStake](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L551>)
 
 ```go
 func getWeightedLiquidityStake(info *definition.LiquidityStakeEntry, startTime, endTime int64) *big.Int
@@ -1000,7 +1000,7 @@ func getWeightedLiquidityStake(info *definition.LiquidityStakeEntry, startTime, 
 weighted liquidity stake amount over time
 
 <a name="getWeightedLiquidityStakeAmount"></a>
-## func [getWeightedLiquidityStakeAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L357>)
+## func [getWeightedLiquidityStakeAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L375>)
 
 ```go
 func getWeightedLiquidityStakeAmount(amount *big.Int, stakingTime int64) *big.Int
@@ -1065,7 +1065,7 @@ func toOldSignature(signature []byte) string
 toOldSignature converts a go\-ethereum\-style 65\-byte signature \(r || s || v\) into the legacy ZNN\-style format \(header byte first, where header = v \+ 31\), base64\-encoded.
 
 <a name="updateLiquidityRewards"></a>
-## func [updateLiquidityRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L87>)
+## func [updateLiquidityRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L92>)
 
 ```go
 func updateLiquidityRewards(context vm_context.AccountVmContext) ([]*nom.AccountBlock, error)
@@ -1074,7 +1074,7 @@ func updateLiquidityRewards(context vm_context.AccountVmContext) ([]*nom.Account
 
 
 <a name="updateLiquidityStakeRewards"></a>
-## func [updateLiquidityStakeRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L721>)
+## func [updateLiquidityStakeRewards](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L746>)
 
 ```go
 func updateLiquidityStakeRewards(context vm_context.AccountVmContext) ([]*nom.AccountBlock, error)
@@ -1148,9 +1148,9 @@ func (p *ActivateSporkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock checks caller authority and that the call carries no value, and decodes the target spork id.
 
 <a name="AddPhaseMethod"></a>
-## type [AddPhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L167-L169>)
+## type [AddPhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L174-L176>)
 
-
+AddPhaseMethod attaches a new phase to an Active project. The phase enters the voting stage immediately. Project owner\-only.
 
 ```go
 type AddPhaseMethod struct {
@@ -1159,7 +1159,7 @@ type AddPhaseMethod struct {
 ```
 
 <a name="AddPhaseMethod.Fee"></a>
-### func \(\*AddPhaseMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L171>)
+### func \(\*AddPhaseMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L178>)
 
 ```go
 func (p *AddPhaseMethod) Fee() (*big.Int, error)
@@ -1168,7 +1168,7 @@ func (p *AddPhaseMethod) Fee() (*big.Int, error)
 
 
 <a name="AddPhaseMethod.GetPlasma"></a>
-### func \(\*AddPhaseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L174>)
+### func \(\*AddPhaseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L181>)
 
 ```go
 func (p *AddPhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1177,7 +1177,7 @@ func (p *AddPhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, 
 
 
 <a name="AddPhaseMethod.ReceiveBlock"></a>
-### func \(\*AddPhaseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L192>)
+### func \(\*AddPhaseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L199>)
 
 ```go
 func (p *AddPhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1186,7 +1186,7 @@ func (p *AddPhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendB
 
 
 <a name="AddPhaseMethod.ValidateSendBlock"></a>
-### func \(\*AddPhaseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L177>)
+### func \(\*AddPhaseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L184>)
 
 ```go
 func (p *AddPhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1195,9 +1195,9 @@ func (p *AddPhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="AllowHtlcProxyUnlockMethod"></a>
-## type [AllowHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L319-L321>)
+## type [AllowHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L336-L338>)
 
-
+AllowHtlcProxyUnlockMethod sets the per\-account proxy\-unlock flag to true, so any caller in possession of the preimage may unlock entries on this account's behalf.
 
 ```go
 type AllowHtlcProxyUnlockMethod struct {
@@ -1206,7 +1206,7 @@ type AllowHtlcProxyUnlockMethod struct {
 ```
 
 <a name="AllowHtlcProxyUnlockMethod.GetPlasma"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L323>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L340>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1215,7 +1215,7 @@ func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 
 
 <a name="AllowHtlcProxyUnlockMethod.ReceiveBlock"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L342>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L359>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1224,7 +1224,7 @@ func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmCo
 
 
 <a name="AllowHtlcProxyUnlockMethod.ValidateSendBlock"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L327>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L344>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1271,9 +1271,9 @@ func (p *BurnMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock requires a positive transferred amount \(the tokens to burn\) and an empty argument list.
 
 <a name="BurnZnnMethod"></a>
-## type [BurnZnnMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L182-L184>)
+## type [BurnZnnMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L191-L193>)
 
-
+BurnZnnMethod burns a portion of the liquidity reward pool by emitting a Burn descendant against the Token contract.
 
 ```go
 type BurnZnnMethod struct {
@@ -1282,7 +1282,7 @@ type BurnZnnMethod struct {
 ```
 
 <a name="BurnZnnMethod.Fee"></a>
-### func \(\*BurnZnnMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L186>)
+### func \(\*BurnZnnMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L195>)
 
 ```go
 func (p *BurnZnnMethod) Fee() (*big.Int, error)
@@ -1291,7 +1291,7 @@ func (p *BurnZnnMethod) Fee() (*big.Int, error)
 
 
 <a name="BurnZnnMethod.GetPlasma"></a>
-### func \(\*BurnZnnMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L189>)
+### func \(\*BurnZnnMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L198>)
 
 ```go
 func (p *BurnZnnMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1300,7 +1300,7 @@ func (p *BurnZnnMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, e
 
 
 <a name="BurnZnnMethod.ReceiveBlock"></a>
-### func \(\*BurnZnnMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L207>)
+### func \(\*BurnZnnMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L216>)
 
 ```go
 func (p *BurnZnnMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1309,7 +1309,7 @@ func (p *BurnZnnMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBl
 
 
 <a name="BurnZnnMethod.ValidateSendBlock"></a>
-### func \(\*BurnZnnMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L192>)
+### func \(\*BurnZnnMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L201>)
 
 ```go
 func (p *BurnZnnMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1356,9 +1356,9 @@ func (p *CancelFuseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the target fusion id and rejects calls that carry value.
 
 <a name="CancelLiquidityStakeMethod"></a>
-## type [CancelLiquidityStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L427-L429>)
+## type [CancelLiquidityStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L448-L450>)
 
-
+CancelLiquidityStakeMethod begins unlocking a staked entry; the refund follows after the lock window completes via [UnlockLiquidityStakeEntries](<#UnlockLiquidityStakeEntries>).
 
 ```go
 type CancelLiquidityStakeMethod struct {
@@ -1367,7 +1367,7 @@ type CancelLiquidityStakeMethod struct {
 ```
 
 <a name="CancelLiquidityStakeMethod.GetPlasma"></a>
-### func \(\*CancelLiquidityStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L431>)
+### func \(\*CancelLiquidityStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L452>)
 
 ```go
 func (p *CancelLiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1376,7 +1376,7 @@ func (p *CancelLiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 
 
 <a name="CancelLiquidityStakeMethod.ReceiveBlock"></a>
-### func \(\*CancelLiquidityStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L448>)
+### func \(\*CancelLiquidityStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L469>)
 
 ```go
 func (p *CancelLiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1385,7 +1385,7 @@ func (p *CancelLiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmCo
 
 
 <a name="CancelLiquidityStakeMethod.ValidateSendBlock"></a>
-### func \(\*CancelLiquidityStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L434>)
+### func \(\*CancelLiquidityStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L455>)
 
 ```go
 func (p *CancelLiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1432,9 +1432,9 @@ func (p *CancelStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the target stake id and rejects value\-bearing calls.
 
 <a name="ChangeAdministratorLiquidity"></a>
-## type [ChangeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L917-L919>)
+## type [ChangeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L951-L953>)
 
-
+ChangeAdministratorLiquidity rotates the liquidity\-contract administrator after a time\-locked proposal completes.
 
 ```go
 type ChangeAdministratorLiquidity struct {
@@ -1443,7 +1443,7 @@ type ChangeAdministratorLiquidity struct {
 ```
 
 <a name="ChangeAdministratorLiquidity.GetPlasma"></a>
-### func \(\*ChangeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L921>)
+### func \(\*ChangeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L955>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1452,7 +1452,7 @@ func (p *ChangeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTa
 
 
 <a name="ChangeAdministratorLiquidity.ReceiveBlock"></a>
-### func \(\*ChangeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L947>)
+### func \(\*ChangeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L981>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1461,7 +1461,7 @@ func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVm
 
 
 <a name="ChangeAdministratorLiquidity.ValidateSendBlock"></a>
-### func \(\*ChangeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L924>)
+### func \(\*ChangeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L958>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1546,9 +1546,11 @@ func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) 
 
 
 <a name="CollectRewardMethod"></a>
-## type [CollectRewardMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L87-L90>)
+## type [CollectRewardMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L96-L99>)
 
-CollectRewardMethod is a common embedded.method used to issue tokens to users based on RewardDeposit object. When issuing rewards, the embedded adds the respected value in the RewardDeposit object in the DB and afterwards, the users will call this method to receive the tokens.
+CollectRewardMethod is a common embedded.method used to issue tokens to users based on the RewardDeposit object. When issuing rewards, the embedded adds the respective value in the RewardDeposit object in the DB; afterwards, the users call this method to receive the tokens.
+
+Plasma is set per\-contract at table\-construction time so each embedded contract can charge its own cost \(simple\-call, with\-withdraw, or double\-withdraw\) for the same logical method.
 
 ```go
 type CollectRewardMethod struct {
@@ -1558,7 +1560,7 @@ type CollectRewardMethod struct {
 ```
 
 <a name="CollectRewardMethod.GetPlasma"></a>
-### func \(\*CollectRewardMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L107>)
+### func \(\*CollectRewardMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L116>)
 
 ```go
 func (p *CollectRewardMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1567,7 +1569,7 @@ func (p *CollectRewardMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 
 
 <a name="CollectRewardMethod.ReceiveBlock"></a>
-### func \(\*CollectRewardMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L125>)
+### func \(\*CollectRewardMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L134>)
 
 ```go
 func (p *CollectRewardMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1576,7 +1578,7 @@ func (p *CollectRewardMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 
 
 <a name="CollectRewardMethod.ValidateSendBlock"></a>
-### func \(\*CollectRewardMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L111>)
+### func \(\*CollectRewardMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L120>)
 
 ```go
 func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1585,9 +1587,9 @@ func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="CreateHtlcMethod"></a>
-## type [CreateHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L50-L52>)
+## type [CreateHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L55-L57>)
 
-
+CreateHtlcMethod creates a new hashed\-timelock entry: locks the caller's transferred amount behind \(hashLock, expirationTime\) for the named hashLocked recipient. The recipient may unlock by revealing the preimage before expiration; afterwards the caller may [ReclaimHtlcMethod](<#ReclaimHtlcMethod>) the funds.
 
 ```go
 type CreateHtlcMethod struct {
@@ -1596,7 +1598,7 @@ type CreateHtlcMethod struct {
 ```
 
 <a name="CreateHtlcMethod.GetPlasma"></a>
-### func \(\*CreateHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L54>)
+### func \(\*CreateHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L59>)
 
 ```go
 func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1605,7 +1607,7 @@ func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 
 
 <a name="CreateHtlcMethod.ReceiveBlock"></a>
-### func \(\*CreateHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L85>)
+### func \(\*CreateHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L90>)
 
 ```go
 func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1614,7 +1616,7 @@ func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 
 
 <a name="CreateHtlcMethod.ValidateSendBlock"></a>
-### func \(\*CreateHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L57>)
+### func \(\*CreateHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L62>)
 
 ```go
 func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1623,9 +1625,9 @@ func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="CreateProjectMethod"></a>
-## type [CreateProjectMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L103-L105>)
+## type [CreateProjectMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L108-L110>)
 
-
+CreateProjectMethod implements project creation: the caller pays [constants.ProjectCreationAmount](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ProjectCreationAmount>) ZNN and submits project metadata; a [definition.Project](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#Project>) is persisted with [definition.VotingStatus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/definition/#VotingStatus>). Pillar voting determines whether the project advances to the funded phases.
 
 ```go
 type CreateProjectMethod struct {
@@ -1634,7 +1636,7 @@ type CreateProjectMethod struct {
 ```
 
 <a name="CreateProjectMethod.GetPlasma"></a>
-### func \(\*CreateProjectMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L107>)
+### func \(\*CreateProjectMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L112>)
 
 ```go
 func (p *CreateProjectMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1643,7 +1645,7 @@ func (p *CreateProjectMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 
 
 <a name="CreateProjectMethod.ReceiveBlock"></a>
-### func \(\*CreateProjectMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L130>)
+### func \(\*CreateProjectMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L135>)
 
 ```go
 func (p *CreateProjectMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1652,7 +1654,7 @@ func (p *CreateProjectMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 
 
 <a name="CreateProjectMethod.ValidateSendBlock"></a>
-### func \(\*CreateProjectMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L110>)
+### func \(\*CreateProjectMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L115>)
 
 ```go
 func (p *CreateProjectMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1737,9 +1739,9 @@ func (p *DelegateMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="DenyHtlcProxyUnlockMethod"></a>
-## type [DenyHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L280-L282>)
+## type [DenyHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L294-L296>)
 
-
+DenyHtlcProxyUnlockMethod sets the per\-account proxy\-unlock flag to false \(default\), so only the hashLocked recipient may unlock entries.
 
 ```go
 type DenyHtlcProxyUnlockMethod struct {
@@ -1748,7 +1750,7 @@ type DenyHtlcProxyUnlockMethod struct {
 ```
 
 <a name="DenyHtlcProxyUnlockMethod.GetPlasma"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L284>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L298>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1757,7 +1759,7 @@ func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable
 
 
 <a name="DenyHtlcProxyUnlockMethod.ReceiveBlock"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L303>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L317>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1766,7 +1768,7 @@ func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmCon
 
 
 <a name="DenyHtlcProxyUnlockMethod.ValidateSendBlock"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L288>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L302>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1775,7 +1777,7 @@ func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) e
 
 
 <a name="DepositQsrMethod"></a>
-## type [DepositQsrMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L196-L198>)
+## type [DepositQsrMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L205-L207>)
 
 
 
@@ -1786,7 +1788,7 @@ type DepositQsrMethod struct {
 ```
 
 <a name="DepositQsrMethod.GetPlasma"></a>
-### func \(\*DepositQsrMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L200>)
+### func \(\*DepositQsrMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L209>)
 
 ```go
 func (p *DepositQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1795,7 +1797,7 @@ func (p *DepositQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 
 
 <a name="DepositQsrMethod.ReceiveBlock"></a>
-### func \(\*DepositQsrMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L217>)
+### func \(\*DepositQsrMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L226>)
 
 ```go
 func (p *DepositQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1804,7 +1806,7 @@ func (p *DepositQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 
 
 <a name="DepositQsrMethod.ValidateSendBlock"></a>
-### func \(\*DepositQsrMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L203>)
+### func \(\*DepositQsrMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L212>)
 
 ```go
 func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1813,7 +1815,7 @@ func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="DonateMethod"></a>
-## type [DonateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L277-L279>)
+## type [DonateMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L286-L288>)
 
 
 
@@ -1824,7 +1826,7 @@ type DonateMethod struct {
 ```
 
 <a name="DonateMethod.GetPlasma"></a>
-### func \(\*DonateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L281>)
+### func \(\*DonateMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L290>)
 
 ```go
 func (p *DonateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1833,7 +1835,7 @@ func (p *DonateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, er
 
 
 <a name="DonateMethod.ReceiveBlock"></a>
-### func \(\*DonateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L298>)
+### func \(\*DonateMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L307>)
 
 ```go
 func (p *DonateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1842,7 +1844,7 @@ func (p *DonateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 
 
 <a name="DonateMethod.ValidateSendBlock"></a>
-### func \(\*DonateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L284>)
+### func \(\*DonateMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L293>)
 
 ```go
 func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1851,9 +1853,9 @@ func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="EmergencyLiquidity"></a>
-## type [EmergencyLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1189-L1191>)
+## type [EmergencyLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1232-L1234>)
 
-
+EmergencyLiquidity is the panic button for the liquidity contract: halts the program, nominates the caller as administrator, and zeroes guardian configuration.
 
 ```go
 type EmergencyLiquidity struct {
@@ -1862,7 +1864,7 @@ type EmergencyLiquidity struct {
 ```
 
 <a name="EmergencyLiquidity.GetPlasma"></a>
-### func \(\*EmergencyLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1193>)
+### func \(\*EmergencyLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1236>)
 
 ```go
 func (p *EmergencyLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1871,7 +1873,7 @@ func (p *EmergencyLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint
 
 
 <a name="EmergencyLiquidity.ReceiveBlock"></a>
-### func \(\*EmergencyLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1209>)
+### func \(\*EmergencyLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1252>)
 
 ```go
 func (p *EmergencyLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1880,7 +1882,7 @@ func (p *EmergencyLiquidity) ReceiveBlock(context vm_context.AccountVmContext, s
 
 
 <a name="EmergencyLiquidity.ValidateSendBlock"></a>
-### func \(\*EmergencyLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1196>)
+### func \(\*EmergencyLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1239>)
 
 ```go
 func (p *EmergencyLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1927,9 +1929,9 @@ func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="FundMethod"></a>
-## type [FundMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L111-L113>)
+## type [FundMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L118-L120>)
 
-
+FundMethod credits the liquidity reward pool from a caller\-supplied transfer.
 
 ```go
 type FundMethod struct {
@@ -1938,7 +1940,7 @@ type FundMethod struct {
 ```
 
 <a name="FundMethod.Fee"></a>
-### func \(\*FundMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L115>)
+### func \(\*FundMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L122>)
 
 ```go
 func (p *FundMethod) Fee() (*big.Int, error)
@@ -1947,7 +1949,7 @@ func (p *FundMethod) Fee() (*big.Int, error)
 
 
 <a name="FundMethod.GetPlasma"></a>
-### func \(\*FundMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L118>)
+### func \(\*FundMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L125>)
 
 ```go
 func (p *FundMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1956,7 +1958,7 @@ func (p *FundMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, erro
 
 
 <a name="FundMethod.ReceiveBlock"></a>
-### func \(\*FundMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L136>)
+### func \(\*FundMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L143>)
 
 ```go
 func (p *FundMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1965,7 +1967,7 @@ func (p *FundMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock
 
 
 <a name="FundMethod.ValidateSendBlock"></a>
-### func \(\*FundMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L121>)
+### func \(\*FundMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L128>)
 
 ```go
 func (p *FundMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2126,9 +2128,9 @@ func (p *LegacyRegisterMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="LiquidityStakeMethod"></a>
-## type [LiquidityStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L353-L355>)
+## type [LiquidityStakeMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L371-L373>)
 
-
+LiquidityStakeMethod locks tokens into the liquidity program for a chosen duration. Weight follows the [constants.LiquidityStakeWeights](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#LiquidityStakeWeights>) schedule \(0..12 for tiers 0..12 of [constants.StakeTimeUnitSec](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#StakeTimeUnitSec>)\).
 
 ```go
 type LiquidityStakeMethod struct {
@@ -2137,7 +2139,7 @@ type LiquidityStakeMethod struct {
 ```
 
 <a name="LiquidityStakeMethod.GetPlasma"></a>
-### func \(\*LiquidityStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L364>)
+### func \(\*LiquidityStakeMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L382>)
 
 ```go
 func (p *LiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2146,7 +2148,7 @@ func (p *LiquidityStakeMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (ui
 
 
 <a name="LiquidityStakeMethod.ReceiveBlock"></a>
-### func \(\*LiquidityStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L382>)
+### func \(\*LiquidityStakeMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L400>)
 
 ```go
 func (p *LiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2155,7 +2157,7 @@ func (p *LiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext,
 
 
 <a name="LiquidityStakeMethod.ValidateSendBlock"></a>
-### func \(\*LiquidityStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L367>)
+### func \(\*LiquidityStakeMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L385>)
 
 ```go
 func (p *LiquidityStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2202,9 +2204,9 @@ func (p *MintMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the \(token, amount, recipient\) tuple and rejects zero amounts or value\-bearing calls.
 
 <a name="NominateGuardiansLiquidity"></a>
-## type [NominateGuardiansLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L998-L1000>)
+## type [NominateGuardiansLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1035-L1037>)
 
-
+NominateGuardiansLiquidity sets the liquidity\-program guardian set. Administrator\-only; takes effect after the time\-locked challenge window.
 
 ```go
 type NominateGuardiansLiquidity struct {
@@ -2213,7 +2215,7 @@ type NominateGuardiansLiquidity struct {
 ```
 
 <a name="NominateGuardiansLiquidity.GetPlasma"></a>
-### func \(\*NominateGuardiansLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1002>)
+### func \(\*NominateGuardiansLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1039>)
 
 ```go
 func (p *NominateGuardiansLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2222,7 +2224,7 @@ func (p *NominateGuardiansLiquidity) GetPlasma(plasmaTable *constants.PlasmaTabl
 
 
 <a name="NominateGuardiansLiquidity.ReceiveBlock"></a>
-### func \(\*NominateGuardiansLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1033>)
+### func \(\*NominateGuardiansLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1070>)
 
 ```go
 func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2231,7 +2233,7 @@ func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmCo
 
 
 <a name="NominateGuardiansLiquidity.ValidateSendBlock"></a>
-### func \(\*NominateGuardiansLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1005>)
+### func \(\*NominateGuardiansLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1042>)
 
 ```go
 func (p *NominateGuardiansLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2278,9 +2280,9 @@ func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) err
 
 
 <a name="ProposeAdministratorLiquidity"></a>
-## type [ProposeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1088-L1090>)
+## type [ProposeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1128-L1130>)
 
-
+ProposeAdministratorLiquidity queues an administrator\-rotation proposal that any guardian can subsequently confirm via [ChangeAdministratorLiquidity](<#ChangeAdministratorLiquidity>) after the time\-lock elapses.
 
 ```go
 type ProposeAdministratorLiquidity struct {
@@ -2289,7 +2291,7 @@ type ProposeAdministratorLiquidity struct {
 ```
 
 <a name="ProposeAdministratorLiquidity.GetPlasma"></a>
-### func \(\*ProposeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1092>)
+### func \(\*ProposeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1132>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2298,7 +2300,7 @@ func (p *ProposeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaT
 
 
 <a name="ProposeAdministratorLiquidity.ReceiveBlock"></a>
-### func \(\*ProposeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1118>)
+### func \(\*ProposeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1158>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2307,7 +2309,7 @@ func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountV
 
 
 <a name="ProposeAdministratorLiquidity.ValidateSendBlock"></a>
-### func \(\*ProposeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1095>)
+### func \(\*ProposeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1135>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2354,9 +2356,9 @@ func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) 
 
 
 <a name="ReclaimHtlcMethod"></a>
-## type [ReclaimHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L121-L123>)
+## type [ReclaimHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L128-L130>)
 
-
+ReclaimHtlcMethod refunds an HTLC entry to the original sender once expirationTime has elapsed without a successful unlock.
 
 ```go
 type ReclaimHtlcMethod struct {
@@ -2365,7 +2367,7 @@ type ReclaimHtlcMethod struct {
 ```
 
 <a name="ReclaimHtlcMethod.GetPlasma"></a>
-### func \(\*ReclaimHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L125>)
+### func \(\*ReclaimHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L132>)
 
 ```go
 func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2374,7 +2376,7 @@ func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint6
 
 
 <a name="ReclaimHtlcMethod.ReceiveBlock"></a>
-### func \(\*ReclaimHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L143>)
+### func \(\*ReclaimHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L150>)
 
 ```go
 func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2383,7 +2385,7 @@ func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 
 
 <a name="ReclaimHtlcMethod.ValidateSendBlock"></a>
-### func \(\*ReclaimHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L128>)
+### func \(\*ReclaimHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L135>)
 
 ```go
 func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2696,9 +2698,9 @@ func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) e
 
 
 <a name="SetAdditionalReward"></a>
-## type [SetAdditionalReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L841-L843>)
+## type [SetAdditionalReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L873-L875>)
 
-
+SetAdditionalReward credits extra rewards into the liquidity pool from the administrator's discretionary funds. Administrator\-only.
 
 ```go
 type SetAdditionalReward struct {
@@ -2707,7 +2709,7 @@ type SetAdditionalReward struct {
 ```
 
 <a name="SetAdditionalReward.GetPlasma"></a>
-### func \(\*SetAdditionalReward\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L845>)
+### func \(\*SetAdditionalReward\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L877>)
 
 ```go
 func (p *SetAdditionalReward) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2716,7 +2718,7 @@ func (p *SetAdditionalReward) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 
 
 <a name="SetAdditionalReward.ReceiveBlock"></a>
-### func \(\*SetAdditionalReward\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L863>)
+### func \(\*SetAdditionalReward\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L895>)
 
 ```go
 func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2725,7 +2727,7 @@ func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, 
 
 
 <a name="SetAdditionalReward.ValidateSendBlock"></a>
-### func \(\*SetAdditionalReward\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L848>)
+### func \(\*SetAdditionalReward\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L880>)
 
 ```go
 func (p *SetAdditionalReward) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2810,9 +2812,9 @@ func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) err
 
 
 <a name="SetIsHalted"></a>
-## type [SetIsHalted](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L744-L746>)
+## type [SetIsHalted](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L771-L773>)
 
-
+SetIsHalted toggles the liquidity\-program halted flag. While halted, new staking is rejected. Administrator\-only.
 
 ```go
 type SetIsHalted struct {
@@ -2821,7 +2823,7 @@ type SetIsHalted struct {
 ```
 
 <a name="SetIsHalted.GetPlasma"></a>
-### func \(\*SetIsHalted\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L748>)
+### func \(\*SetIsHalted\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L775>)
 
 ```go
 func (p *SetIsHalted) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2830,7 +2832,7 @@ func (p *SetIsHalted) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, err
 
 
 <a name="SetIsHalted.ReceiveBlock"></a>
-### func \(\*SetIsHalted\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L766>)
+### func \(\*SetIsHalted\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L793>)
 
 ```go
 func (p *SetIsHalted) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2839,7 +2841,7 @@ func (p *SetIsHalted) ReceiveBlock(context vm_context.AccountVmContext, sendBloc
 
 
 <a name="SetIsHalted.ValidateSendBlock"></a>
-### func \(\*SetIsHalted\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L751>)
+### func \(\*SetIsHalted\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L778>)
 
 ```go
 func (p *SetIsHalted) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3000,9 +3002,9 @@ func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="SetTokenTupleMethod"></a>
-## type [SetTokenTupleMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L240-L242>)
+## type [SetTokenTupleMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L254-L256>)
 
-
+SetTokenTupleMethod configures the per\-token reward shares \(which tokens are eligible for liquidity rewards, what minimum amounts qualify, what fraction of the pool each token earns\). Administrator\-only; takes effect after the time\-locked challenge window when applicable.
 
 ```go
 type SetTokenTupleMethod struct {
@@ -3011,7 +3013,7 @@ type SetTokenTupleMethod struct {
 ```
 
 <a name="SetTokenTupleMethod.GetPlasma"></a>
-### func \(\*SetTokenTupleMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L244>)
+### func \(\*SetTokenTupleMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L258>)
 
 ```go
 func (p *SetTokenTupleMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3020,7 +3022,7 @@ func (p *SetTokenTupleMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 
 
 <a name="SetTokenTupleMethod.ReceiveBlock"></a>
-### func \(\*SetTokenTupleMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L295>)
+### func \(\*SetTokenTupleMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L309>)
 
 ```go
 func (p *SetTokenTupleMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3029,7 +3031,7 @@ func (p *SetTokenTupleMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 
 
 <a name="SetTokenTupleMethod.ValidateSendBlock"></a>
-### func \(\*SetTokenTupleMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L247>)
+### func \(\*SetTokenTupleMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L261>)
 
 ```go
 func (p *SetTokenTupleMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3190,9 +3192,9 @@ func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="UnlockHtlcMethod"></a>
-## type [UnlockHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L190-L192>)
+## type [UnlockHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L201-L203>)
 
-
+UnlockHtlcMethod claims an HTLC by revealing the preimage. The caller must be the hashLocked recipient \(or have proxy\-unlock permission via [AllowHtlcProxyUnlockMethod](<#AllowHtlcProxyUnlockMethod>)\) and the preimage must hash to the entry's hashLock under its declared hash type.
 
 ```go
 type UnlockHtlcMethod struct {
@@ -3201,7 +3203,7 @@ type UnlockHtlcMethod struct {
 ```
 
 <a name="UnlockHtlcMethod.GetPlasma"></a>
-### func \(\*UnlockHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L194>)
+### func \(\*UnlockHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L205>)
 
 ```go
 func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3210,7 +3212,7 @@ func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 
 
 <a name="UnlockHtlcMethod.ReceiveBlock"></a>
-### func \(\*UnlockHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L212>)
+### func \(\*UnlockHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L223>)
 
 ```go
 func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3219,7 +3221,7 @@ func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 
 
 <a name="UnlockHtlcMethod.ValidateSendBlock"></a>
-### func \(\*UnlockHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L197>)
+### func \(\*UnlockHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L208>)
 
 ```go
 func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3228,9 +3230,9 @@ func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="UnlockLiquidityStakeEntries"></a>
-## type [UnlockLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L793-L795>)
+## type [UnlockLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L822-L824>)
 
-
+UnlockLiquidityStakeEntries refunds every cancelled\-and\-due stake entry for the caller in one batch.
 
 ```go
 type UnlockLiquidityStakeEntries struct {
@@ -3239,7 +3241,7 @@ type UnlockLiquidityStakeEntries struct {
 ```
 
 <a name="UnlockLiquidityStakeEntries.GetPlasma"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L797>)
+### func \(\*UnlockLiquidityStakeEntries\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L826>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3248,7 +3250,7 @@ func (p *UnlockLiquidityStakeEntries) GetPlasma(plasmaTable *constants.PlasmaTab
 
 
 <a name="UnlockLiquidityStakeEntries.ReceiveBlock"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L814>)
+### func \(\*UnlockLiquidityStakeEntries\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L843>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3257,7 +3259,7 @@ func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmC
 
 
 <a name="UnlockLiquidityStakeEntries.ValidateSendBlock"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L800>)
+### func \(\*UnlockLiquidityStakeEntries\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L829>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3304,9 +3306,9 @@ func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="UpdateEmbeddedAcceleratorMethod"></a>
-## type [UpdateEmbeddedAcceleratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L270-L272>)
+## type [UpdateEmbeddedAcceleratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L281-L283>)
 
-
+UpdateEmbeddedAcceleratorMethod is the periodic\-update entry point: tallies votes for projects/phases whose voting window has closed, advances passing entries to Active/Paid status, and pays out funds to project owners.
 
 ```go
 type UpdateEmbeddedAcceleratorMethod struct {
@@ -3315,7 +3317,7 @@ type UpdateEmbeddedAcceleratorMethod struct {
 ```
 
 <a name="UpdateEmbeddedAcceleratorMethod.GetPlasma"></a>
-### func \(\*UpdateEmbeddedAcceleratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L274>)
+### func \(\*UpdateEmbeddedAcceleratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L285>)
 
 ```go
 func (p *UpdateEmbeddedAcceleratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3324,7 +3326,7 @@ func (p *UpdateEmbeddedAcceleratorMethod) GetPlasma(plasmaTable *constants.Plasm
 
 
 <a name="UpdateEmbeddedAcceleratorMethod.ReceiveBlock"></a>
-### func \(\*UpdateEmbeddedAcceleratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L291>)
+### func \(\*UpdateEmbeddedAcceleratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L302>)
 
 ```go
 func (p *UpdateEmbeddedAcceleratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3333,7 +3335,7 @@ func (p *UpdateEmbeddedAcceleratorMethod) ReceiveBlock(context vm_context.Accoun
 
 
 <a name="UpdateEmbeddedAcceleratorMethod.ValidateSendBlock"></a>
-### func \(\*UpdateEmbeddedAcceleratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L277>)
+### func \(\*UpdateEmbeddedAcceleratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L288>)
 
 ```go
 func (p *UpdateEmbeddedAcceleratorMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3342,9 +3344,9 @@ func (p *UpdateEmbeddedAcceleratorMethod) ValidateSendBlock(block *nom.AccountBl
 
 
 <a name="UpdateEmbeddedLiquidityMethod"></a>
-## type [UpdateEmbeddedLiquidityMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L22-L24>)
+## type [UpdateEmbeddedLiquidityMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L27-L29>)
 
-
+UpdateEmbeddedLiquidityMethod is the periodic\-update entry point for the liquidity contract \(origin\-tier dispatch\). Tracks the periodic per\-momentum\-cadence work; the spork\-activated [UpdateRewardEmbeddedLiquidityMethod](<#UpdateRewardEmbeddedLiquidityMethod>) takes over once bridge\+liquidity is enforced.
 
 ```go
 type UpdateEmbeddedLiquidityMethod struct {
@@ -3353,7 +3355,7 @@ type UpdateEmbeddedLiquidityMethod struct {
 ```
 
 <a name="UpdateEmbeddedLiquidityMethod.GetPlasma"></a>
-### func \(\*UpdateEmbeddedLiquidityMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L26>)
+### func \(\*UpdateEmbeddedLiquidityMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L31>)
 
 ```go
 func (method *UpdateEmbeddedLiquidityMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3362,7 +3364,7 @@ func (method *UpdateEmbeddedLiquidityMethod) GetPlasma(plasmaTable *constants.Pl
 
 
 <a name="UpdateEmbeddedLiquidityMethod.ReceiveBlock"></a>
-### func \(\*UpdateEmbeddedLiquidityMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L43>)
+### func \(\*UpdateEmbeddedLiquidityMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L48>)
 
 ```go
 func (method *UpdateEmbeddedLiquidityMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3371,7 +3373,7 @@ func (method *UpdateEmbeddedLiquidityMethod) ReceiveBlock(context vm_context.Acc
 
 
 <a name="UpdateEmbeddedLiquidityMethod.ValidateSendBlock"></a>
-### func \(\*UpdateEmbeddedLiquidityMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L29>)
+### func \(\*UpdateEmbeddedLiquidityMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L34>)
 
 ```go
 func (method *UpdateEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3494,9 +3496,9 @@ func (p *UpdateEmbeddedStakeMethod) ValidateSendBlock(block *nom.AccountBlock) e
 ValidateSendBlock requires no value and no arguments.
 
 <a name="UpdatePhaseMethod"></a>
-## type [UpdatePhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L427-L429>)
+## type [UpdatePhaseMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L440-L442>)
 
-
+UpdatePhaseMethod allows the project owner to revise pending phase metadata before voting concludes.
 
 ```go
 type UpdatePhaseMethod struct {
@@ -3505,7 +3507,7 @@ type UpdatePhaseMethod struct {
 ```
 
 <a name="UpdatePhaseMethod.GetPlasma"></a>
-### func \(\*UpdatePhaseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L431>)
+### func \(\*UpdatePhaseMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L444>)
 
 ```go
 func (p *UpdatePhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3514,7 +3516,7 @@ func (p *UpdatePhaseMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint6
 
 
 <a name="UpdatePhaseMethod.ReceiveBlock"></a>
-### func \(\*UpdatePhaseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L449>)
+### func \(\*UpdatePhaseMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L462>)
 
 ```go
 func (p *UpdatePhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3523,7 +3525,7 @@ func (p *UpdatePhaseMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 
 
 <a name="UpdatePhaseMethod.ValidateSendBlock"></a>
-### func \(\*UpdatePhaseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L434>)
+### func \(\*UpdatePhaseMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L447>)
 
 ```go
 func (p *UpdatePhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3570,9 +3572,9 @@ func (p *UpdatePillarMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="UpdateRewardEmbeddedLiquidityMethod"></a>
-## type [UpdateRewardEmbeddedLiquidityMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L490-L492>)
+## type [UpdateRewardEmbeddedLiquidityMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L515-L517>)
 
-
+UpdateRewardEmbeddedLiquidityMethod is the post\-spork periodic\-update entry point: distributes the per\-epoch reward pool across the liquidity\-stake holders, deletes past\-end\-of\-life records, and advances the epoch cursor.
 
 ```go
 type UpdateRewardEmbeddedLiquidityMethod struct {
@@ -3581,7 +3583,7 @@ type UpdateRewardEmbeddedLiquidityMethod struct {
 ```
 
 <a name="UpdateRewardEmbeddedLiquidityMethod.GetPlasma"></a>
-### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L494>)
+### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L519>)
 
 ```go
 func (method *UpdateRewardEmbeddedLiquidityMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3590,7 +3592,7 @@ func (method *UpdateRewardEmbeddedLiquidityMethod) GetPlasma(plasmaTable *consta
 
 
 <a name="UpdateRewardEmbeddedLiquidityMethod.ReceiveBlock"></a>
-### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L511>)
+### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L536>)
 
 ```go
 func (method *UpdateRewardEmbeddedLiquidityMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3599,7 +3601,7 @@ func (method *UpdateRewardEmbeddedLiquidityMethod) ReceiveBlock(context vm_conte
 
 
 <a name="UpdateRewardEmbeddedLiquidityMethod.ValidateSendBlock"></a>
-### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L497>)
+### func \(\*UpdateRewardEmbeddedLiquidityMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L522>)
 
 ```go
 func (method *UpdateRewardEmbeddedLiquidityMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3684,7 +3686,7 @@ func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) err
 
 
 <a name="VoteByNameMethod"></a>
-## type [VoteByNameMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L306-L308>)
+## type [VoteByNameMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L315-L317>)
 
 
 
@@ -3695,7 +3697,7 @@ type VoteByNameMethod struct {
 ```
 
 <a name="VoteByNameMethod.Fee"></a>
-### func \(\*VoteByNameMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L310>)
+### func \(\*VoteByNameMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L319>)
 
 ```go
 func (p *VoteByNameMethod) Fee() (*big.Int, error)
@@ -3704,7 +3706,7 @@ func (p *VoteByNameMethod) Fee() (*big.Int, error)
 
 
 <a name="VoteByNameMethod.GetPlasma"></a>
-### func \(\*VoteByNameMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L313>)
+### func \(\*VoteByNameMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L322>)
 
 ```go
 func (p *VoteByNameMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3713,7 +3715,7 @@ func (p *VoteByNameMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 
 
 <a name="VoteByNameMethod.ReceiveBlock"></a>
-### func \(\*VoteByNameMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L335>)
+### func \(\*VoteByNameMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L344>)
 
 ```go
 func (p *VoteByNameMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3722,7 +3724,7 @@ func (p *VoteByNameMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 
 
 <a name="VoteByNameMethod.ValidateSendBlock"></a>
-### func \(\*VoteByNameMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L316>)
+### func \(\*VoteByNameMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L325>)
 
 ```go
 func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3731,7 +3733,7 @@ func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error
 
 
 <a name="VoteByProdAddressMethod"></a>
-## type [VoteByProdAddressMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L372-L374>)
+## type [VoteByProdAddressMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L381-L383>)
 
 
 
@@ -3742,7 +3744,7 @@ type VoteByProdAddressMethod struct {
 ```
 
 <a name="VoteByProdAddressMethod.Fee"></a>
-### func \(\*VoteByProdAddressMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L376>)
+### func \(\*VoteByProdAddressMethod\) [Fee](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L385>)
 
 ```go
 func (p *VoteByProdAddressMethod) Fee() (*big.Int, error)
@@ -3751,7 +3753,7 @@ func (p *VoteByProdAddressMethod) Fee() (*big.Int, error)
 
 
 <a name="VoteByProdAddressMethod.GetPlasma"></a>
-### func \(\*VoteByProdAddressMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L379>)
+### func \(\*VoteByProdAddressMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L388>)
 
 ```go
 func (p *VoteByProdAddressMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3760,7 +3762,7 @@ func (p *VoteByProdAddressMethod) GetPlasma(plasmaTable *constants.PlasmaTable) 
 
 
 <a name="VoteByProdAddressMethod.ReceiveBlock"></a>
-### func \(\*VoteByProdAddressMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L401>)
+### func \(\*VoteByProdAddressMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L410>)
 
 ```go
 func (p *VoteByProdAddressMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3769,7 +3771,7 @@ func (p *VoteByProdAddressMethod) ReceiveBlock(context vm_context.AccountVmConte
 
 
 <a name="VoteByProdAddressMethod.ValidateSendBlock"></a>
-### func \(\*VoteByProdAddressMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L382>)
+### func \(\*VoteByProdAddressMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L391>)
 
 ```go
 func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3778,7 +3780,7 @@ func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) err
 
 
 <a name="WithdrawQsrMethod"></a>
-## type [WithdrawQsrMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L230-L232>)
+## type [WithdrawQsrMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L239-L241>)
 
 
 
@@ -3789,7 +3791,7 @@ type WithdrawQsrMethod struct {
 ```
 
 <a name="WithdrawQsrMethod.GetPlasma"></a>
-### func \(\*WithdrawQsrMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L234>)
+### func \(\*WithdrawQsrMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L243>)
 
 ```go
 func (p *WithdrawQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3798,7 +3800,7 @@ func (p *WithdrawQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint6
 
 
 <a name="WithdrawQsrMethod.ReceiveBlock"></a>
-### func \(\*WithdrawQsrMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L251>)
+### func \(\*WithdrawQsrMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L260>)
 
 ```go
 func (p *WithdrawQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3807,7 +3809,7 @@ func (p *WithdrawQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 
 
 <a name="WithdrawQsrMethod.ValidateSendBlock"></a>
-### func \(\*WithdrawQsrMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L237>)
+### func \(\*WithdrawQsrMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L246>)
 
 ```go
 func (p *WithdrawQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error

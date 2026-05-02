@@ -100,6 +100,11 @@ func checkPhaseFunds(context vm_context.AccountVmContext, project *definition.Pr
 	return nil
 }
 
+// CreateProjectMethod implements project creation: the caller
+// pays [constants.ProjectCreationAmount] ZNN and submits project
+// metadata; a [definition.Project] is persisted with
+// [definition.VotingStatus]. Pillar voting determines whether
+// the project advances to the funded phases.
 type CreateProjectMethod struct {
 	MethodName string
 }
@@ -164,6 +169,8 @@ func (p *CreateProjectMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	return nil, nil
 }
 
+// AddPhaseMethod attaches a new phase to an Active project. The
+// phase enters the voting stage immediately. Project owner-only.
 type AddPhaseMethod struct {
 	MethodName string
 }
@@ -267,6 +274,10 @@ func checkAcceleratorVotes(context vm_context.AccountVmContext, id types.Hash, n
 	return ok
 }
 
+// UpdateEmbeddedAcceleratorMethod is the periodic-update entry
+// point: tallies votes for projects/phases whose voting window
+// has closed, advances passing entries to Active/Paid status,
+// and pays out funds to project owners.
 type UpdateEmbeddedAcceleratorMethod struct {
 	MethodName string
 }
@@ -424,6 +435,8 @@ func (p *UpdateEmbeddedAcceleratorMethod) ReceiveBlock(context vm_context.Accoun
 	return blocks, nil
 }
 
+// UpdatePhaseMethod allows the project owner to revise pending
+// phase metadata before voting concludes.
 type UpdatePhaseMethod struct {
 	MethodName string
 }

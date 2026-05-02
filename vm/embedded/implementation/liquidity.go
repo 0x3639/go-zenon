@@ -19,6 +19,11 @@ var (
 	liquidityLog = common.EmbeddedLogger.New("contract", "liquidity")
 )
 
+// UpdateEmbeddedLiquidityMethod is the periodic-update entry
+// point for the liquidity contract (origin-tier dispatch). Tracks
+// the periodic per-momentum-cadence work; the spork-activated
+// [UpdateRewardEmbeddedLiquidityMethod] takes over once
+// bridge+liquidity is enforced.
 type UpdateEmbeddedLiquidityMethod struct {
 	MethodName string
 }
@@ -108,6 +113,8 @@ func updateLiquidityRewards(context vm_context.AccountVmContext) ([]*nom.Account
 	}
 }
 
+// FundMethod credits the liquidity reward pool from a
+// caller-supplied transfer.
 type FundMethod struct {
 	MethodName string
 }
@@ -179,6 +186,8 @@ func (p *FundMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock
 	return blocks, nil
 }
 
+// BurnZnnMethod burns a portion of the liquidity reward pool by
+// emitting a Burn descendant against the Token contract.
 type BurnZnnMethod struct {
 	MethodName string
 }
@@ -237,6 +246,11 @@ func (p *BurnZnnMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBl
 	return blocks, nil
 }
 
+// SetTokenTupleMethod configures the per-token reward shares
+// (which tokens are eligible for liquidity rewards, what minimum
+// amounts qualify, what fraction of the pool each token earns).
+// Administrator-only; takes effect after the time-locked challenge
+// window when applicable.
 type SetTokenTupleMethod struct {
 	MethodName string
 }
@@ -350,6 +364,10 @@ func (p *SetTokenTupleMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	return nil, nil
 }
 
+// LiquidityStakeMethod locks tokens into the liquidity program for
+// a chosen duration. Weight follows the
+// [constants.LiquidityStakeWeights] schedule (0..12 for tiers
+// 0..12 of [constants.StakeTimeUnitSec]).
 type LiquidityStakeMethod struct {
 	MethodName string
 }
@@ -424,6 +442,9 @@ func (p *LiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmContext,
 	return nil, nil
 }
 
+// CancelLiquidityStakeMethod begins unlocking a staked entry; the
+// refund follows after the lock window completes via
+// [UnlockLiquidityStakeEntries].
 type CancelLiquidityStakeMethod struct {
 	MethodName string
 }
@@ -487,6 +508,10 @@ func (p *CancelLiquidityStakeMethod) ReceiveBlock(context vm_context.AccountVmCo
 	}, nil
 }
 
+// UpdateRewardEmbeddedLiquidityMethod is the post-spork
+// periodic-update entry point: distributes the per-epoch reward
+// pool across the liquidity-stake holders, deletes
+// past-end-of-life records, and advances the epoch cursor.
 type UpdateRewardEmbeddedLiquidityMethod struct {
 	MethodName string
 }
@@ -741,6 +766,8 @@ func updateLiquidityStakeRewards(context vm_context.AccountVmContext) ([]*nom.Ac
 	return result, nil
 }
 
+// SetIsHalted toggles the liquidity-program halted flag. While
+// halted, new staking is rejected. Administrator-only.
 type SetIsHalted struct {
 	MethodName string
 }
@@ -790,6 +817,8 @@ func (p *SetIsHalted) ReceiveBlock(context vm_context.AccountVmContext, sendBloc
 	return nil, nil
 }
 
+// UnlockLiquidityStakeEntries refunds every cancelled-and-due
+// stake entry for the caller in one batch.
 type UnlockLiquidityStakeEntries struct {
 	MethodName string
 }
@@ -838,6 +867,9 @@ func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmC
 	return nil, nil
 }
 
+// SetAdditionalReward credits extra rewards into the liquidity
+// pool from the administrator's discretionary funds.
+// Administrator-only.
 type SetAdditionalReward struct {
 	MethodName string
 }
@@ -914,6 +946,8 @@ func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, 
 	return nil, nil
 }
 
+// ChangeAdministratorLiquidity rotates the liquidity-contract
+// administrator after a time-locked proposal completes.
 type ChangeAdministratorLiquidity struct {
 	MethodName string
 }
@@ -995,6 +1029,9 @@ func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVm
 	return nil, nil
 }
 
+// NominateGuardiansLiquidity sets the liquidity-program guardian
+// set. Administrator-only; takes effect after the time-locked
+// challenge window.
 type NominateGuardiansLiquidity struct {
 	MethodName string
 }
@@ -1085,6 +1122,9 @@ func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmCo
 	return nil, nil
 }
 
+// ProposeAdministratorLiquidity queues an administrator-rotation
+// proposal that any guardian can subsequently confirm via
+// [ChangeAdministratorLiquidity] after the time-lock elapses.
 type ProposeAdministratorLiquidity struct {
 	MethodName string
 }
@@ -1186,6 +1226,9 @@ func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountV
 	return nil, nil
 }
 
+// EmergencyLiquidity is the panic button for the liquidity
+// contract: halts the program, nominates the caller as
+// administrator, and zeroes guardian configuration.
 type EmergencyLiquidity struct {
 	MethodName string
 }

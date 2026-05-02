@@ -726,13 +726,19 @@ const (
 )
 ```
 
-<a name="VoteYes"></a>
+<a name="VoteYes"></a>Vote discriminators used by the VoteByName / VoteByProdAddress methods \(shared between Accelerator and Spork governance\).
+
+jsonCommon is the canonical Solidity\-shaped ABI shared by every embedded contract: the periodic Update / CollectReward / DepositQsr / WithdrawQsr / Donate entry points, the per\-pillar vote machinery, and the storage record shapes that recur \(lastUpdate height counter, lastEpochUpdate cursor, rewardDeposit \+ rewardDepositHistory, qsrDeposit per\-account QSR escrow, pillarVote, votableHash, timeChallengeInfo for the time\-locked governance challenge, securityInfo for guardians and delays\).
 
 ```go
 const (
+    // VoteYes counts toward project / spork acceptance.
     VoteYes uint8 = iota
+    // VoteNo counts toward rejection.
     VoteNo
+    // VoteAbstain is recorded but neither accepts nor rejects.
     VoteAbstain
+    // VoteNotValid is the catch-all for malformed votes.
     VoteNotValid
 
     jsonCommon = `
@@ -1616,7 +1622,7 @@ func getPillarEpochHistoryPrefixKey(epoch uint64) []byte
 
 
 <a name="getQsrDepositKey"></a>
-## func [getQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L292>)
+## func [getQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L308>)
 
 ```go
 func getQsrDepositKey(address *types.Address) []byte
@@ -1634,7 +1640,7 @@ func getRequestPairKey(id types.Hash) []byte
 
 
 <a name="getRewardDepositHistoryEntryKey"></a>
-## func [getRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L396>)
+## func [getRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L412>)
 
 ```go
 func getRewardDepositHistoryEntryKey(epoch uint64, address *types.Address) []byte
@@ -1643,7 +1649,7 @@ func getRewardDepositHistoryEntryKey(epoch uint64, address *types.Address) []byt
 
 
 <a name="getRewardDepositHistoryPrefixKey"></a>
-## func [getRewardDepositHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L393>)
+## func [getRewardDepositHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L409>)
 
 ```go
 func getRewardDepositHistoryPrefixKey(address *types.Address) []byte
@@ -1652,7 +1658,7 @@ func getRewardDepositHistoryPrefixKey(address *types.Address) []byte
 
 
 <a name="getRewardDepositKey"></a>
-## func [getRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L174>)
+## func [getRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L190>)
 
 ```go
 func getRewardDepositKey(address *types.Address) []byte
@@ -1787,7 +1793,7 @@ func isProducingPillarKey(key []byte) bool
 
 
 <a name="isQsrDepositKey"></a>
-## func [isQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L295>)
+## func [isQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L311>)
 
 ```go
 func isQsrDepositKey(key []byte) bool
@@ -1796,7 +1802,7 @@ func isQsrDepositKey(key []byte) bool
 
 
 <a name="isRewardDepositHistoryEntryKey"></a>
-## func [isRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L401>)
+## func [isRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L417>)
 
 ```go
 func isRewardDepositHistoryEntryKey(key []byte) bool
@@ -1805,7 +1811,7 @@ func isRewardDepositHistoryEntryKey(key []byte) bool
 
 
 <a name="isRewardDepositKey"></a>
-## func [isRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L177>)
+## func [isRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L193>)
 
 ```go
 func isRewardDepositKey(key []byte) bool
@@ -1832,7 +1838,7 @@ func isTokenInfoKey(key []byte) bool
 isTokenInfoKey reports whether key belongs to the tokenInfo keyspace.
 
 <a name="timeChallengeKey"></a>
-## func [timeChallengeKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L629>)
+## func [timeChallengeKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L645>)
 
 ```go
 func timeChallengeKey(methodName string) []byte
@@ -1922,7 +1928,7 @@ func unmarshalProducingPillarKey(key []byte) (*types.Address, error)
 
 
 <a name="unmarshalQsrDepositKey"></a>
-## func [unmarshalQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L298>)
+## func [unmarshalQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L314>)
 
 ```go
 func unmarshalQsrDepositKey(key []byte) (*types.Address, error)
@@ -1931,7 +1937,7 @@ func unmarshalQsrDepositKey(key []byte) (*types.Address, error)
 
 
 <a name="unmarshalRewardDepositHistoryEntryKey"></a>
-## func [unmarshalRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L404>)
+## func [unmarshalRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L420>)
 
 ```go
 func unmarshalRewardDepositHistoryEntryKey(key []byte) (uint64, *types.Address, error)
@@ -1940,7 +1946,7 @@ func unmarshalRewardDepositHistoryEntryKey(key []byte) (uint64, *types.Address, 
 
 
 <a name="unmarshalRewardDepositKey"></a>
-## func [unmarshalRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L180>)
+## func [unmarshalRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L196>)
 
 ```go
 func unmarshalRewardDepositKey(key []byte) (*types.Address, error)
@@ -1967,7 +1973,7 @@ func unmarshalTokenInfoKey(key []byte) (*types.ZenonTokenStandard, error)
 unmarshalTokenInfoKey extracts the [types.ZenonTokenStandard](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZenonTokenStandard>) from a tokenInfo key.
 
 <a name="unmarshalVotableHashKey"></a>
-## func [unmarshalVotableHashKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L536>)
+## func [unmarshalVotableHashKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L552>)
 
 ```go
 func unmarshalVotableHashKey(key []byte) (*types.Hash, error)
@@ -2440,7 +2446,7 @@ type IssueParam struct {
 ```
 
 <a name="LastEpochUpdate"></a>
-## type [LastEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L341-L343>)
+## type [LastEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L357-L359>)
 
 
 
@@ -2451,7 +2457,7 @@ type LastEpochUpdate struct {
 ```
 
 <a name="GetLastEpochUpdate"></a>
-### func [GetLastEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L359>)
+### func [GetLastEpochUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L375>)
 
 ```go
 func GetLastEpochUpdate(context db.DB) (*LastEpochUpdate, error)
@@ -2460,7 +2466,7 @@ func GetLastEpochUpdate(context db.DB) (*LastEpochUpdate, error)
 
 
 <a name="LastEpochUpdate.Save"></a>
-### func \(\*LastEpochUpdate\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L345>)
+### func \(\*LastEpochUpdate\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L361>)
 
 ```go
 func (epoch *LastEpochUpdate) Save(context db.DB) error
@@ -2469,7 +2475,7 @@ func (epoch *LastEpochUpdate) Save(context db.DB) error
 
 
 <a name="LastUpdateVariable"></a>
-## type [LastUpdateVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L223-L225>)
+## type [LastUpdateVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L239-L241>)
 
 
 
@@ -2480,7 +2486,7 @@ type LastUpdateVariable struct {
 ```
 
 <a name="GetLastUpdate"></a>
-### func [GetLastUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L252>)
+### func [GetLastUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L268>)
 
 ```go
 func GetLastUpdate(context db.DB) (*LastUpdateVariable, error)
@@ -2489,7 +2495,7 @@ func GetLastUpdate(context db.DB) (*LastUpdateVariable, error)
 
 
 <a name="parseLastUpdate"></a>
-### func [parseLastUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L241>)
+### func [parseLastUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L257>)
 
 ```go
 func parseLastUpdate(data []byte) (*LastUpdateVariable, error)
@@ -2498,7 +2504,7 @@ func parseLastUpdate(data []byte) (*LastUpdateVariable, error)
 
 
 <a name="LastUpdateVariable.Save"></a>
-### func \(\*LastUpdateVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L227>)
+### func \(\*LastUpdateVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L243>)
 
 ```go
 func (upd *LastUpdateVariable) Save(context db.DB) error
@@ -3326,7 +3332,7 @@ func (pillar *PillarInfo) Save(context db.DB) error
 
 
 <a name="PillarVote"></a>
-## type [PillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L450-L454>)
+## type [PillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L466-L470>)
 
 
 
@@ -3339,7 +3345,7 @@ type PillarVote struct {
 ```
 
 <a name="GetAllPillarVotes"></a>
-### func [GetAllPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L485>)
+### func [GetAllPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L501>)
 
 ```go
 func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote
@@ -3348,7 +3354,7 @@ func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote
 
 
 <a name="GetPillarVote"></a>
-### func [GetPillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L506>)
+### func [GetPillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L522>)
 
 ```go
 func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, error)
@@ -3357,7 +3363,7 @@ func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, erro
 
 
 <a name="parsePillarVote"></a>
-### func [parsePillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L475>)
+### func [parsePillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L491>)
 
 ```go
 func parsePillarVote(data []byte) (*PillarVote, error)
@@ -3366,7 +3372,7 @@ func parsePillarVote(data []byte) (*PillarVote, error)
 
 
 <a name="PillarVote.Data"></a>
-### func \(\*PillarVote\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L466>)
+### func \(\*PillarVote\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L482>)
 
 ```go
 func (vote *PillarVote) Data() []byte
@@ -3375,7 +3381,7 @@ func (vote *PillarVote) Data() []byte
 
 
 <a name="PillarVote.Delete"></a>
-### func \(\*PillarVote\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L459>)
+### func \(\*PillarVote\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L475>)
 
 ```go
 func (vote *PillarVote) Delete(context db.DB)
@@ -3384,7 +3390,7 @@ func (vote *PillarVote) Delete(context db.DB)
 
 
 <a name="PillarVote.Key"></a>
-### func \(\*PillarVote\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L462>)
+### func \(\*PillarVote\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L478>)
 
 ```go
 func (vote *PillarVote) Key() []byte
@@ -3393,7 +3399,7 @@ func (vote *PillarVote) Key() []byte
 
 
 <a name="PillarVote.Save"></a>
-### func \(\*PillarVote\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L456>)
+### func \(\*PillarVote\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L472>)
 
 ```go
 func (vote *PillarVote) Save(context db.DB)
@@ -3534,7 +3540,7 @@ func (project *Project) Save(context db.DB)
 
 
 <a name="QsrDeposit"></a>
-## type [QsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L264-L267>)
+## type [QsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L280-L283>)
 
 
 
@@ -3546,7 +3552,7 @@ type QsrDeposit struct {
 ```
 
 <a name="GetQsrDeposit"></a>
-### func [GetQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L328>)
+### func [GetQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L344>)
 
 ```go
 func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error)
@@ -3555,7 +3561,7 @@ func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error)
 GetQsrDeposit returns deposited QSR for sentinel/pillar. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
 
 <a name="newQsrDeposit"></a>
-### func [newQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L286>)
+### func [newQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L302>)
 
 ```go
 func newQsrDeposit(address *types.Address) *QsrDeposit
@@ -3564,7 +3570,7 @@ func newQsrDeposit(address *types.Address) *QsrDeposit
 
 
 <a name="parseQsrDeposit"></a>
-### func [parseQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L308>)
+### func [parseQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L324>)
 
 ```go
 func parseQsrDeposit(key []byte, data []byte) (*QsrDeposit, error)
@@ -3573,7 +3579,7 @@ func parseQsrDeposit(key []byte, data []byte) (*QsrDeposit, error)
 
 
 <a name="QsrDeposit.Delete"></a>
-### func \(\*QsrDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L282>)
+### func \(\*QsrDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L298>)
 
 ```go
 func (deposit *QsrDeposit) Delete(context db.DB) error
@@ -3582,7 +3588,7 @@ func (deposit *QsrDeposit) Delete(context db.DB) error
 
 
 <a name="QsrDeposit.Save"></a>
-### func \(\*QsrDeposit\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L269>)
+### func \(\*QsrDeposit\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L285>)
 
 ```go
 func (deposit *QsrDeposit) Save(context db.DB) error
@@ -3678,7 +3684,7 @@ type RevokeUnwrapParam struct {
 ```
 
 <a name="RewardDeposit"></a>
-## type [RewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L116-L120>)
+## type [RewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L132-L136>)
 
 
 
@@ -3691,7 +3697,7 @@ type RewardDeposit struct {
 ```
 
 <a name="GetRewardDeposit"></a>
-### func [GetRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L210>)
+### func [GetRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L226>)
 
 ```go
 func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, error)
@@ -3700,7 +3706,7 @@ func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, er
 GetRewardDeposit returns uncollected ZNN & QSR reward. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
 
 <a name="newRewardDeposit"></a>
-### func [newRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L166>)
+### func [newRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L182>)
 
 ```go
 func newRewardDeposit(address *types.Address) *RewardDeposit
@@ -3709,7 +3715,7 @@ func newRewardDeposit(address *types.Address) *RewardDeposit
 
 
 <a name="parseRewardDeposit"></a>
-### func [parseRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L190>)
+### func [parseRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L206>)
 
 ```go
 func parseRewardDeposit(key []byte, data []byte) (*RewardDeposit, error)
@@ -3718,7 +3724,7 @@ func parseRewardDeposit(key []byte, data []byte) (*RewardDeposit, error)
 
 
 <a name="RewardDeposit.Delete"></a>
-### func \(\*RewardDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L162>)
+### func \(\*RewardDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L178>)
 
 ```go
 func (deposit *RewardDeposit) Delete(context db.DB) error
@@ -3727,7 +3733,7 @@ func (deposit *RewardDeposit) Delete(context db.DB) error
 
 
 <a name="RewardDeposit.MarshalJSON"></a>
-### func \(\*RewardDeposit\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L138>)
+### func \(\*RewardDeposit\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L154>)
 
 ```go
 func (deposit *RewardDeposit) MarshalJSON() ([]byte, error)
@@ -3736,7 +3742,7 @@ func (deposit *RewardDeposit) MarshalJSON() ([]byte, error)
 
 
 <a name="RewardDeposit.Save"></a>
-### func \(\*RewardDeposit\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L153>)
+### func \(\*RewardDeposit\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L169>)
 
 ```go
 func (deposit *RewardDeposit) Save(context db.DB) error
@@ -3745,7 +3751,7 @@ func (deposit *RewardDeposit) Save(context db.DB) error
 
 
 <a name="RewardDeposit.ToRewardDepositMarshal"></a>
-### func \(\*RewardDeposit\) [ToRewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L128>)
+### func \(\*RewardDeposit\) [ToRewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L144>)
 
 ```go
 func (deposit *RewardDeposit) ToRewardDepositMarshal() *RewardDepositMarshal
@@ -3754,7 +3760,7 @@ func (deposit *RewardDeposit) ToRewardDepositMarshal() *RewardDepositMarshal
 
 
 <a name="RewardDeposit.UnmarshalJSON"></a>
-### func \(\*RewardDeposit\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L142>)
+### func \(\*RewardDeposit\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L158>)
 
 ```go
 func (deposit *RewardDeposit) UnmarshalJSON(data []byte) error
@@ -3763,7 +3769,7 @@ func (deposit *RewardDeposit) UnmarshalJSON(data []byte) error
 
 
 <a name="RewardDepositHistory"></a>
-## type [RewardDepositHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L375-L380>)
+## type [RewardDepositHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L391-L396>)
 
 
 
@@ -3777,7 +3783,7 @@ type RewardDepositHistory struct {
 ```
 
 <a name="GetRewardDepositHistory"></a>
-### func [GetRewardDepositHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L432>)
+### func [GetRewardDepositHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L448>)
 
 ```go
 func GetRewardDepositHistory(context db.DB, epoch uint64, address *types.Address) (*RewardDepositHistory, error)
@@ -3786,7 +3792,7 @@ func GetRewardDepositHistory(context db.DB, epoch uint64, address *types.Address
 
 
 <a name="parseRewardDepositHistoryEntry"></a>
-### func [parseRewardDepositHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L415>)
+### func [parseRewardDepositHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L431>)
 
 ```go
 func parseRewardDepositHistoryEntry(key, data []byte) (*RewardDepositHistory, error)
@@ -3795,7 +3801,7 @@ func parseRewardDepositHistoryEntry(key, data []byte) (*RewardDepositHistory, er
 
 
 <a name="RewardDepositHistory.Save"></a>
-### func \(\*RewardDepositHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L382>)
+### func \(\*RewardDepositHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L398>)
 
 ```go
 func (rdh *RewardDepositHistory) Save(context db.DB) error
@@ -3804,7 +3810,7 @@ func (rdh *RewardDepositHistory) Save(context db.DB) error
 
 
 <a name="RewardDepositMarshal"></a>
-## type [RewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L122-L126>)
+## type [RewardDepositMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L138-L142>)
 
 
 
@@ -3817,7 +3823,7 @@ type RewardDepositMarshal struct {
 ```
 
 <a name="SecurityInfoVariable"></a>
-## type [SecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L652-L661>)
+## type [SecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L668-L677>)
 
 SecurityInfoVariable This refers to time challenge security
 
@@ -3835,7 +3841,7 @@ type SecurityInfoVariable struct {
 ```
 
 <a name="GetSecurityInfoVariable"></a>
-### func [GetSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L695>)
+### func [GetSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L711>)
 
 ```go
 func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error)
@@ -3844,7 +3850,7 @@ func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error)
 
 
 <a name="parseSecurityInfoVariable"></a>
-### func [parseSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L679>)
+### func [parseSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L695>)
 
 ```go
 func parseSecurityInfoVariable(data []byte) (*SecurityInfoVariable, error)
@@ -3853,7 +3859,7 @@ func parseSecurityInfoVariable(data []byte) (*SecurityInfoVariable, error)
 
 
 <a name="SecurityInfoVariable.Save"></a>
-### func \(\*SecurityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L663>)
+### func \(\*SecurityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L679>)
 
 ```go
 func (s *SecurityInfoVariable) Save(context db.DB) error
@@ -4213,7 +4219,7 @@ func (assets *SwapAssets) Save(context db.DB) error
 Save writes assets into context's storage.
 
 <a name="TimeChallengeInfo"></a>
-## type [TimeChallengeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L596-L600>)
+## type [TimeChallengeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L612-L616>)
 
 
 
@@ -4226,7 +4232,7 @@ type TimeChallengeInfo struct {
 ```
 
 <a name="GetTimeChallengeInfoVariable"></a>
-### func [GetTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L633>)
+### func [GetTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L649>)
 
 ```go
 func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChallengeInfo, error)
@@ -4235,7 +4241,7 @@ func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChalle
 
 
 <a name="parseTimeChallengeInfoVariable"></a>
-### func [parseTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L617>)
+### func [parseTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L633>)
 
 ```go
 func parseTimeChallengeInfoVariable(data []byte) (*TimeChallengeInfo, error)
@@ -4244,7 +4250,7 @@ func parseTimeChallengeInfoVariable(data []byte) (*TimeChallengeInfo, error)
 
 
 <a name="TimeChallengeInfo.Delete"></a>
-### func \(\*TimeChallengeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L647>)
+### func \(\*TimeChallengeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L663>)
 
 ```go
 func (t *TimeChallengeInfo) Delete(context db.DB) error
@@ -4253,7 +4259,7 @@ func (t *TimeChallengeInfo) Delete(context db.DB) error
 
 
 <a name="TimeChallengeInfo.Key"></a>
-### func \(\*TimeChallengeInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L644>)
+### func \(\*TimeChallengeInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L660>)
 
 ```go
 func (t *TimeChallengeInfo) Key() []byte
@@ -4262,7 +4268,7 @@ func (t *TimeChallengeInfo) Key() []byte
 
 
 <a name="TimeChallengeInfo.Save"></a>
-### func \(\*TimeChallengeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L602>)
+### func \(\*TimeChallengeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L618>)
 
 ```go
 func (t *TimeChallengeInfo) Save(context db.DB) error
@@ -4685,7 +4691,7 @@ type UpdateWrapRequestParam struct {
 ```
 
 <a name="VotableHash"></a>
-## type [VotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L515-L518>)
+## type [VotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L531-L534>)
 
 
 
@@ -4697,7 +4703,7 @@ type VotableHash struct {
 ```
 
 <a name="GetVotableHash"></a>
-### func [GetVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L561>)
+### func [GetVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L577>)
 
 ```go
 func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error)
@@ -4706,7 +4712,7 @@ func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error)
 
 
 <a name="parseVotableHash"></a>
-### func [parseVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L544>)
+### func [parseVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L560>)
 
 ```go
 func parseVotableHash(data []byte, key []byte) (*VotableHash, error)
@@ -4715,7 +4721,7 @@ func parseVotableHash(data []byte, key []byte) (*VotableHash, error)
 
 
 <a name="VotableHash.Data"></a>
-### func \(\*VotableHash\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L529>)
+### func \(\*VotableHash\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L545>)
 
 ```go
 func (votable *VotableHash) Data() []byte
@@ -4724,7 +4730,7 @@ func (votable *VotableHash) Data() []byte
 
 
 <a name="VotableHash.Delete"></a>
-### func \(\*VotableHash\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L523>)
+### func \(\*VotableHash\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L539>)
 
 ```go
 func (votable *VotableHash) Delete(context db.DB)
@@ -4733,7 +4739,7 @@ func (votable *VotableHash) Delete(context db.DB)
 
 
 <a name="VotableHash.Key"></a>
-### func \(\*VotableHash\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L526>)
+### func \(\*VotableHash\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L542>)
 
 ```go
 func (votable *VotableHash) Key() []byte
@@ -4742,7 +4748,7 @@ func (votable *VotableHash) Key() []byte
 
 
 <a name="VotableHash.Save"></a>
-### func \(\*VotableHash\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L520>)
+### func \(\*VotableHash\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L536>)
 
 ```go
 func (votable *VotableHash) Save(context db.DB)
@@ -4751,7 +4757,7 @@ func (votable *VotableHash) Save(context db.DB)
 
 
 <a name="VoteBreakdown"></a>
-## type [VoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L570-L575>)
+## type [VoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L586-L591>)
 
 
 
@@ -4765,7 +4771,7 @@ type VoteBreakdown struct {
 ```
 
 <a name="GetVoteBreakdown"></a>
-### func [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L577>)
+### func [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L593>)
 
 ```go
 func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown

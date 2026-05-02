@@ -12,6 +12,9 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
+// commonLog is the shared logger for the cross-contract helpers
+// in this file (update rate-limiting, reward bookkeeping,
+// embedded-account QSR escrow, vote handling).
 var (
 	commonLog = common.EmbeddedLogger.New("contract", "common")
 )
@@ -81,9 +84,15 @@ func checkAndPerformUpdateEpoch(context vm_context.AccountVmContext, epoch *defi
 	return epoch.Save(context.Storage())
 }
 
-// CollectRewardMethod is a common embedded.method used to issue tokens to users based on RewardDeposit object.
-// When issuing rewards, the embedded adds the respected value in the RewardDeposit object in the DB and afterwards,
-// the users will call this method to receive the tokens.
+// CollectRewardMethod is a common embedded.method used to issue
+// tokens to users based on the RewardDeposit object. When issuing
+// rewards, the embedded adds the respective value in the
+// RewardDeposit object in the DB; afterwards, the users call this
+// method to receive the tokens.
+//
+// Plasma is set per-contract at table-construction time so each
+// embedded contract can charge its own cost (simple-call,
+// with-withdraw, or double-withdraw) for the same logical method.
 type CollectRewardMethod struct {
 	MethodName string
 	Plasma     uint64

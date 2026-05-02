@@ -16,10 +16,26 @@ import (
 	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
+// Vote discriminators used by the VoteByName / VoteByProdAddress
+// methods (shared between Accelerator and Spork governance).
+//
+// jsonCommon is the canonical Solidity-shaped ABI shared by every
+// embedded contract: the periodic Update / CollectReward /
+// DepositQsr / WithdrawQsr / Donate entry points, the per-pillar
+// vote machinery, and the storage record shapes that recur
+// (lastUpdate height counter, lastEpochUpdate cursor,
+// rewardDeposit + rewardDepositHistory, qsrDeposit per-account
+// QSR escrow, pillarVote, votableHash, timeChallengeInfo for the
+// time-locked governance challenge, securityInfo for guardians
+// and delays).
 const (
+	// VoteYes counts toward project / spork acceptance.
 	VoteYes uint8 = iota
+	// VoteNo counts toward rejection.
 	VoteNo
+	// VoteAbstain is recorded but neither accepts nor rejects.
 	VoteAbstain
+	// VoteNotValid is the catch-all for malformed votes.
 	VoteNotValid
 
 	jsonCommon = `
