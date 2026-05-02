@@ -5,13 +5,16 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// passwordHash of a password
+// passwordHash holds the 32-byte Argon2id-derived key used to AES-GCM-encrypt
+// the wallet entropy, plus the per-keyfile salt used to derive it.
 type passwordHash struct {
 	password [32]byte
 	salt     hexutil.Bytes
 }
 
-// Set updates the password hash to be of the provided password
+// Set derives a fresh keyfile-encryption key from password using a new
+// 16-byte random salt. Argon2id parameters: time=1, memory=64 MiB,
+// parallelism=4, output=32 bytes.
 func (h *passwordHash) Set(password string) error {
 	h.salt = GetEntropyCSPRNG(16)
 	// pw is the salted, hashed password
@@ -19,6 +22,10 @@ func (h *passwordHash) Set(password string) error {
 	copy(h.password[:], pw[:32])
 	return nil
 }
+
+// SetFromJSON re-derives the keyfile-encryption key from password using
+// the salt persisted in params (the inverse of [passwordHash.Set]).
+// Argon2id parameters match [passwordHash.Set].
 func (h *passwordHash) SetFromJSON(password string, params argon2Params) error {
 	h.salt = params.Salt
 	// pw is the salted, hashed password

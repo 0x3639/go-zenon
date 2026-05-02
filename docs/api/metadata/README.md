@@ -6,13 +6,21 @@
 import "github.com/zenon-network/go-zenon/metadata"
 ```
 
-Package metadata exposes build\-time information baked into the binary.
+Package metadata exposes the build\-time information baked into the node binary.
 
 ### Overview
 
-metadata holds the running znnd version string and git commit hash, used by RPC \`utility\` calls and structured log lines. The git commit value is generated at build time by the Makefile.
+metadata holds two values: the human\-readable [Version](<#Version>) string \(a build\-tagged constant; one variant per build target\) and the [GitCommit](<#GitCommit>) hash captured by the Go toolchain at build time. RPC \`utility\` endpoints surface both to clients, and structured log lines include them on boot so a running node can be traced back to a specific commit.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- Version — the release\-channel string. Two variants are defined, gated by the \`libznn\` build tag, so the standalone \`znnd\` and the \`libznn\` C\-shared\-library builds advertise themselves distinctly.
+- GitCommit — the VCS revision from [debug.BuildInfo](<https://pkg.go.dev/runtime/debug/#BuildInfo>), populated when the binary is built inside a VCS\-aware context.
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/cmd/znnd](<https://pkg.go.dev/github.com/zenon-network/go-zenon/cmd/znnd/>) — entry point that prints [Version](<#Version>) and [GitCommit](<#GitCommit>) at startup.
+- [github.com/zenon\\\-network/go\\\-zenon/rpc/api](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/api/>) — \`utility\` namespace surfaces these values to RPC clients.
 
 ## Index
 
@@ -22,7 +30,7 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 ## Constants
 
-<a name="Version"></a>
+<a name="Version"></a>Version is the human\-readable version string baked into the standalone \`znnd\` binary. The libznn build defines its own [Version](<#Version>) constant in version\_libznn.go; the build tags ensure exactly one is present per build.
 
 ```go
 const (
@@ -32,7 +40,9 @@ const (
 
 ## Variables
 
-<a name="GitCommit"></a>
+<a name="GitCommit"></a>GitCommit is the VCS revision recorded by the Go toolchain at build time \(the value of the \`vcs.revision\` setting in [debug.BuildInfo](<https://pkg.go.dev/runtime/debug/#BuildInfo>)\). Empty if the binary was built outside a VCS\-aware context.
+
+It is consumed by RPC \`utility\` calls and by structured log lines so a running node can be traced back to a specific commit.
 
 ```go
 var GitCommit = func() string {

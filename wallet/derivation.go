@@ -15,21 +15,37 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// BIP-32-style derivation parameters used to turn a BIP-39 seed into an
+// Ed25519 keypair.
 const (
+	// ZenonAccountPathFormat is the canonical BIP-44 derivation path for
+	// Zenon accounts. Coin type 73404 is allocated to ZNN; the placeholder
+	// is the account index.
 	ZenonAccountPathFormat = "m/44'/73404'/%d'"
-	FirstHardenedIndex     = uint32(0x80000000)
-	seedModifier           = "ed25519 seed"
+	// FirstHardenedIndex is the BIP-32 hardened-derivation offset. Every
+	// segment of a Zenon path is hardened; non-hardened (public)
+	// derivation is not defined for Ed25519.
+	FirstHardenedIndex = uint32(0x80000000)
+	// seedModifier is the HMAC key used to derive the master key from a
+	// BIP-39 seed (the canonical SLIP-0010 ed25519 modifier).
+	seedModifier = "ed25519 seed"
 )
 
+// pathRegex validates that a derivation path is a `/`-separated sequence
+// of hardened segments rooted at `m`.
 var (
 	pathRegex = regexp.MustCompile("^m(\\/[0-9]+')+$")
 )
 
+// key is an intermediate derivation node holding the 32-byte private key
+// and the 32-byte chain code. Each derivation step produces a new key.
 type key struct {
 	Key       []byte
 	ChainCode []byte
 }
 
+// toKeyPair turns the raw 32-byte private-key seed into a fully-formed
+// [KeyPair] (Ed25519 keypair + derived address).
 func (k key) toKeyPair() (*KeyPair, error) {
 	public, private, err := ed25519.GenerateKey(bytes.NewReader(k.Key))
 	if err != nil {
@@ -43,8 +59,10 @@ func (k key) toKeyPair() (*KeyPair, error) {
 	}, nil
 }
 
-// DeriveForPath derives key for chain path in BIP-44 format and chain seed.
-// Ed25119 derivation operated on hardened keys only.
+// DeriveForPath derives the keypair for the given BIP-44 path against the
+// supplied seed. Ed25519 derivation operates on hardened keys only; an
+// invalid or non-hardened path returns [ErrInvalidPath] or
+// [ErrNoPublicDerivation].
 func DeriveForPath(path string, seed []byte) (*KeyPair, error) {
 	if !isValidPath(path) {
 		return nil, ErrInvalidPath
@@ -71,11 +89,16 @@ func DeriveForPath(path string, seed []byte) (*KeyPair, error) {
 
 	return key.toKeyPair()
 }
+
+// DeriveWithIndex is a convenience over [DeriveForPath] that builds the
+// canonical Zenon account path for the supplied index.
 func DeriveWithIndex(i uint32, seed []byte) (*KeyPair, error) {
 	path := fmt.Sprintf(ZenonAccountPathFormat, i)
 	return DeriveForPath(path, seed)
 }
 
+// newMasterKey runs HMAC-SHA512 over the seed using [seedModifier] as the
+// key and splits the result into the master private key and chain code.
 func newMasterKey(seed []byte) (*key, error) {
 	newHmac := hmac.New(sha512.New, []byte(seedModifier))
 	_, err := newHmac.Write(seed)
@@ -89,6 +112,10 @@ func newMasterKey(seed []byte) (*key, error) {
 	}
 	return key, nil
 }
+
+// derive performs one hardened SLIP-0010 derivation step. Returns
+// [ErrNoPublicDerivation] for any non-hardened index (Ed25519 has no
+// public-derivation form).
 func (k *key) derive(i uint32) (*key, error) {
 	// no public derivation for ed25519
 	if i < FirstHardenedIndex {
@@ -111,6 +138,8 @@ func (k *key) derive(i uint32) (*key, error) {
 	}, nil
 }
 
+// isValidPath reports whether path matches [pathRegex] and every segment
+// fits in a uint32 once the trailing `'` is stripped.
 func isValidPath(path string) bool {
 	if !pathRegex.MatchString(path) {
 		return false

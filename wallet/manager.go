@@ -8,15 +8,25 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
+// DefaultMaxIndex is the fallback derivation-index ceiling applied when
+// [Config.MaxSearchIndex] is left zero.
 const (
 	DefaultMaxIndex = 128
 )
 
+// Config configures a [Manager]: where to find key files on disk and the
+// default derivation-index ceiling for address searches.
 type Config struct {
 	WalletDir      string
 	MaxSearchIndex uint32
 }
 
+// Manager is the wallet subsystem: it discovers key files in
+// [Config.WalletDir], holds the encrypted [KeyFile]s in memory, and tracks
+// which of them have been unlocked (decrypted into [KeyStore]s) by the user.
+//
+// Concurrency: the manager is not internally synchronized; callers that
+// share an instance across goroutines must synchronize externally.
 type Manager struct {
 	config *Config
 	log    common.Logger
@@ -25,6 +35,8 @@ type Manager struct {
 	decrypted map[string]*KeyStore // map from path to
 }
 
+// New constructs a [Manager] from config. Returns nil if config is nil;
+// fills DefaultMaxIndex when [Config.MaxSearchIndex] is left at zero.
 func New(config *Config) *Manager {
 	if config == nil {
 		return nil
@@ -42,6 +54,8 @@ func New(config *Config) *Manager {
 	}
 }
 
+// Start ensures [Config.WalletDir] exists and populates the encrypted
+// keyfile index by scanning the directory.
 func (m *Manager) Start() error {
 	// ensure WalletDir exists
 	if err := os.MkdirAll(m.config.WalletDir, 0700); err != nil {
@@ -60,6 +74,9 @@ func (m *Manager) Start() error {
 	}
 	return nil
 }
+
+// Stop zeros out every decrypted keystore and clears the indexes so secret
+// material does not outlive the manager.
 func (m *Manager) Stop() {
 	for _, ks := range m.decrypted {
 		ks.Zero()
@@ -68,6 +85,8 @@ func (m *Manager) Stop() {
 	m.encrypted = nil
 }
 
+// MakePathAbsolut resolves path against [Config.WalletDir] when it is
+// relative; absolute paths pass through unchanged.
 func (m *Manager) MakePathAbsolut(path string) string {
 	if filepath.IsAbs(path) {
 		return path
@@ -76,6 +95,8 @@ func (m *Manager) MakePathAbsolut(path string) string {
 	}
 }
 
+// GetKeyFile returns the encrypted keyfile registered for path, or
+// [ErrKeyStoreNotFound] if none is.
 func (m *Manager) GetKeyFile(path string) (*KeyFile, error) {
 	path = m.MakePathAbsolut(path)
 	if kf, ok := m.encrypted[path]; !ok {
@@ -84,6 +105,10 @@ func (m *Manager) GetKeyFile(path string) (*KeyFile, error) {
 		return kf, nil
 	}
 }
+
+// GetKeyStore returns the unlocked keystore for path, or
+// [ErrKeyStoreNotFound] if the keyfile is unknown / [ErrKeyStoreLocked]
+// if it is registered but not unlocked.
 func (m *Manager) GetKeyStore(path string) (*KeyStore, error) {
 	path = m.MakePathAbsolut(path)
 	if _, ok := m.encrypted[path]; !ok {
@@ -94,6 +119,10 @@ func (m *Manager) GetKeyStore(path string) (*KeyStore, error) {
 		return ks, nil
 	}
 }
+
+// GetKeyFileAndDecrypt loads the keyfile at path and decrypts it with
+// password. Does not register the resulting keystore on the manager —
+// callers that want persistent unlock should use [Manager.Unlock].
 func (m *Manager) GetKeyFileAndDecrypt(path, password string) (*KeyStore, error) {
 	if kf, err := m.GetKeyFile(path); err != nil {
 		return nil, err
@@ -128,7 +157,9 @@ func (m *Manager) ListEntropyFilesInStandardDir() ([]*KeyFile, error) {
 	return files, nil
 }
 
-// Unlock also adds keyFile to encrypted if not present
+// Unlock decrypts the keyfile at path with password and registers both
+// the keyfile (if not already known) and the resulting keystore on the
+// manager. After this call [Manager.GetKeyStore] succeeds for path.
 func (m *Manager) Unlock(path, password string) error {
 	path = m.MakePathAbsolut(path)
 	kf, err := m.GetKeyFile(path)
@@ -144,6 +175,10 @@ func (m *Manager) Unlock(path, password string) error {
 	m.decrypted[path] = ks
 	return nil
 }
+
+// Lock zeros and forgets the decrypted keystore for path. Subsequent
+// [Manager.GetKeyStore] calls will return [ErrKeyStoreLocked] until the
+// caller unlocks again.
 func (m *Manager) Lock(path string) {
 	path = m.MakePathAbsolut(path)
 	if ks, ok := m.decrypted[path]; ok {
@@ -151,6 +186,9 @@ func (m *Manager) Lock(path string) {
 		m.decrypted[path] = nil
 	}
 }
+
+// IsUnlocked reports whether the keystore at path is currently unlocked.
+// Returns [ErrKeyStoreNotFound] if path is not a known keyfile.
 func (m *Manager) IsUnlocked(path string) (bool, error) {
 	path = m.MakePathAbsolut(path)
 	if _, ok := m.encrypted[path]; !ok {

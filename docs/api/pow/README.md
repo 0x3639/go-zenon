@@ -6,13 +6,39 @@
 import "github.com/zenon-network/go-zenon/pow"
 ```
 
-Package pow generates the proof\-of\-work nonces that satisfy the plasma difficulty for an account block.
+Package pow generates and verifies the proof\-of\-work nonces that satisfy the plasma difficulty for an account block.
 
 ### Overview
 
-Plasma may be paid either by fusing QSR \(steady yield\) or by burning a small proof of work per block; pow implements the second path. Callers supply a seed derived from the block contents and a target difficulty, and the package returns an 8\-byte nonce whose hash satisfies the difficulty target.
+Plasma may be paid either by fusing QSR \(steady yield through the Plasma embedded contract\) or by burning a small proof of work per block. pow implements the second path. The PoW seed is \`Hash\(address || previousHash\)\` — deliberately decoupled from per\-block payload so a caller can pre\-compute the nonce while the rest of the block is still being assembled.
 
-Per\-package documentation is being filled in incrementally. See docs/STYLE.md for the full template applied in subsequent PRs.
+### Key Concepts
+
+- Difficulty — a [big.Int](<https://pkg.go.dev/math/big/#Int>) target. Higher values demand more hashes; [GetThresholdByDifficulty](<#GetThresholdByDifficulty>) converts the target to the 64\-bit threshold the resulting hash must exceed.
+- Nonce — 8 random bytes that, when hashed with the seed, yield a value above the threshold. Stored in [github.com/zenon\\\-network/go\\\-zenon/chain/nom.AccountBlock.Nonce](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.Nonce>).
+- Seed — \`Hash\(address || previousHash\)\`. Computed by [GetAccountBlockHash](<#GetAccountBlockHash>).
+
+### Usage
+
+Search for a nonce when constructing an account block that pays plasma via PoW:
+
+```
+seed := pow.GetAccountBlockHash(block)
+block.Nonce = pow.GetPoWNonce(big.NewInt(int64(block.Difficulty)), seed)
+```
+
+Verify a nonce on an inbound block \(used by the verifier\):
+
+```
+if !pow.CheckPoWNonce(block) { /* reject */ }
+```
+
+### Related Packages
+
+- [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — defines the \`Difficulty\`/\`Nonce\` fields on [chain/nom.AccountBlock](<https://pkg.go.dev/chain/nom/#AccountBlock>) consumed here.
+- [github.com/zenon\\\-network/go\\\-zenon/common/crypto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/>) — supplies the hash function used to score nonces.
+- [github.com/zenon\\\-network/go\\\-zenon/wallet](<https://pkg.go.dev/github.com/zenon-network/go-zenon/wallet/>) — provides the cryptographically\-secure entropy source for nonce search seeds.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — calls [CheckPoWNonce](<#CheckPoWNonce>) during stateless block validation.
 
 ## Index
 
@@ -29,93 +55,97 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="CheckPoWNonce"></a>
-## func [CheckPoWNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L18>)
+## func [CheckPoWNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L24>)
 
 ```go
 func CheckPoWNonce(block *nom.AccountBlock) bool
 ```
 
-
+CheckPoWNonce verifies that block.Nonce satisfies block.Difficulty. The verifier calls this whenever a block claims plasma via PoW.
 
 <a name="GetAccountBlockHash"></a>
-## func [GetAccountBlockHash](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L14>)
+## func [GetAccountBlockHash](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L18>)
 
 ```go
 func GetAccountBlockHash(block *nom.AccountBlock) types.Hash
 ```
 
-
+GetAccountBlockHash derives the seed an account block's PoW operates on: the hash of the sender's address concatenated with the previous\-block hash. The seed deliberately omits per\-block payload so the PoW can be pre\-computed before the rest of the block is finalized.
 
 <a name="GetPoWNonce"></a>
-## func [GetPoWNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L25>)
+## func [GetPoWNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L37>)
 
 ```go
 func GetPoWNonce(difficulty *big.Int, dataHash types.Hash) []byte
 ```
 
+GetPoWNonce searches for a nonce that satisfies difficulty against the supplied dataHash. The search starts at a cryptographically random 8\-byte seed and increments until the resulting hash crosses the difficulty threshold.
 
+Concurrency: each call uses fresh entropy and is safe to run in parallel.
 
 <a name="GetThresholdByDifficulty"></a>
-## func [GetThresholdByDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L64>)
+## func [GetThresholdByDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L90>)
 
 ```go
 func GetThresholdByDifficulty(difficulty *big.Int) uint64
 ```
 
+GetThresholdByDifficulty returns the unsigned 64\-bit threshold a hash must exceed to satisfy difficulty: \`2^64 \- 2^64/difficulty\`. Higher difficulty pushes the threshold closer to 2^64, leaving a smaller fraction of nonces valid.
 
+Panics if difficulty is nil — every call site must supply a positive difficulty.
 
 <a name="Uint64ToByteArray"></a>
-## func [Uint64ToByteArray](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L48>)
+## func [Uint64ToByteArray](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L65>)
 
 ```go
 func Uint64ToByteArray(i uint64) [8]byte
 ```
 
-
+Uint64ToByteArray encodes i as 8 little\-endian bytes. Little\-endian here \(as opposed to the big\-endian helpers in [common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>)\) matches the on\-chain PoW byte order.
 
 <a name="getTarget"></a>
-## func [getTarget](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L39>)
+## func [getTarget](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L53>)
 
 ```go
 func getTarget(difficulty *big.Int, data types.Hash, nonce []byte) ([]byte, [8]byte)
 ```
 
-
+getTarget assembles the 40\-byte hash input \(\`nonce || dataHash\`\) and the 8\-byte little\-endian difficulty target the search compares against.
 
 <a name="getTargetByDifficulty"></a>
-## func [getTargetByDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L81>)
+## func [getTargetByDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L112>)
 
 ```go
 func getTargetByDifficulty(difficulty uint64) [8]byte
 ```
 
-
+getTargetByDifficulty is the uint64 form of [GetThresholdByDifficulty](<#GetThresholdByDifficulty>) returning the 8\-byte little\-endian encoding directly. A zero difficulty produces an all\-zero target — every hash satisfies it \(no PoW required\).
 
 <a name="greaterDifficulty"></a>
-## func [greaterDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L94>)
+## func [greaterDifficulty](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L128>)
 
 ```go
 func greaterDifficulty(x, y []byte) bool
 ```
 
-
+greaterDifficulty reports whether the little\-endian\-encoded x is numerically greater than \(or equal to\) y. Equal values return true so a zero\-difficulty target is trivially satisfied.
 
 <a name="hashWithNonce"></a>
-## func [hashWithNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L74>)
+## func [hashWithNonce](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L102>)
 
 ```go
 func hashWithNonce(dataHash types.Hash, nonce []byte) []byte
 ```
 
-
+hashWithNonce returns the first 8 bytes of \`Hash\(nonce || dataHash\)\`. Verifier\-side mirror of the search loop in [GetPoWNonce](<#GetPoWNonce>).
 
 <a name="quickInc"></a>
-## func [quickInc](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L54>)
+## func [quickInc](<https://github.com/zenon-network/go-zenon/blob/master/pow/pow.go#L73>)
 
 ```go
 func quickInc(x []byte) []byte
 ```
 
-
+quickInc increments x in place as a little\-endian counter with byte\-level carry. Returns x for chaining; the underlying buffer is mutated.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

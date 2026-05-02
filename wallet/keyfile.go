@@ -9,12 +9,23 @@ import (
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
+// On-disk format constants. Bumping cryptoStoreVersion or changing
+// aesMode / argonName makes existing key files incompatible — readers
+// validate these fields on every open.
 const (
+	// cryptoStoreVersion is the schema version stamped on every key file.
 	cryptoStoreVersion = 1
-	aesMode            = "aes-256-gcm"
-	argonName          = "argon2.IDKey"
+	// aesMode is the AES-GCM variant used for entropy encryption.
+	aesMode = "aes-256-gcm"
+	// argonName is the password-derivation function name written into
+	// every key file.
+	argonName = "argon2.IDKey"
 )
 
+// KeyFile is the on-disk encrypted representation of a [KeyStore]. The
+// BIP-39 entropy is encrypted under an Argon2id-derived key from the
+// user's password; the file carries the cipher parameters needed to
+// reverse the operation along with the wallet's public base address.
 type KeyFile struct {
 	Path string
 
@@ -24,6 +35,9 @@ type KeyFile struct {
 	Timestamp   int64         `json:"timestamp"`
 }
 
+// cryptoParams carries the cipher and KDF parameters for a [KeyFile]:
+// the cipher name, the KDF identifier, the AES-GCM ciphertext and nonce,
+// and the Argon2 parameters used to derive the key.
 type cryptoParams struct {
 	// Constants
 	CipherName string `json:"cipherName"`
@@ -34,10 +48,17 @@ type cryptoParams struct {
 	Argon2Params argon2Params  `json:"argon2Params"`
 }
 
+// argon2Params holds the per-keyfile Argon2id salt. Cost parameters are
+// hard-coded in [passwordHash.Set] so every keyfile uses the same
+// memory/iteration tuning.
 type argon2Params struct {
 	Salt hexutil.Bytes `json:"salt"`
 }
 
+// ReadKeyFile loads and validates a key file from disk. Returns one of
+// [ErrKeyFileInvalidVersion], [ErrKeyFileInvalidCipher], or
+// [ErrKeyFileInvalidKDF] when the file's format does not match this
+// build's expectations.
 func ReadKeyFile(path string) (*KeyFile, error) {
 	keyFileJson, err := os.ReadFile(path)
 	if err != nil {
@@ -64,6 +85,9 @@ func ReadKeyFile(path string) (*KeyFile, error) {
 	}
 	return k, nil
 }
+
+// Write persists kf to its [KeyFile.Path] with restrictive
+// (owner-only-read-write) permissions.
 func (kf *KeyFile) Write() error {
 	keyFileJson, err := json.MarshalIndent(kf, "", "    ")
 	if err != nil {
@@ -72,6 +96,11 @@ func (kf *KeyFile) Write() error {
 	return os.WriteFile(kf.Path, keyFileJson, 0700)
 }
 
+// Decrypt reverses the AES-GCM encryption with a key derived from
+// password and the stored Argon2 salt. Returns [ErrWrongPassword] on any
+// authentication-tag mismatch — the GCM failure is converted to a
+// password error so callers don't have to distinguish auth failure from
+// decryption failure.
 func (kf *KeyFile) Decrypt(password string) (*KeyStore, error) {
 	derivedKey := new(passwordHash)
 	err := derivedKey.SetFromJSON(password, kf.Crypto.Argon2Params)

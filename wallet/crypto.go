@@ -10,10 +10,17 @@ import (
 	"github.com/pkg/errors"
 )
 
+// gcmAdditionData is the AES-GCM additional-data tag bound into every
+// keyfile's authenticated ciphertext. Acts as a domain separator so a
+// keyfile produced by this package cannot be misinterpreted under a
+// different scheme.
 const (
 	gcmAdditionData = "zenon"
 )
 
+// aesGCMEncrypt encrypts inText under key with a fresh 12-byte random
+// nonce and the [gcmAdditionData] tag. Returns the sealed ciphertext, the
+// nonce, and any error from cipher construction.
 func aesGCMEncrypt(key, inText []byte) (outText, nonce []byte, err error) {
 	aesBlock, err := aes.NewCipher(key)
 	if err != nil {
@@ -29,6 +36,10 @@ func aesGCMEncrypt(key, inText []byte) (outText, nonce []byte, err error) {
 	outText = stream.Seal(nil, nonce, inText, []byte(gcmAdditionData))
 	return outText, nonce, err
 }
+
+// aesGCMDecrypt opens cipherText sealed by [aesGCMEncrypt]. Returns the
+// AES-GCM open error on tag mismatch — callers map that to a higher-level
+// error such as [ErrWrongPassword].
 func aesGCMDecrypt(key, cipherText, nonce []byte) ([]byte, error) {
 	aesBlock, err := aes.NewCipher(key)
 	if err != nil {
@@ -47,6 +58,10 @@ func aesGCMDecrypt(key, cipherText, nonce []byte) ([]byte, error) {
 
 	return outText, err
 }
+
+// GetEntropyCSPRNG returns n cryptographically-secure random bytes from
+// crypto/rand. Panics on read failure — a CSPRNG that returns short is
+// considered fatal.
 func GetEntropyCSPRNG(n int) []byte {
 	mainBuff := make([]byte, n)
 	_, err := io.ReadFull(rand.Reader, mainBuff)
@@ -56,6 +71,9 @@ func GetEntropyCSPRNG(n int) []byte {
 	return mainBuff
 }
 
+// VerifySignature checks an Ed25519 signature. Returns an error if pubkey
+// is not the expected length; otherwise returns the bool result of
+// [ed25519.Verify] with a nil error.
 func VerifySignature(pubkey ed25519.PublicKey, message, sig []byte) (bool, error) {
 	if len(pubkey) != ed25519.PublicKeySize {
 		return false, errors.Errorf("ed25519: bad public key length; length=%v", len(pubkey))
