@@ -145,12 +145,14 @@ type WrapTokenMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *WrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *WrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.WrapTokenParam)
@@ -171,7 +173,8 @@ func (p *WrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *WrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -292,12 +295,14 @@ type UpdateWrapRequestMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *UpdateWrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UpdateWrapRequestParam)
@@ -314,7 +319,8 @@ func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -414,12 +420,14 @@ type UnwrapTokenMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *UnwrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UnwrapTokenParam)
@@ -441,7 +449,8 @@ func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *UnwrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -524,12 +533,14 @@ type SetNetworkMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.NetworkInfoParam)
@@ -562,7 +573,8 @@ func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -609,12 +621,14 @@ type RemoveNetworkMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *RemoveNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.NetworkInfoParam)
@@ -631,7 +645,8 @@ func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *RemoveNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -673,12 +688,14 @@ type SetNetworkMetadataMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetNetworkMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -699,7 +716,8 @@ func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) er
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetNetworkMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -749,12 +767,14 @@ type SetTokenPairMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.TokenPairParam)
@@ -796,7 +816,8 @@ func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -879,12 +900,14 @@ type RemoveTokenPairMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *RemoveTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.TokenPairParam)
@@ -905,7 +928,8 @@ func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -983,12 +1007,14 @@ type HaltMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *HaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1005,7 +1031,8 @@ func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1053,12 +1080,14 @@ type UnhaltMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *UnhaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	if err := definition.ABIBridge.UnpackEmptyMethod(p.MethodName, block.Data); err != nil {
@@ -1073,7 +1102,8 @@ func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1114,12 +1144,14 @@ type EmergencyMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *EmergencyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	if err := definition.ABIBridge.UnpackEmptyMethod(p.MethodName, block.Data); err != nil {
@@ -1134,7 +1166,8 @@ func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1209,12 +1242,14 @@ type ChangeTssECDSAPubKeyMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *ChangeTssECDSAPubKeyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.ChangeECDSAPubKeyParam)
@@ -1237,7 +1272,8 @@ func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1326,12 +1362,14 @@ type ChangeAdministratorMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *ChangeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	address := new(types.Address)
@@ -1355,7 +1393,8 @@ func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *ChangeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1404,12 +1443,14 @@ type SetAllowKeygenMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetAllowKeygenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1426,7 +1467,8 @@ func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error 
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetAllowKeygenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1478,12 +1520,14 @@ type SetOrchestratorInfoMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetOrchestratorInfoMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1504,7 +1548,8 @@ func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetOrchestratorInfoMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1545,12 +1590,14 @@ type SetBridgeMetadataMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *SetBridgeMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1571,7 +1618,8 @@ func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *SetBridgeMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1604,12 +1652,14 @@ type RevokeUnwrapRequestMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *RevokeUnwrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1626,7 +1676,8 @@ func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *RevokeUnwrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1665,12 +1716,14 @@ type RedeemMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *RedeemMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.RedeemParam)
@@ -1687,7 +1740,8 @@ func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *RedeemMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1781,12 +1835,14 @@ type NominateGuardiansMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *NominateGuardiansMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1816,7 +1872,8 @@ func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *NominateGuardiansMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -1880,12 +1937,14 @@ type ProposeAdministratorMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *ProposeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -1910,7 +1969,8 @@ func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *ProposeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

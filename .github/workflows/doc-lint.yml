@@ -11,11 +11,9 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
-# Phase 0 documentation rollout: this workflow runs revive's `exported` and
-# `package-comments` rules in warn-only mode. It is intentionally non-blocking
-# while per-package documentation PRs land. Once every package is documented,
-# flip `continue-on-error` to false and tighten `.golangci.yml`'s severity to
-# `error`.
+# Documentation enforcement for godoc coverage. This workflow runs revive's
+# `exported` and `package-comments` rules in error mode so new exported
+# symbols and packages keep their godoc comments.
 
 permissions:
   contents: read
@@ -33,7 +31,6 @@ jobs:
   doc-lint:
     needs: harden_security
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -47,9 +44,11 @@ jobs:
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v1.55.2
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.6.2
 
       - name: Run doc lint
+        env:
+          GOWORK: off
         run: |
           "$(go env GOPATH)/bin/golangci-lint" run \
             --config=.golangci.yml \

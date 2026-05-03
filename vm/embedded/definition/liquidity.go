@@ -470,7 +470,7 @@ func IterateLiquidityStakeEntries(context db.DB, f func(entry *LiquidityStakeEnt
 	return nil
 }
 
-// LiquidityStakeEntryMarshal is part of the package's public API; see the surrounding code for usage.
+// LiquidityStakeEntryMarshal is the JSON/RPC view of a liquidity-stake entry.
 type LiquidityStakeEntryMarshal struct {
 	Amount         string                   `json:"amount"`
 	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
@@ -482,7 +482,7 @@ type LiquidityStakeEntryMarshal struct {
 	Id             types.Hash               `json:"id"`
 }
 
-// ToLiquidityStakeEntry is part of the receiver's public API.
+// ToLiquidityStakeEntry converts the storage record into its JSON/RPC view.
 func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMarshal {
 	aux := &LiquidityStakeEntryMarshal{
 		Amount:         stake.Amount.String(),

@@ -164,7 +164,7 @@ func (project *Project) Key() []byte {
 	return common.JoinBytes([]byte{projectKeyPrefix}, project.Id.Bytes())
 }
 
-// Data is part of the receiver's public API.
+// Data ABI-encodes the project record for storage.
 func (project *Project) Data() []byte {
 	return ABIAccelerator.PackVariablePanic(
 		ProjectVariableName,
@@ -282,7 +282,7 @@ func (phase *Phase) Key() []byte {
 	return common.JoinBytes([]byte{phaseKeyPrefix}, phase.Id.Bytes())
 }
 
-// Data is part of the receiver's public API.
+// Data ABI-encodes the phase record for storage.
 func (phase *Phase) Data() []byte {
 	return ABIAccelerator.PackVariablePanic(
 		PhaseVariableName,

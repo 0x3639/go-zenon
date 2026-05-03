@@ -514,7 +514,7 @@ func (vote *PillarVote) Key() []byte {
 	return common.JoinBytes(pillarVoteKeyPrefix, vote.Id.Bytes(), nameHash)
 }
 
-// Data is part of the receiver's public API.
+// Data ABI-encodes the pillar-vote record for storage.
 func (vote *PillarVote) Data() []byte {
 	return ABICommon.PackVariablePanic(
 		PillarVoteVariableName,
@@ -587,7 +587,7 @@ func (votable *VotableHash) Key() []byte {
 	return common.JoinBytes(votableHashKeyPrefix, votable.Id.Bytes())
 }
 
-// Data is part of the receiver's public API.
+// Data ABI-encodes the votable-hash marker for storage.
 func (votable *VotableHash) Data() []byte {
 	return ABICommon.PackVariablePanic(
 		VotableHashVariableName,

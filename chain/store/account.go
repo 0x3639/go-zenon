@@ -48,8 +48,8 @@ type Account interface {
 	// GetChainPlasma returns the per-account plasma counter the
 	// rate-limiter uses.
 	GetChainPlasma() (*big.Int, error)
-	// AddChainPlasma adds delta to the per-account plasma counter.
-	AddChainPlasma(delta uint64) error
+	// AddChainPlasma adds the supplied value to the per-account plasma counter.
+	AddChainPlasma(uint64) error
 
 	// MarkAsReceived records that hash (a send block referenced by
 	// FromBlockHash) has been consumed; subsequent receives of the same

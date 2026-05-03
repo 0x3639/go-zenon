@@ -55,7 +55,7 @@ doc-lint: ## Run godoc lint (revive: exported, package-comments)
 		echo "golangci-lint not found; install from https://golangci-lint.run/usage/install/"; \
 		exit 1; \
 	}
-	golangci-lint run --config=.golangci.yml ./...
+	GOWORK=off golangci-lint run --config=.golangci.yml ./...
 
 doc-api: ## Regenerate static markdown API docs under docs/api/
 	./scripts/gen-api-docs.sh

@@ -48,10 +48,10 @@ type embeddedImplementation struct {
 // activates.
 //
 //   - originEmbedded — the genesis-time set: Plasma, Pillar, Token,
-//     Sentinel, Swap, Stake, Spork, Liquidity (donations only),
-//     Accelerator (donations only).
-//   - acceleratorEmbedded — adds full Accelerator and CollectReward
-//     wiring.
+//     Sentinel, Swap, Stake, Spork, Accelerator Donate, and the
+//     initial Liquidity Update/Donate methods.
+//   - acceleratorEmbedded — adds the full Accelerator method set,
+//     lowers CollectReward plasma costs, and opens Liquidity Fund/BurnZnn.
 //   - bridgeAndLiquidityEmbedded — adds Bridge and the full
 //     Liquidity method set.
 //   - htlcEmbedded — adds the HTLC contract.
@@ -131,10 +131,10 @@ func getBridgeAndLiquidity() map[types.Address]*embeddedImplementation {
 	return contracts
 }
 
-// getAccelerator layers the Accelerator contract (full method set)
-// onto the origin tier and adds CollectReward wiring to the
-// pillar/sentinel/stake contracts. Used when the accelerator spork
-// is active.
+// getAccelerator layers the Accelerator contract's full method set
+// onto the origin tier, lowers CollectReward plasma costs for
+// pillar/sentinel/stake contracts, and opens Liquidity Fund/BurnZnn.
+// Used when the accelerator spork is active.
 func getAccelerator() map[types.Address]*embeddedImplementation {
 	contracts := getOrigin()
 	contracts[types.AcceleratorContract] = &embeddedImplementation{
@@ -161,8 +161,8 @@ func getAccelerator() map[types.Address]*embeddedImplementation {
 
 // getOrigin returns the genesis-time embedded-contract dispatch
 // table — the set of contracts and methods active before any spork
-// is activated. Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork,
-// plus the donation-only stubs of Liquidity and Accelerator.
+// is activated. It includes Plasma, Pillar, Token, Sentinel, Swap,
+// Stake, Spork, Accelerator Donate, and Liquidity Update/Donate.
 func getOrigin() map[types.Address]*embeddedImplementation {
 	return map[types.Address]*embeddedImplementation{
 		types.PlasmaContract: {

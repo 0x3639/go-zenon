@@ -56,12 +56,14 @@ type CreateHtlcMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -91,7 +93,8 @@ func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -134,12 +137,14 @@ type ReclaimHtlcMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(types.Hash)
@@ -156,7 +161,8 @@ func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid reclaim - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -212,12 +218,14 @@ type UnlockHtlcMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 	param := new(definition.UnlockHtlcParam)
@@ -234,7 +242,8 @@ func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid unlock - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -310,12 +319,14 @@ type DenyHtlcProxyUnlockMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -331,7 +342,8 @@ func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) e
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)
@@ -355,12 +367,14 @@ type AllowHtlcProxyUnlockMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -376,7 +390,8 @@ func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		htlcLog.Debug("invalid create - syntactic validation failed", "address", sendBlock.Address, "reason", err)

@@ -17,10 +17,11 @@
 // activation order:
 //
 //   - originEmbedded — genesis-time contracts (Plasma, Pillar,
-//     Token, Sentinel, Swap, Stake, Spork) plus donation-only
-//     stubs for Liquidity and Accelerator.
-//   - acceleratorEmbedded — adds the full Accelerator contract and
-//     CollectReward wiring across pillar/sentinel/stake.
+//     Token, Sentinel, Swap, Stake, Spork), Accelerator Donate, and
+//     Liquidity Update/Donate.
+//   - acceleratorEmbedded — adds the full Accelerator contract,
+//     lowers CollectReward plasma costs across pillar/sentinel/stake,
+//     and opens Liquidity Fund/BurnZnn.
 //   - bridgeAndLiquidityEmbedded — adds Bridge and the full
 //     Liquidity method set.
 //   - htlcEmbedded — adds the HTLC contract.

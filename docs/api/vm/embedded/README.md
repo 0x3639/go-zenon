@@ -16,8 +16,8 @@ embedded maps a system address \(Pillar, Sentinel, Stake, Token, Plasma, Spork, 
 
 Four pre\-built dispatch tables are stacked in increasing activation order:
 
-- originEmbedded — genesis\-time contracts \(Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork\) plus donation\-only stubs for Liquidity and Accelerator.
-- acceleratorEmbedded — adds the full Accelerator contract and CollectReward wiring across pillar/sentinel/stake.
+- originEmbedded — genesis\-time contracts \(Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork\), Accelerator Donate, and Liquidity Update/Donate.
+- acceleratorEmbedded — adds the full Accelerator contract, lowers CollectReward plasma costs across pillar/sentinel/stake, and opens Liquidity Fund/BurnZnn.
 - bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
 - htlcEmbedded — adds the HTLC contract.
 
@@ -52,8 +52,8 @@ Four pre\-built dispatch tables are stacked in increasing activation order:
 
 <a name="originEmbedded"></a>Pre\-built dispatch tables, one per spork tier. Tables are constructed once at package init and stacked: each tier inherits from the previous and layers on the contracts/methods the spork activates.
 
-- originEmbedded — the genesis\-time set: Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Liquidity \(donations only\), Accelerator \(donations only\).
-- acceleratorEmbedded — adds full Accelerator and CollectReward wiring.
+- originEmbedded — the genesis\-time set: Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Accelerator Donate, and the initial Liquidity Update/Donate methods.
+- acceleratorEmbedded — adds the full Accelerator method set, lowers CollectReward plasma costs, and opens Liquidity Fund/BurnZnn.
 - bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
 - htlcEmbedded — adds the HTLC contract.
 
@@ -75,7 +75,7 @@ var (
 func getAccelerator() map[types.Address]*embeddedImplementation
 ```
 
-getAccelerator layers the Accelerator contract \(full method set\) onto the origin tier and adds CollectReward wiring to the pillar/sentinel/stake contracts. Used when the accelerator spork is active.
+getAccelerator layers the Accelerator contract's full method set onto the origin tier, lowers CollectReward plasma costs for pillar/sentinel/stake contracts, and opens Liquidity Fund/BurnZnn. Used when the accelerator spork is active.
 
 <a name="getBridgeAndLiquidity"></a>
 ## func [getBridgeAndLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L90>)
@@ -102,7 +102,7 @@ getHtlc layers the HTLC contract onto the bridge\+liquidity tier. Used as the ac
 func getOrigin() map[types.Address]*embeddedImplementation
 ```
 
-getOrigin returns the genesis\-time embedded\-contract dispatch table — the set of contracts and methods active before any spork is activated. Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, plus the donation\-only stubs of Liquidity and Accelerator.
+getOrigin returns the genesis\-time embedded\-contract dispatch table — the set of contracts and methods active before any spork is activated. It includes Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Accelerator Donate, and Liquidity Update/Donate.
 
 <a name="Method"></a>
 ## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L17-L34>)

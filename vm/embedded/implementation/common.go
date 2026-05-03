@@ -113,13 +113,15 @@ func addReward(context vm_context.AccountVmContext, epoch uint64, reward definit
 	common.DealWithErr(hisDeposit.Save(context.Storage()))
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *CollectRewardMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	// in case of sentinels it issues 2 rewards, but it's not called enough to cause issues
 	return p.Plasma, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -135,7 +137,8 @@ func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *CollectRewardMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -212,12 +215,14 @@ type DepositQsrMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *DepositQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -233,7 +238,8 @@ func (p *DepositQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *DepositQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -252,12 +258,14 @@ type WithdrawQsrMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *WithdrawQsrMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedWWithdraw, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *WithdrawQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -273,7 +281,8 @@ func (p *WithdrawQsrMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *WithdrawQsrMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -305,12 +314,14 @@ type DonateMethod struct {
 	MethodName string
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *DonateMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -326,7 +337,8 @@ func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *DonateMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -340,17 +352,20 @@ type VoteByNameMethod struct {
 	MethodName string
 }
 
-// Fee is part of the receiver's public API.
+// Fee returns the method-level ZNN fee; this method currently
+// charges no additional fee.
 func (p *VoteByNameMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *VoteByNameMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -371,7 +386,8 @@ func (p *VoteByNameMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *VoteByNameMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
@@ -414,17 +430,20 @@ type VoteByProdAddressMethod struct {
 	MethodName string
 }
 
-// Fee is part of the receiver's public API.
+// Fee returns the method-level ZNN fee; this method currently
+// charges no additional fee.
 func (p *VoteByProdAddressMethod) Fee() (*big.Int, error) {
 	return big.NewInt(0), nil
 }
 
-// GetPlasma loads the Plasma record from storage.
+// GetPlasma returns this method's plasma requirement from the
+// supplied table or method-specific configuration.
 func (p *VoteByProdAddressMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error) {
 	return plasmaTable.EmbeddedSimple, nil
 }
 
-// ValidateSendBlock is part of the receiver's public API.
+// ValidateSendBlock decodes call data and checks token, amount,
+// and method-specific send-block invariants.
 func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 	var err error
 
@@ -445,7 +464,8 @@ func (p *VoteByProdAddressMethod) ValidateSendBlock(block *nom.AccountBlock) err
 	return err
 }
 
-// ReceiveBlock is part of the receiver's public API.
+// ReceiveBlock applies the validated call to context and returns
+// any descendant account blocks emitted by the method.
 func (p *VoteByProdAddressMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

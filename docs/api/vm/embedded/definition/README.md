@@ -383,7 +383,7 @@ const (
 	[
 		{"type":"function","name":"Update", "inputs":[]},
 		{"type":"function","name":"Donate", "inputs":[]},
-		
+
 		{"type":"function","name":"CreateProject", "inputs":[
 			{"name":"name","type":"string"},
 			{"name":"description","type":"string"},
@@ -533,7 +533,7 @@ const (
 
 		{"type":"function","name":"Unhalt","inputs":[]},
 		{"type":"function","name":"Emergency","inputs":[]},
-		
+
 		{"type":"function","name":"ChangeTssECDSAPubKey","inputs":[
 			{"name":"pubKey","type":"string"},
 			{"name":"oldPubKeySignature","type":"string"},
@@ -543,7 +543,7 @@ const (
 		{"type":"function","name":"ChangeAdministrator","inputs":[
 			{"name":"administrator","type":"address"}
 		]},
-		
+
 		{"type":"function","name":"ProposeAdministrator","inputs":[
 			{"name":"address","type":"address"}
 		]},
@@ -742,7 +742,7 @@ const (
     VoteNotValid
 
     jsonCommon = `
-	[	
+	[
 		{"type":"variable","name":"lastUpdate","inputs":[{"name":"height","type":"uint64"}]},
 		{"type":"variable","name":"lastEpochUpdate","inputs":[{"name":"lastEpoch", "type": "int64"}]},
 		{"type":"variable","name":"rewardDeposit","inputs":[
@@ -1020,8 +1020,8 @@ const (
 			{"name":"producerAddress","type":"address"},
 			{"name":"rewardAddress","type":"address"},
 			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"}, 
-			{"name":"publicKey", "type":"string"}, 
+			{"name":"giveDelegateRewardPercentage","type":"uint8"},
+			{"name":"publicKey", "type":"string"},
 			{"name":"signature","type":"string"}
 		]},
 		{"type":"function","name":"UpdatePillar", "inputs":[
@@ -2820,7 +2820,7 @@ Save persists the receiver under its keyed slot in storage.
 func (stake *LiquidityStakeEntry) ToLiquidityStakeEntry() *LiquidityStakeEntryMarshal
 ```
 
-ToLiquidityStakeEntry is part of the receiver's public API.
+ToLiquidityStakeEntry converts the storage record into its JSON/RPC view.
 
 <a name="LiquidityStakeEntry.UnmarshalJSON"></a>
 ### func \(\*LiquidityStakeEntry\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L506>)
@@ -2834,7 +2834,7 @@ UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 <a name="LiquidityStakeEntryMarshal"></a>
 ## type [LiquidityStakeEntryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L474-L483>)
 
-LiquidityStakeEntryMarshal is part of the package's public API; see the surrounding code for usage.
+LiquidityStakeEntryMarshal is the JSON/RPC view of a liquidity-stake entry.
 
 ```go
 type LiquidityStakeEntryMarshal struct {
@@ -3111,7 +3111,7 @@ func parsePhase(data []byte) *Phase
 func (phase *Phase) Data() []byte
 ```
 
-Data is part of the receiver's public API.
+Data ABI-encodes the project record for storage.
 
 <a name="Phase.Delete"></a>
 ### func \(\*Phase\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L276>)
@@ -3387,7 +3387,7 @@ func parsePillarVote(data []byte) (*PillarVote, error)
 func (vote *PillarVote) Data() []byte
 ```
 
-Data is part of the receiver's public API.
+Data ABI-encodes the phase record for storage.
 
 <a name="PillarVote.Delete"></a>
 ### func \(\*PillarVote\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L507>)
@@ -3510,7 +3510,7 @@ func parseProject(data []byte) *Project
 func (project *Project) Data() []byte
 ```
 
-Data is part of the receiver's public API.
+Data ABI-encodes the pillar-vote record for storage.
 
 <a name="Project.Delete"></a>
 ### func \(\*Project\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L158>)
@@ -4743,7 +4743,7 @@ func parseVotableHash(data []byte, key []byte) (*VotableHash, error)
 func (votable *VotableHash) Data() []byte
 ```
 
-Data is part of the receiver's public API.
+Data ABI-encodes the votable-hash marker for storage.
 
 <a name="VotableHash.Delete"></a>
 ### func \(\*VotableHash\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L581>)

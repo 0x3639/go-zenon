@@ -89,8 +89,8 @@ type Account interface {
     // GetChainPlasma returns the per-account plasma counter the
     // rate-limiter uses.
     GetChainPlasma() (*big.Int, error)
-    // AddChainPlasma adds delta to the per-account plasma counter.
-    AddChainPlasma(delta uint64) error
+    // AddChainPlasma adds the supplied value to the per-account plasma counter.
+    AddChainPlasma(uint64) error
 
     // MarkAsReceived records that hash (a send block referenced by
     // FromBlockHash) has been consumed; subsequent receives of the same
@@ -254,9 +254,9 @@ type Momentum interface {
     // GetActivePillars returns the registered pillar set whose
     // registration is still active.
     GetActivePillars() ([]*definition.PillarInfo, error)
-    // IsSporkActive reports whether the spork referenced by spork has
+    // IsSporkActive reports whether the supplied spork has
     // been activated at this view's height.
-    IsSporkActive(spork *types.ImplementedSpork) (bool, error)
+    IsSporkActive(*types.ImplementedSpork) (bool, error)
     // GetStakeBeneficialAmount returns the total stake amount addr is
     // the beneficial owner of (the input to per-account staking rewards).
     GetStakeBeneficialAmount(addr types.Address) (*big.Int, error)
