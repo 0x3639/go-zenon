@@ -45,9 +45,29 @@ GOWORK=off gomarkdoc \
   --repository.default-branch master \
   ./...
 
-# Second pass for build-tagged packages that the default pass skips. cmd/libznn
-# is gated by `//go:build libznn && !detached` and would otherwise produce no
-# documentation under the default build constraints.
+# Second pass for build-tagged packages that the default pass skips.
+#
+# Build-tag audit (rerun with):
+#   grep -rn "^//go:build" --include="*.go" . | grep -v "_test.go" \
+#     | awk -F: '{print $3}' | sort -u
+#
+# Only `libznn` (and its `!libznn` / `libznn && !detached` variants) appears
+# as a non-test build tag in this repo. It is present in three directories:
+#
+#   cmd/libznn/  — the cgo entry point that compiles to libznn.{so,dylib,dll}.
+#                  This is unique API surface and is documented by the pass
+#                  below.
+#   app/         — a libznn-tagged variant of app/manager.go that swaps in
+#                  the shared-library lifecycle. The exported API matches the
+#                  default !libznn variant already documented by the first pass.
+#   metadata/    — same pattern as app/: parallel implementation, identical
+#                  exported API as the !libznn build.
+#
+# We therefore scope this second pass to ./cmd/libznn/... only. Documenting
+# the libznn variants of app/ and metadata/ would overwrite the default-pass
+# docs for those directories and surface implementation detail rather than
+# new API. If a future libznn-tagged package introduces unique exported API,
+# either extend this block or move to a per-directory output template.
 GOWORK=off gomarkdoc \
   --output "$OUT_DIR/{{.Dir}}/README.md" \
   --include-unexported \
