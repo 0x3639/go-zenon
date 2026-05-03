@@ -3,6 +3,7 @@ package tests
 import (
 	"crypto/ecdsa"
 	"encoding/base64"
+	"fmt"
 	eabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ecommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -1982,17 +1983,26 @@ t=2001-09-09T02:05:00+0000 lvl=eror msg=Unwrap-ErrInvalidSignature module=embedd
 
 // TestBridge_GetAllUnwrapTokenRequests_SortStability verifies that
 // GetAllUnwrapTokenRequests sorts strictly by RegistrationMomentumHeight
-// descending and that pagination order is deterministic across calls.
+// descending, deterministically tie-breaks equal-height requests, and
+// returns consistent results across page boundaries.
 //
 // The underlying GetUnwrapTokenRequests iterates LevelDB by
 // (TransactionHash, LogIndex), so the input slice arrives in an order
-// that is *unrelated* to height. We use sort.SliceStable in the API, which
-// preserves the deterministic upstream order as an implicit tie-breaker.
+// that is *unrelated* to height. The API uses sort.SliceStable, which
+// preserves the deterministic upstream tx-hash order as an implicit
+// tie-breaker for equal-height entries.
 //
-// Tx hashes are deliberately chosen so that lexicographic tx-hash order
-// disagrees with height-descending order — proving the sort is doing real
-// work and that the API does not accidentally rely on LevelDB iteration
-// order.
+// To meaningfully exercise stability vs sort.Slice, the test creates 12
+// unwraps in a single momentum batch sharing one RegistrationMomentumHeight.
+// Below ~12 elements Go's sort uses insertion sort — incidentally stable —
+// so smaller fixtures cannot distinguish SliceStable from Slice. With 12
+// ties + a 13th newer entry, Go's pdqsort reorders the ties under Slice
+// but preserves them under SliceStable; this test pins the SliceStable
+// order and therefore fails if the API reverts to sort.Slice.
+//
+// Tx-hash prefixes are also chosen so that lexicographic tx-hash order
+// disagrees with height-descending order — proving the sort is doing
+// real work and not accidentally relying on LevelDB iteration.
 func TestBridge_GetAllUnwrapTokenRequests_SortStability(t *testing.T) {
 	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
 	defer z.StopPanic()
@@ -2002,76 +2012,121 @@ func TestBridge_GetAllUnwrapTokenRequests_SortStability(t *testing.T) {
 	networkClass := uint32(2) // evm
 	chainId := uint32(123)
 	tokenAddress := "0x5fbdb2315678afecb367f032d93f642f64180aa3"
-
-	// Hashes chosen so LevelDB ascending tx-hash order is:
-	//   "01..." (third / newest)
-	//   "0a..." (first / oldest)
-	//   "ff..." (second / middle)
-	// while strict height-descending order is:
-	//   "01..." (newest), "ff..." (middle), "0a..." (oldest)
-	// The two orderings disagree on the second/third positions, so a
-	// no-op sort or a sort-by-tx-hash would fail this test.
-	hashes := []types.Hash{
-		types.HexToHashPanic("0a01010101010101010101010101010101010101010101010101010101010101"),
-		types.HexToHashPanic("ff02020202020202020202020202020202020202020202020202020202020202"),
-		types.HexToHashPanic("0103030303030303030303030303030303030303030303030303030303030303"),
-	}
 	amount := big.NewInt(50 * g.Zexp)
-	for _, hash := range hashes {
-		signature := getUnwrapTokenSignature(t, networkClass, chainId, hash, 200, tokenAddress, amount, networkClass)
-		defer z.CallContract(unwrapToken(networkClass, chainId, hash, 200, tokenAddress, amount, signature)).
+
+	// 12 unwraps submitted back-to-back (no insertMomentums between
+	// them). They all land in the next produced momentum and share a
+	// RegistrationMomentumHeight. Hash prefixes 0x00..0x0b place them in
+	// strict tx-hash-ascending order in LevelDB, which is the order
+	// SliceStable must preserve when the comparator only considers height.
+	const tieCount = 12
+	tieHashes := make([]types.Hash, tieCount)
+	for i := 0; i < tieCount; i++ {
+		hex := fmt.Sprintf("%02x" + "01010101010101010101010101010101010101010101010101010101010101", i)
+		tieHashes[i] = types.HexToHashPanic(hex)
+		signature := getUnwrapTokenSignature(t, networkClass, chainId, tieHashes[i], 200, tokenAddress, amount, networkClass)
+		defer z.CallContract(unwrapToken(networkClass, chainId, tieHashes[i], 200, tokenAddress, amount, signature)).
 			Error(t, nil)
-		insertMomentums(z, 2)
 	}
+	insertMomentums(z, 2)
+
+	// 13th unwrap, registered later at a strictly higher height. Its
+	// hash prefix 0xff is lexicographically larger than every tied hash;
+	// LevelDB therefore returns it last, while the height-descending sort
+	// must place it first. Together with the tied block this proves the
+	// sort is height-driven, not tx-hash-driven.
+	hashNewest := types.HexToHashPanic("ff03030303030303030303030303030303030303030303030303030303030303")
+	sigNewest := getUnwrapTokenSignature(t, networkClass, chainId, hashNewest, 200, tokenAddress, amount, networkClass)
+	defer z.CallContract(unwrapToken(networkClass, chainId, hashNewest, 200, tokenAddress, amount, sigNewest)).
+		Error(t, nil)
+	insertMomentums(z, 2)
 
 	bridgeAPI := embedded.NewBridgeApi(z)
 
-	list1, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 10)
+	full, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 100)
 	common.FailIfErr(t, err)
-	list2, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 10)
-	common.FailIfErr(t, err)
-
-	if list1.Count != len(hashes) || len(list1.List) != len(hashes) {
-		t.Fatalf("expected %d unwraps, got count=%d len=%d", len(hashes), list1.Count, len(list1.List))
+	expectedCount := tieCount + 1
+	if full.Count != expectedCount || len(full.List) != expectedCount {
+		t.Fatalf("expected %d unwraps, got count=%d len=%d", expectedCount, full.Count, len(full.List))
 	}
 
-	// Strictly height-descending. (Equality is allowed for ties; here all
-	// three heights differ, so the inequality is strict.)
-	for i := 1; i < len(list1.List); i++ {
-		prev := list1.List[i-1].RegistrationMomentumHeight
-		cur := list1.List[i].RegistrationMomentumHeight
-		if cur > prev {
-			t.Fatalf("not height-descending at index %d: prev=%d cur=%d", i, prev, cur)
+	// Confirm the tied entries actually share a single height; otherwise
+	// the stability assertion below would be vacuous.
+	tiedHeight := full.List[1].RegistrationMomentumHeight
+	for i := 2; i < expectedCount; i++ {
+		if full.List[i].RegistrationMomentumHeight != tiedHeight {
+			t.Fatalf("expected indices 1..%d to share height %d; index %d had %d",
+				expectedCount-1, tiedHeight, i, full.List[i].RegistrationMomentumHeight)
+		}
+	}
+	if full.List[0].RegistrationMomentumHeight <= tiedHeight {
+		t.Fatalf("expected index 0 height > tied height; got %d <= %d",
+			full.List[0].RegistrationMomentumHeight, tiedHeight)
+	}
+
+	// Height-descending overall.
+	for i := 1; i < len(full.List); i++ {
+		if full.List[i].RegistrationMomentumHeight > full.List[i-1].RegistrationMomentumHeight {
+			t.Fatalf("not height-descending at index %d: prev=%d cur=%d", i,
+				full.List[i-1].RegistrationMomentumHeight, full.List[i].RegistrationMomentumHeight)
 		}
 	}
 
-	// The newest unwrap was the third one submitted (hash "01..."); it must
-	// land first. The middle unwrap (hash "ff...") must land second — even
-	// though "0a..." < "ff..." lexicographically, "0a..." is older and so
-	// must land last. This is exactly the tx-hash-vs-height disagreement.
-	if list1.List[0].TransactionHash != hashes[2] {
-		t.Fatalf("first result: expected newest hash %v, got %v", hashes[2], list1.List[0].TransactionHash)
+	// Index 0 is the newest unwrap (hash 0xff). Indices 1..12 are the
+	// tied entries in LevelDB tx-hash-ascending order (0x00..0x0b). With
+	// Go's pdqsort, sort.Slice reorders these ties for inputs of this
+	// size; sort.SliceStable preserves them. This is the assertion that
+	// distinguishes the two implementations.
+	if full.List[0].TransactionHash != hashNewest {
+		t.Fatalf("index 0: expected newest %v, got %v", hashNewest, full.List[0].TransactionHash)
 	}
-	if list1.List[1].TransactionHash != hashes[1] {
-		t.Fatalf("second result: expected middle-height hash %v, got %v", hashes[1], list1.List[1].TransactionHash)
-	}
-	if list1.List[2].TransactionHash != hashes[0] {
-		t.Fatalf("third result: expected oldest hash %v, got %v", hashes[0], list1.List[2].TransactionHash)
+	for i := 0; i < tieCount; i++ {
+		got := full.List[i+1].TransactionHash
+		if got != tieHashes[i] {
+			t.Fatalf("index %d (tie-break): expected %v (LevelDB position %d), got %v — stability violated",
+				i+1, tieHashes[i], i, got)
+		}
 	}
 
-	// Two consecutive calls must return byte-identical ordering. With
-	// sort.Slice (non-stable) and any equal-height entries this could fail
-	// across calls; with sort.SliceStable + deterministic LevelDB upstream
-	// order it is guaranteed.
-	if len(list1.List) != len(list2.List) {
-		t.Fatalf("list length differs across calls: %d vs %d", len(list1.List), len(list2.List))
+	// Pagination determinism: with pageSize=5 the 13 results land on
+	// three pages. Concatenating them must reproduce the full single-call
+	// result exactly. This catches sort instability that varies across
+	// API invocations as well as off-by-one paging bugs.
+	const pageSize = 5
+	combined := make([]*embedded.UnwrapTokenRequest, 0, expectedCount)
+	for page := uint32(0); ; page++ {
+		p, err := bridgeAPI.GetAllUnwrapTokenRequests(page, pageSize)
+		common.FailIfErr(t, err)
+		if p.Count != expectedCount {
+			t.Fatalf("page %d: expected total Count=%d, got %d", page, expectedCount, p.Count)
+		}
+		combined = append(combined, p.List...)
+		if len(p.List) < pageSize {
+			break
+		}
 	}
-	for i := range list1.List {
-		if list1.List[i].TransactionHash != list2.List[i].TransactionHash ||
-			list1.List[i].LogIndex != list2.List[i].LogIndex {
-			t.Fatalf("ordering differs at index %d across calls: %v/%d vs %v/%d", i,
-				list1.List[i].TransactionHash, list1.List[i].LogIndex,
-				list2.List[i].TransactionHash, list2.List[i].LogIndex)
+	if len(combined) != len(full.List) {
+		t.Fatalf("combined paginated length %d != full length %d", len(combined), len(full.List))
+	}
+	for i := range full.List {
+		if combined[i].TransactionHash != full.List[i].TransactionHash ||
+			combined[i].LogIndex != full.List[i].LogIndex {
+			t.Fatalf("paginated/full ordering differs at index %d: paged=%v/%d full=%v/%d", i,
+				combined[i].TransactionHash, combined[i].LogIndex,
+				full.List[i].TransactionHash, full.List[i].LogIndex)
+		}
+	}
+
+	// A second full-list call must also be byte-identical to the first.
+	again, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 100)
+	common.FailIfErr(t, err)
+	if len(again.List) != len(full.List) {
+		t.Fatalf("repeated call length differs: %d vs %d", len(again.List), len(full.List))
+	}
+	for i := range full.List {
+		if again.List[i].TransactionHash != full.List[i].TransactionHash ||
+			again.List[i].LogIndex != full.List[i].LogIndex {
+			t.Fatalf("repeated call ordering differs at index %d", i)
 		}
 	}
 }
