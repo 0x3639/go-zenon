@@ -1,0 +1,35 @@
+# go-zenon
+
+> Reference Go implementation of Zenon Network of Momentum (NoM), Alphanet Phase 0. Dual-ledger blockchain — per-account chains anchored by a global momentum chain produced by elected pillars. Anti-spam via plasma (fused QSR or PoW). Protocol upgrades via sporks.
+
+Module path: `github.com/zenon-network/go-zenon`. Go 1.20+.
+
+## Primary documentation
+
+- [README](README.md): Build and run instructions.
+- [ARCHITECTURE.md](ARCHITECTURE.md): System overview, dual-ledger model, concept glossary (momentum, account block, plasma, spork, pillar).
+- [AGENTS.md](AGENTS.md): Per-package one-liner map and where-to-look index.
+- [docs/api/README.md](docs/api/README.md): Index of all rendered godocs.
+- [docs/STYLE.md](docs/STYLE.md): Godoc style guide.
+
+## Canonical API reference
+
+Once merged to master, the canonical agent-facing API surface is pkg.go.dev:
+https://pkg.go.dev/github.com/zenon-network/go-zenon
+
+For GitHub-side review without a pkg.go.dev round-trip, use [docs/api/](docs/api/README.md).
+
+## Where to start by topic
+
+- **Block model and ledger types**: [chain/nom](docs/api/chain/nom/README.md) — `AccountBlock`, `Momentum`, transaction wrappers.
+- **Embedded contracts (Pillar, Sentinel, Stake, Token, Plasma, Spork, Swap, Accelerator, HTLC, Bridge, Liquidity)**: [vm/embedded](docs/api/vm/embedded/README.md) — dispatcher; [vm/embedded/definition](docs/api/vm/embedded/definition/README.md) — ABI; [vm/embedded/implementation](docs/api/vm/embedded/implementation/README.md) — behavior.
+- **Consensus (pillar election, points, ticks)**: [consensus](docs/api/consensus/README.md).
+- **Block production**: [pillar](docs/api/pillar/README.md).
+- **Validation**: [verifier](docs/api/verifier/README.md).
+- **Sync and P2P**: [protocol](docs/api/protocol/README.md), [p2p](docs/api/p2p/README.md).
+- **RPC API**: [rpc/api](docs/api/rpc/api/README.md), [rpc/api/embedded](docs/api/rpc/api/embedded/README.md).
+- **Top-level orchestration**: [zenon](docs/api/zenon/README.md).
+
+## Optional: chat/MCP access
+
+This repo is indexed by DeepWiki at https://deepwiki.com/zenon-network/go-zenon (chat UI). MCP-compatible agents can use the DeepWiki MCP server at https://mcp.deepwiki.com/mcp to query the repo programmatically.
