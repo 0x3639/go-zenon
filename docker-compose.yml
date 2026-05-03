@@ -1,0 +1,85 @@
+services:
+  pillar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-zenon-devnet:latest
+    container_name: znnd-devnet-pillar
+    restart: unless-stopped
+    environment:
+      ZNND_ROLE: pillar
+    expose:
+      - "35995"
+    volumes:
+      - pillar-data:/root/.znn
+    networks:
+      devnet:
+        ipv4_address: 172.30.0.10
+
+  pillar2:
+    image: go-zenon-devnet:latest
+    container_name: znnd-devnet-pillar2
+    restart: unless-stopped
+    depends_on:
+      - pillar
+    environment:
+      ZNND_ROLE: pillar2
+    expose:
+      - "35995"
+    volumes:
+      - pillar2-data:/root/.znn
+    networks:
+      devnet:
+        ipv4_address: 172.30.0.12
+
+  pillar3:
+    image: go-zenon-devnet:latest
+    container_name: znnd-devnet-pillar3
+    restart: unless-stopped
+    depends_on:
+      - pillar
+    environment:
+      ZNND_ROLE: pillar3
+    expose:
+      - "35995"
+    volumes:
+      - pillar3-data:/root/.znn
+    networks:
+      devnet:
+        ipv4_address: 172.30.0.13
+
+  rpc:
+    image: go-zenon-devnet:latest
+    container_name: znnd-devnet-rpc
+    restart: unless-stopped
+    depends_on:
+      - pillar
+    environment:
+      ZNND_ROLE: rpc
+    ports:
+      - "35997:35997" # HTTP RPC
+      - "35998:35998" # WS RPC
+    volumes:
+      - rpc-data:/root/.znn
+    networks:
+      devnet:
+        ipv4_address: 172.30.0.11
+
+networks:
+  devnet:
+    name: znnd-devnet
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  pillar-data:
+    driver: local
+  pillar2-data:
+    driver: local
+  pillar3-data:
+    driver: local
+  rpc-data:
+    driver: local

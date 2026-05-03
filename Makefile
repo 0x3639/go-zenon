@@ -1,4 +1,4 @@
-.PHONY: all clean znnd
+.PHONY: all clean znnd devnet-keys devnet-up devnet-down
 
 GO ?= latest
 
@@ -39,3 +39,12 @@ clean:
 	rm -r $(BUILDDIR)/
 
 all: znnd libznn
+
+devnet-keys:
+	go run ./cmd/devnet-keygen $(if $(FORCE),--force,)
+
+devnet-up:
+	docker compose up -d --build
+
+devnet-down:
+	docker compose down -v
