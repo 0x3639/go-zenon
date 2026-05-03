@@ -315,7 +315,7 @@ func beforeAction(ctx *cli.Context) error
 beforeAction is the urfave/cli pre\-action hook: print the version banner, pin GOMAXPROCS to all cores, and \(if \`\-\-pprof\` is set\) start the pprof HTTP server in a background goroutine.
 
 <a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/templates.go#L7>)
+## func [init](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L51>)
 
 ```go
 func init()

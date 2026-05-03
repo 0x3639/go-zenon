@@ -12,6 +12,13 @@
 
 set -euo pipefail
 
+# Force module-mode resolution against this repo's own go.mod, ignoring any
+# parent go.work that may chain in unrelated modules. Without this, every Go
+# command in the script (including the `go list -m` below) inherits the
+# workspace and produces multi-module output that corrupts the generated
+# index. Exported once here so all subsequent invocations stay consistent.
+export GOWORK=off
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -26,7 +33,7 @@ if ! command -v gomarkdoc >/dev/null 2>&1; then
   export PATH="$GOBIN:$PATH"
   if ! command -v gomarkdoc >/dev/null 2>&1; then
     echo "Installing gomarkdoc into $GOBIN..."
-    GOWORK=off go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@v1.1.0
+    go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@v1.1.0
   fi
 fi
 
@@ -38,7 +45,7 @@ echo "Generating markdown docs under $OUT_DIR/ ..."
 # gomarkdoc writes one .md per package. The {{.Dir}} template expands to the
 # package directory relative to the module root, giving us a 1:1 mirror of the
 # source tree under docs/api/.
-GOWORK=off gomarkdoc \
+gomarkdoc \
   --output "$OUT_DIR/{{.Dir}}/README.md" \
   --include-unexported \
   --repository.url "https://github.com/zenon-network/go-zenon" \
@@ -68,7 +75,7 @@ GOWORK=off gomarkdoc \
 # docs for those directories and surface implementation detail rather than
 # new API. If a future libznn-tagged package introduces unique exported API,
 # either extend this block or move to a per-directory output template.
-GOWORK=off gomarkdoc \
+gomarkdoc \
   --output "$OUT_DIR/{{.Dir}}/README.md" \
   --include-unexported \
   --tags "libznn" \
