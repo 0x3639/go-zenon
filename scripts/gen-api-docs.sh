@@ -56,6 +56,25 @@ GOWORK=off gomarkdoc \
   --repository.default-branch master \
   ./cmd/libznn/...
 
+# Build a TSV lookup of `package path -> one-liner description` from the
+# package-map table in AGENTS.md. AGENTS.md is the single source of truth for
+# these summaries — we strip the markdown table syntax and the trailing slash
+# so the keys match the directory paths emitted by gomarkdoc. Packages absent
+# from AGENTS.md fall through to a bare link with no summary, so the index
+# stays valid even if AGENTS.md drifts.
+SUMMARIES_TSV="$(mktemp)"
+trap 'rm -f "$SUMMARIES_TSV"' EXIT
+awk -F'|' '
+  /^\| `[^`]+\/` \| / {
+    path = $2; desc = $3
+    gsub(/^[ ]+|[ ]+$/, "", path)
+    gsub(/^`|`$/, "", path)
+    sub(/\/$/, "", path)
+    gsub(/^[ ]+|[ ]+$/, "", desc)
+    print path "\t" desc
+  }
+' AGENTS.md > "$SUMMARIES_TSV"
+
 # Build the top-level index.
 INDEX="$OUT_DIR/README.md"
 {
@@ -71,13 +90,19 @@ INDEX="$OUT_DIR/README.md"
   echo
   echo "## Packages"
   echo
-  # Find every generated package README and link it.
+  # Find every generated package README and link it, joining each link with
+  # the AGENTS.md one-liner via the lookup file built above.
   find "$OUT_DIR" -mindepth 2 -name 'README.md' \
     | sed "s#^$OUT_DIR/##; s#/README.md\$##" \
     | sort \
-    | while read -r pkg; do
-        echo "- [\`$MODULE/$pkg\`]($pkg/README.md)"
-      done
+    | awk -F'\t' -v module="$MODULE" '
+        FNR == NR { desc[$1] = $2; next }
+        {
+          link = "- [`" module "/" $0 "`](" $0 "/README.md)"
+          if ($0 in desc) print link " — " desc[$0]
+          else print link
+        }
+      ' "$SUMMARIES_TSV" -
   echo
   echo "## Cross-references"
   echo
