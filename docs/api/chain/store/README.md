@@ -254,8 +254,8 @@ type Momentum interface {
     // GetActivePillars returns the registered pillar set whose
     // registration is still active.
     GetActivePillars() ([]*definition.PillarInfo, error)
-    // IsSporkActive reports whether the supplied spork has
-    // been activated at this view's height.
+    // IsSporkActive reports whether the supplied spork has been
+    // activated at this view's height.
     IsSporkActive(*types.ImplementedSpork) (bool, error)
     // GetStakeBeneficialAmount returns the total stake amount addr is
     // the beneficial owner of (the input to per-account staking rewards).
