@@ -1980,6 +1980,102 @@ t=2001-09-09T02:05:00+0000 lvl=eror msg=Unwrap-ErrInvalidSignature module=embedd
 }`)
 }
 
+// TestBridge_GetAllUnwrapTokenRequests_SortStability verifies that
+// GetAllUnwrapTokenRequests sorts strictly by RegistrationMomentumHeight
+// descending and that pagination order is deterministic across calls.
+//
+// The underlying GetUnwrapTokenRequests iterates LevelDB by
+// (TransactionHash, LogIndex), so the input slice arrives in an order
+// that is *unrelated* to height. We use sort.SliceStable in the API, which
+// preserves the deterministic upstream order as an implicit tie-breaker.
+//
+// Tx hashes are deliberately chosen so that lexicographic tx-hash order
+// disagrees with height-descending order — proving the sort is doing real
+// work and that the API does not accidentally rely on LevelDB iteration
+// order.
+func TestBridge_GetAllUnwrapTokenRequests_SortStability(t *testing.T) {
+	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
+	defer z.StopPanic()
+
+	activateBridgeStep6(t, z)
+
+	networkClass := uint32(2) // evm
+	chainId := uint32(123)
+	tokenAddress := "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+
+	// Hashes chosen so LevelDB ascending tx-hash order is:
+	//   "01..." (third / newest)
+	//   "0a..." (first / oldest)
+	//   "ff..." (second / middle)
+	// while strict height-descending order is:
+	//   "01..." (newest), "ff..." (middle), "0a..." (oldest)
+	// The two orderings disagree on the second/third positions, so a
+	// no-op sort or a sort-by-tx-hash would fail this test.
+	hashes := []types.Hash{
+		types.HexToHashPanic("0a01010101010101010101010101010101010101010101010101010101010101"),
+		types.HexToHashPanic("ff02020202020202020202020202020202020202020202020202020202020202"),
+		types.HexToHashPanic("0103030303030303030303030303030303030303030303030303030303030303"),
+	}
+	amount := big.NewInt(50 * g.Zexp)
+	for _, hash := range hashes {
+		signature := getUnwrapTokenSignature(t, networkClass, chainId, hash, 200, tokenAddress, amount, networkClass)
+		defer z.CallContract(unwrapToken(networkClass, chainId, hash, 200, tokenAddress, amount, signature)).
+			Error(t, nil)
+		insertMomentums(z, 2)
+	}
+
+	bridgeAPI := embedded.NewBridgeApi(z)
+
+	list1, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 10)
+	common.FailIfErr(t, err)
+	list2, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 10)
+	common.FailIfErr(t, err)
+
+	if list1.Count != len(hashes) || len(list1.List) != len(hashes) {
+		t.Fatalf("expected %d unwraps, got count=%d len=%d", len(hashes), list1.Count, len(list1.List))
+	}
+
+	// Strictly height-descending. (Equality is allowed for ties; here all
+	// three heights differ, so the inequality is strict.)
+	for i := 1; i < len(list1.List); i++ {
+		prev := list1.List[i-1].RegistrationMomentumHeight
+		cur := list1.List[i].RegistrationMomentumHeight
+		if cur > prev {
+			t.Fatalf("not height-descending at index %d: prev=%d cur=%d", i, prev, cur)
+		}
+	}
+
+	// The newest unwrap was the third one submitted (hash "01..."); it must
+	// land first. The middle unwrap (hash "ff...") must land second — even
+	// though "0a..." < "ff..." lexicographically, "0a..." is older and so
+	// must land last. This is exactly the tx-hash-vs-height disagreement.
+	if list1.List[0].TransactionHash != hashes[2] {
+		t.Fatalf("first result: expected newest hash %v, got %v", hashes[2], list1.List[0].TransactionHash)
+	}
+	if list1.List[1].TransactionHash != hashes[1] {
+		t.Fatalf("second result: expected middle-height hash %v, got %v", hashes[1], list1.List[1].TransactionHash)
+	}
+	if list1.List[2].TransactionHash != hashes[0] {
+		t.Fatalf("third result: expected oldest hash %v, got %v", hashes[0], list1.List[2].TransactionHash)
+	}
+
+	// Two consecutive calls must return byte-identical ordering. With
+	// sort.Slice (non-stable) and any equal-height entries this could fail
+	// across calls; with sort.SliceStable + deterministic LevelDB upstream
+	// order it is guaranteed.
+	if len(list1.List) != len(list2.List) {
+		t.Fatalf("list length differs across calls: %d vs %d", len(list1.List), len(list2.List))
+	}
+	for i := range list1.List {
+		if list1.List[i].TransactionHash != list2.List[i].TransactionHash ||
+			list1.List[i].LogIndex != list2.List[i].LogIndex {
+			t.Fatalf("ordering differs at index %d across calls: %v/%d vs %v/%d", i,
+				list1.List[i].TransactionHash, list1.List[i].LogIndex,
+				list2.List[i].TransactionHash, list2.List[i].LogIndex)
+		}
+	}
+}
+
 func TestBridge_Redeem(t *testing.T) {
 	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
 	defer z.StopPanic()
