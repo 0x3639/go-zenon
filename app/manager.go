@@ -47,9 +47,20 @@ func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 }
 
 // Start launches the node, prints producer-status detection,
-// installs SIGINT/SIGTERM handlers (a second signal still does not
-// quit; up to 10 are required to escape a graceful shutdown), and
-// blocks on [node.Node.Wait] until the node stops.
+// installs SIGINT/SIGTERM handlers, and blocks on [node.Node.Wait]
+// until the node stops.
+//
+// Signal semantics: the first SIGINT/SIGTERM triggers Stop in a
+// background goroutine. The handler then drains up to **ten**
+// additional signals before returning — every additional signal in
+// that window is logged as a warning ("Please DO NOT interrupt the
+// shutdown process, panic may occur."). After ten extra signals the
+// drain loop exits but the process keeps running until
+// [node.Node.Wait] returns.
+//
+// Note: signal.Notify is also asked to listen for SIGKILL, but
+// SIGKILL is uncatchable on Unix — that entry has no effect and is
+// kept only for source-code symmetry with the other names.
 func (nodeManager *Manager) Start() error {
 	// Start up the node
 	log.Info("starting znnd")

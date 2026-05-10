@@ -63,9 +63,14 @@ var (
 
 	// network
 
+	// ListenHostFlag — confusingly named "--host"; despite the
+	// "Network" framing, app/config.go maps this flag to
+	// cfg.RPC.HTTPHost (the HTTP-RPC listen interface), NOT to
+	// cfg.Net.ListenHost. Use --http-addr to set the same value
+	// explicitly. Kept for back-compat.
 	ListenHostFlag = &cli.StringFlag{
 		Name:  "host",
-		Usage: "Network listening host",
+		Usage: "HTTP-RPC server listening interface (despite the name; see flags.go for history)",
 		Value: p2p.DefaultListenHost,
 	}
 	ListenPortFlag = &cli.IntFlag{
@@ -78,9 +83,13 @@ var (
 		Usage: "Maximum number of network peers (network disabled if set to 0)",
 		Value: p2p.DefaultMaxPeers,
 	}
+	// MaxPendingPeersFlag — caps concurrent in-flight p2p
+	// handshakes (counted separately for inbound/outbound); maps to
+	// cfg.Net.MaxPendingPeers. Has nothing to do with database
+	// connection attempts despite older Usage wording.
 	MaxPendingPeersFlag = &cli.UintFlag{
 		Name:  "max-pending-peers",
-		Usage: "Maximum number of db connection attempts (defaults used if set to 0)",
+		Usage: "Maximum concurrent in-flight peer handshakes (defaults used if set to 0)",
 		Value: p2p.DefaultMaxPeers,
 	}
 

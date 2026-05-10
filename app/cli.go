@@ -22,8 +22,10 @@ var (
 	// commands, and the boot/teardown action callbacks.
 	app = cli.NewApp()
 	// nodeManager holds the running node so the libznn-exported
-	// [Stop] can reach it. Always set during the [action] callback
-	// when [Manager.Start] is reached.
+	// [Stop] can reach it. Assigned by the [action] callback before
+	// it calls [Manager.Start] (see action() below); the assignment
+	// is therefore live for the entire duration of Start, not only
+	// after Start returns.
 	nodeManager *Manager
 )
 
