@@ -11,9 +11,12 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
-// getConsensusOpenFilesCacheCapacity returns the LevelDB open-files cache
-// size for the consensus database. macOS has a tighter default ulimit so we
-// cap it lower there.
+// getConsensusOpenFilesCacheCapacity returns the LevelDB open-files
+// cache size used by every LevelDB instance opened through this
+// package (chain, consensus, embedded contracts — the name is a
+// historical artifact from when the consensus DB was the only
+// LevelDB-backed store). macOS has a tighter default ulimit so we cap
+// it lower there.
 func getConsensusOpenFilesCacheCapacity() int {
 	switch runtime.GOOS {
 	case "darwin":
@@ -139,9 +142,11 @@ func NewLevelDBWrapper(db *leveldb.DB) DB {
 		})
 }
 
-// NewLevelDB opens (or creates) a LevelDB at dirname and returns both the
-// high-level [DB] view and the underlying `*leveldb.DB` (for callers that
-// need to take snapshots, close it, etc.). Panics on open failure.
+// NewLevelDB opens (or creates) a LevelDB at dirname (any caller; not
+// specific to consensus despite [getConsensusOpenFilesCacheCapacity]'s
+// historical name) and returns both the high-level [DB] view and the
+// underlying `*leveldb.DB` (for callers that need to take snapshots,
+// close it, etc.). Panics on open failure.
 func NewLevelDB(dirname string) (DB, *leveldb.DB) {
 	opts := &opt.Options{OpenFilesCacheCapacity: getConsensusOpenFilesCacheCapacity()}
 	db, err := leveldb.OpenFile(dirname, opts)

@@ -53,9 +53,14 @@
 //
 //	if err := mgr.Add(tx); err != nil { /* handle */ }
 //
-// Tombstone-encoded deletion: writes through [DB.Delete] are persisted as a
-// single-byte tombstone so that LevelDB snapshots remain immutable while
-// still letting iteration skip deleted keys via [newSkipDeletedIterator].
+// Tombstone-encoded deletion: writes through [DB.Delete] are persisted
+// as a zero-length byte slice (the empty tombstone). Live values are
+// stored as `existsByte || value` so the read path can distinguish
+// the two. LevelDB snapshots remain immutable while still letting
+// iteration skip deleted keys via [enableDeleteIterator]. (The
+// low-level [patchApplierWO] writer uses a different encoding — a
+// length-1 `existsByte` value — because it bypasses the high-level
+// decorator.)
 //
 // # Concurrency
 //

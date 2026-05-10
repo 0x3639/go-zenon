@@ -222,7 +222,7 @@ func (addr *Address) Proto() *AddressProto {
 // on size mismatch — the protobuf shape is fixed at AddressSize bytes.
 func DeProtoAddress(pb *AddressProto) *Address {
 	if len(pb.Address) != AddressSize {
-		panic(fmt.Sprintf("invalid DeProto - wanted hash size %v but got %v", HashSize, len(pb.Address)))
+		panic(fmt.Sprintf("invalid DeProto - wanted address size %v but got %v", AddressSize, len(pb.Address)))
 	}
 	addr := new(Address)
 	copy(addr[:], pb.Address)

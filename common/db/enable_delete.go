@@ -6,9 +6,17 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 )
 
-// existsByte is the one-byte tombstone marker prefixed onto every value the
-// [enableDeleteDB] decorator stores. A value of `existsByte || ...` is a
-// live entry; a single `0x00` byte is a tombstone signaling deletion.
+// existsByte is the one-byte LIVE-VALUE prefix that the [enableDeleteDB]
+// decorator prepends onto every Put. Live entries are stored as
+// `existsByte || value` (length ≥ 1); deletions are stored as the empty
+// byte slice `[]byte{}` (length 0). The Get/Has/iterator paths treat
+// any zero-length value as a tombstone (see [enableDeleteDB.Get],
+// [enableDeleteDB.Has], [enableDeleteIterator.Value]).
+//
+// Note: existsByte is "0x00" both because it's a stable, unambiguous
+// marker and because at the raw-LevelDB layer the writer in
+// [patchApplierWO] also prepends a `0x00` to maintain the same shape
+// when bypassing the high-level decorator.
 var (
 	existsByte = []byte{0}
 )
@@ -39,9 +47,10 @@ func (p *enableDeletePatch) Delete(key []byte) {
 
 // enableDeleteDB layers tombstone-based deletion on top of a low-level
 // [db] that itself has no Delete operation. Live values are stored as
-// `existsByte || value`; deleted keys are stored as `0x00`. This makes
-// LevelDB snapshots representable as immutable data while still letting
-// chain reorgs roll keys forward and back.
+// `existsByte || value` (one prefix byte plus the original value);
+// deleted keys are stored as the empty byte slice `[]byte{}` (zero
+// length). This makes LevelDB snapshots representable as immutable
+// data while still letting chain reorgs roll keys forward and back.
 type enableDeleteDB struct {
 	db db
 }
@@ -78,7 +87,12 @@ func (d *enableDeleteDB) Put(key, value []byte) error {
 	return d.db.Put(key, common.JoinBytes(existsByte, value))
 }
 
-// Delete writes a single-byte tombstone at key.
+// Delete writes the empty byte slice at key — that zero-length value
+// is the tombstone the read path recognizes (see [enableDeleteDB.Get]).
+// Note this is NOT the same as the `[]byte{0}` written by the
+// low-level [patchApplierWO] path; the WO path writes a length-1 value
+// (existsByte || empty) so its writes look like a live empty value to
+// the high-level decorator.
 func (d *enableDeleteDB) Delete(key []byte) error {
 	return d.db.Put(key, []byte{})
 }

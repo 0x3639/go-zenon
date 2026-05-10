@@ -7,9 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// JoinBytes concatenates data into a single allocation. Used everywhere
-// the codebase composes canonical key forms or hash inputs from multiple
-// fixed-size pieces.
+// JoinBytes concatenates data using a growing append loop (so the
+// allocation count is amortized, not strictly one). Used everywhere
+// the codebase composes canonical key forms or hash inputs from
+// multiple fixed-size pieces; the inputs are typically small enough
+// that the amortized cost is negligible.
 func JoinBytes(data ...[]byte) []byte {
 	var newData []byte
 	for _, d := range data {

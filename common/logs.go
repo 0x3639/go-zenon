@@ -36,10 +36,11 @@ var (
 	WalletLogger     = log15.New("module", "wallet")
 )
 
-// InitLogging wires the per-subsystem loggers to two rotating files under
-// `<dataPath>/log/`: `zenon.log` for events at logLevelStr or finer (but
-// strictly below `error`) and `zenon.error.log` for errors. Invalid level
-// strings fall back to Info.
+// InitLogging wires the per-subsystem loggers to two rotating files:
+// `<dataPath>/log/zenon.log` for events at logLevelStr or finer (but
+// strictly below `error`), and `<dataPath>/log/error/zenon.error.log`
+// for errors (note the additional `error/` subdirectory; see
+// [runErrorLogHandler]). Invalid level strings fall back to Info.
 func InitLogging(dataPath, logLevelStr string) {
 	var logHandle []log15.Handler
 
