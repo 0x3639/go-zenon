@@ -27,7 +27,10 @@ import (
 
 // pmp adapts the NAT-PMP protocol implementation so it conforms to
 // the common Interface. gw is the gateway IP; c is the underlying
-// natpmp.Client used for the actual SOAP-style RPC calls.
+// natpmp.Client that issues the binary UDP requests defined by
+// RFC 6886. (Despite naming similarity to UPnP, NAT-PMP is not a
+// SOAP-over-HTTP protocol — earlier wording in this comment was
+// wrong.)
 type pmp struct {
 	gw net.IP
 	c  *natpmp.Client

@@ -55,7 +55,9 @@ const (
 	// pubLen is a 512-bit pubkey in uncompressed representation
 	// without the format byte.
 	pubLen = 64
-	// shaLen is the keccak-256 hash / nonce length.
+	// shaLen is the SHA3-256 hash / nonce length (the rlpx code calls
+	// it "sha" / "shaLen" interchangeably; the implementation uses
+	// golang.org/x/crypto/sha3.New256, not legacy Keccak256).
 	shaLen = 32
 
 	// authMsgLen is the plaintext size of the initiator's enc-handshake
@@ -150,10 +152,11 @@ func (t *rlpx) close(err error) {
 	t.fd.Close()
 }
 
-// doEncHandshake runs the protocol handshake using authenticated
-// messages. the protocol handshake is the first authenticated message
-// and also verifies whether the encryption handshake 'worked' and the
-// remote side actually provided the right public key.
+// doProtoHandshake runs the post-encryption protocol handshake. The
+// protocol handshake is the first authenticated message and also
+// verifies that the prior encryption handshake (see
+// [rlpx.doEncHandshake]) succeeded and the remote side actually
+// provided the right public key.
 func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err error) {
 	// Writing our handshake happens concurrently, we prefer
 	// returning the handshake read error. If the remote side
@@ -181,7 +184,7 @@ func readProtocolHandshake(rw MsgReader, our *protoHandshake) (*protoHandshake, 
 	}
 	if msg.Code == discMsg {
 		// Disconnect before protocol handshake is valid according to the
-		// spec and we send it ourself if the posthanshake checks fail.
+		// spec and we send it ourself if the post-handshake checks fail.
 		// We can't return the reason directly, though, because it is echoed
 		// back otherwise. Wrap it in a string instead.
 		var reason [1]DiscReason

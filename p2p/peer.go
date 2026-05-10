@@ -217,9 +217,16 @@ loop:
 
 	p.rw.close(reason)
 	close(p.closed)
-	common.P2PLogger.Debug("wg.Wait() peer.run()")
+	// Historical: p.wg.Wait() used to block here until every
+	// subprotocol goroutine returned. The Wait was disabled to avoid
+	// hanging shutdowns when a misbehaving protocol never returned;
+	// the surrounding Debug logs were left in place to mark where the
+	// barrier used to be. Closing p.closed above is what now signals
+	// the protocols to stop; protocol goroutines return at their own
+	// pace.
+	common.P2PLogger.Debug("wg.Wait() peer.run() (skipped — see comment)")
 	// p.wg.Wait()
-	common.P2PLogger.Debug("wg.Wait() peer.run() finished")
+	common.P2PLogger.Debug("wg.Wait() peer.run() finished (skipped — see comment)")
 	if requested {
 		reason = DiscRequested
 	}
