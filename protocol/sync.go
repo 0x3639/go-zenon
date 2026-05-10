@@ -53,9 +53,13 @@ func (pm *ProtocolManager) syncTransactions(p *peer) {
 }
 
 // txsyncLoop takes care of the initial transaction sync for each new
-// connection. When a new peer appears, we relay all currently pending
-// transactions. In order to minimise egress bandwidth usage, we send
-// the transactions in small packs to one peer at a time.
+// connection. When a new peer appears, we enqueue all currently
+// pending transactions to that peer. The "small packs" framing in the
+// historical comment is misleading: the inner `send` helper batches
+// every queued transaction into a single pack before transmitting, so
+// one peer receives one large pack rather than a stream of bounded
+// chunks. The throttling comes from sending to one peer at a time,
+// not from per-pack size limits.
 func (pm *ProtocolManager) txsyncLoop() {
 	var (
 		pending = make(map[discover.NodeID]*txsync)

@@ -14,9 +14,11 @@
 //
 //   - Difficulty — a [big.Int] target. Higher values demand more hashes;
 //     [GetThresholdByDifficulty] converts the target to the 64-bit
-//     threshold the resulting hash must exceed.
+//     threshold the resulting hash must reach (the comparison in
+//     [greaterDifficulty] returns true on equal values, so the rule is
+//     "≥ threshold").
 //   - Nonce — 8 random bytes that, when hashed with the seed, yield a
-//     value above the threshold. Stored in
+//     value at or above the threshold. Stored in
 //     [github.com/zenon-network/go-zenon/chain/nom.AccountBlock.Nonce].
 //   - Seed — `Hash(address || previousHash)`. Computed by
 //     [GetAccountBlockHash].

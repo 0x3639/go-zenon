@@ -60,7 +60,7 @@ func (m *manager) Start() error {
 
 	m.consensus.Register(m)
 	if err := m.worker.Start(); err != nil {
-		m.log.Error("failed to produce contracts", "reason", err)
+		m.log.Error("failed to start contract worker", "reason", err)
 	}
 
 	return nil

@@ -12,10 +12,14 @@
 // On a peer announcement ([NewBlockHashesMsg]), the fetcher
 // records the announce, waits a brief window
 // ([arriveTimeout] = 500ms) in case the block arrives via
-// natural broadcast, then explicitly requests it. Validated
-// blocks are inserted via the [chainInsertFn] callback, with
-// per-peer hash and block caps ([hashLimit], [blockLimit]) for
-// DOS protection.
+// natural broadcast, then explicitly requests it. The
+// [blockValidatorFn] callback the protocol layer wires in is
+// currently a stub that returns nil (see protocol/handler.go's
+// `validator := func(...) error { return nil }`); real consensus
+// validation happens later when the chain layer applies the block
+// via the supervisor. Inserted via the [chainInsertFn] callback,
+// with per-peer hash and block caps ([hashLimit], [blockLimit])
+// for DOS protection.
 //
 // # Concurrency
 //

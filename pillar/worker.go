@@ -16,9 +16,10 @@ import (
 
 // worker is the per-pillar production engine. One Process call
 // drives a complete slot's work (momentum + auto-receives + embedded
-// updates). Init / Start / Stop control its lifetime: Start opens
-// the closed channel; Stop closes it and waits for in-flight Process
-// calls to drain via the children WaitGroup.
+// updates). Init / Start / Stop control its lifetime: Start
+// allocates and assigns a fresh `closed` channel via `make(chan
+// struct{})`; Stop closes that channel and waits for in-flight
+// Process calls to drain via the children WaitGroup.
 //
 // The worker can run only one Process at a time — the working mutex
 // serializes them and the embedded contracts list defines which
