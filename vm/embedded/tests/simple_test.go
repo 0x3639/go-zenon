@@ -265,9 +265,13 @@ func TestSimple_CanCallConsensusCache(t *testing.T) {
 	common.Json(pillarApi.GetAll(0, 10)).Error(t, nil)
 }
 
-// - test that it's not possible to have 2 transaction which don't have the momentum-ack in decreasing order
+// - test that subsequent receives on the same account chain must
+//   carry MomentumAcknowledged values in non-decreasing order; an
+//   older MomentumAcknowledged on a later block is rejected with
+//   verifier.ErrABMAGap
 // * creates 2 send blocks in momentum 2
-// * tries to receive the 2 blocks manually with faulty momentum-ack
+// * tries to receive the 2 blocks manually with the second receive
+//   referencing an older momentum than the first
 func TestSimple_MomentumAcknowledgedIncreasing(t *testing.T) {
 	z := mock.NewMockZenon(t)
 	defer z.StopPanic()

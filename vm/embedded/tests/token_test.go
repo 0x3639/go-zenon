@@ -412,8 +412,11 @@ t=2001-09-09T01:47:10+0000 lvl=dbug msg="minted ZTS" module=embedded contract=to
 }
 
 // Test Mint to embedded
-// - can't mint to pillar embedded since it doesn't have the method
-// - can mint to liquidity embedded since it doesn't have the method
+// - can't mint to pillar embedded since the pillar contract has no
+//   receive method for token minting
+// - can mint to liquidity embedded; the liquidity contract treats
+//   the inbound token as a donation (see "received donation" log
+//   below)
 func TestToken_MintToEmbedded(t *testing.T) {
 	z := mock.NewMockZenon(t)
 	defer z.StopPanic()

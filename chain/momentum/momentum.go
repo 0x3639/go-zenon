@@ -83,7 +83,7 @@ func (ms *momentumStore) GetMomentumsByHeight(height uint64, higher bool, count 
 }
 
 // PrefetchMomentum bundles momentum together with the full account
-// blocks it commits to, returning the [nom.DetailedMomentum] form the
+// blocks it commits to, returning the [nom.DetailedMomentum] that the
 // verifier consumes.
 func (ms *momentumStore) PrefetchMomentum(momentum *nom.Momentum) (*nom.DetailedMomentum, error) {
 	accountBlocks := make([]*nom.AccountBlock, len(momentum.Content))

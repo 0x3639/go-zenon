@@ -48,7 +48,13 @@ func checkExpectedResults(t *testing.T, a, b map[string]int, chx float64) {
 	}
 }
 
-// Checks whenever 2 slices are equal
+// checkUnequalOrder asserts that two PillarDelegation slices are NOT
+// element-wise equal in order — used by [TestAlgo_seed] to confirm
+// different proof-block heights produce different shuffles. Returns
+// silently on length mismatch or any positional difference; calls
+// t.Errorf only when both slices have the same names in the same
+// order. (The previous "Checks whenever 2 slices are equal" docstring
+// inverted the semantic.)
 func checkUnequalOrder(t *testing.T, a, b []*types.PillarDelegation) {
 	if len(a) != len(b) {
 		return

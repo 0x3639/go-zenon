@@ -23,7 +23,7 @@ func newGenesisMomentum(genesisConfig *GenesisConfig, pool chain.AccountPool) *n
 	blocks := pool.GetAllUncommittedAccountBlocks()
 
 	supervisor := vm.NewSupervisor(nil, nil)
-	// genesis momentum does not go throw verifier
+	// genesis momentum does not go through the verifier
 	m := &nom.Momentum{
 		Version:         1,
 		ChainIdentifier: genesisConfig.ChainIdentifier,

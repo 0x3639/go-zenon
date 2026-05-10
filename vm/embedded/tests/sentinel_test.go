@@ -634,7 +634,7 @@ t=2001-09-09T03:46:50+0000 lvl=dbug msg="invalid update - rewards not due yet" m
 }
 
 // - register sentinel for User1
-// - insert momentums to heigth 60 * 6 + 2 + SentinelLockTimeWindow
+// - insert momentums to height 60 * 6 + 2 + SentinelLockTimeWindow
 // - check uncollected reward for User1
 // - revoke sentinel for User1
 // - check uncollected reward for User1 (the uncollected reward must be the same)
