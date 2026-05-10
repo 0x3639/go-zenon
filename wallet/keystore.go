@@ -84,9 +84,11 @@ func (ks *KeyStore) DeriveForIndexPath(index uint32) (path string, key *KeyPair,
 	return ks.DeriveForFullPath(fmt.Sprintf(ZenonAccountPathFormat, index))
 }
 
-// FindAddress walks derivation indexes 0..maxSearchIndex looking for one
-// that derives to address. Returns [ErrAddressNotFound] if no such index
-// is reached.
+// FindAddress walks derivation indexes 0..maxSearchIndex (the
+// file-local constant 128, not [Config.MaxSearchIndex]) looking for
+// one that derives to address. Returns [ErrAddressNotFound] if no
+// such index is reached. The [Config.MaxSearchIndex] field is
+// currently ignored — see the note on the Config type.
 func (ks *KeyStore) FindAddress(address types.Address) (key *KeyPair, index uint32, err error) {
 	for index = uint32(0); index < maxSearchIndex; index++ {
 		_, key, err = ks.DeriveForIndexPath(index)

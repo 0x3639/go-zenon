@@ -110,7 +110,13 @@ type NetworkInfoResponse struct {
 }
 
 // p2pPeerToPeer projects a [p2p.Peer] into the wire-form [Peer].
-// Strips the port suffix from RemoteAddr to produce a bare IP.
+// Strips the trailing :port from RemoteAddr to produce a bare IP.
+//
+// Caveat: the strings.Split(ip, ":")[0] approach assumes IPv4. For an
+// IPv6 RemoteAddr like "[2001:db8::1]:35995" this returns "[2001"
+// rather than the full address. Callers needing IPv6 support should
+// use net.SplitHostPort instead. Left unchanged for now to avoid
+// changing the wire format consumers may already depend on.
 func p2pPeerToPeer(peer *p2p.Peer) (*Peer, error) {
 	ip := peer.RemoteAddr().String()
 	splits := strings.Split(ip, ":")

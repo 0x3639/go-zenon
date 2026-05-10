@@ -42,8 +42,12 @@ var (
 	// ErrInvalidPath is returned by [DeriveForPath] when the supplied
 	// path does not parse as a hardened BIP-44 path.
 	ErrInvalidPath = errors.New("invalid derivation path")
-	// ErrNoPublicDerivation is returned by [DeriveForPath] when a
-	// non-hardened segment is encountered. Ed25519 has no public-derivation
-	// form.
+	// ErrNoPublicDerivation is returned by the unexported [key.derive]
+	// when called with an index below FirstHardenedIndex (Ed25519 has
+	// no public-derivation form). NOTE: [DeriveForPath] is unable to
+	// trigger this — it adds FirstHardenedIndex to every parsed
+	// segment before calling derive, so non-hardened input is rejected
+	// upstream by [ErrInvalidPath]. ErrNoPublicDerivation is only
+	// reachable when something calls key.derive directly.
 	ErrNoPublicDerivation = errors.New("no public derivation for ed25519")
 )

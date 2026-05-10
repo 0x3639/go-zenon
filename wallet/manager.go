@@ -14,8 +14,13 @@ const (
 	DefaultMaxIndex = 128
 )
 
-// Config configures a [Manager]: where to find key files on disk and the
-// default derivation-index ceiling for address searches.
+// Config configures a [Manager]: where to find key files on disk and a
+// derivation-index ceiling.
+//
+// NOTE: MaxSearchIndex is currently dead config — [KeyStore.FindAddress]
+// (keystore.go:90) uses the file-local maxSearchIndex constant (128),
+// not this field. Setting MaxSearchIndex on a Config has no effect on
+// search behavior. Kept on the struct for API stability.
 type Config struct {
 	WalletDir      string
 	MaxSearchIndex uint32

@@ -106,9 +106,11 @@ type MockContractCaller struct {
 }
 
 // LateCallFunction is invoked by the [common.Expecter] after the
-// receive block is cemented. Returns the contract's recorded error
-// string; if the send hasn't been receipted yet, returns a hint
-// that the test forgot to call InsertNewMomentum.
+// receive block is cemented. Despite the (string, error) return
+// signature it always returns ("", err) — the recorded contract
+// outcome is wrapped in the error. The "hint that the test forgot
+// to call InsertNewMomentum" is also returned as an error
+// (errors.Errorf), not as a hint string.
 func (mcc *MockContractCaller) LateCallFunction() (string, error) {
 	str, ok := (*mcc.results)[mcc.sendBlockHash]
 	if !ok {
@@ -152,10 +154,11 @@ func (clock *mockClock) Now() time.Time {
 	return *clock.lastTime
 }
 
-// mockZenon is the production [MockZenon] implementation. Contains
-// one chain + consensus + supervisor stack plus a slice of pillars
-// (one per genesis pillar key) so any required momentum producer
-// can be selected per-tick.
+// mockZenon is the test-harness [MockZenon] implementation (the
+// older "production" wording was wrong — this type only ships in
+// test code paths). Contains one chain + consensus + supervisor
+// stack plus a slice of pillars (one per genesis pillar key) so any
+// required momentum producer can be selected per-tick.
 type mockZenon struct {
 	lastTime         *time.Time
 	t                common.T

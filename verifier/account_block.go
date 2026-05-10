@@ -91,7 +91,12 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 	accountStore := av.chain.GetAccountStore(block.Address, block.Previous())
 
 	if accountStore == nil {
-		// try to give a better error in case we are not able to give a better error
+		// Refine the error: the previous-identifier lookup miss could be
+		// "ErrABPrevHasCementedOnTop" (the chain advanced past the
+		// referenced previous), "ErrABPrevHeightExists" (a different
+		// block sits at that height), or the catch-all
+		// "ErrABPreviousMissing". Fall back to the global frontier
+		// store to disambiguate.
 		globalStore := av.chain.GetFrontierMomentumStore().GetAccountStore(block.Address)
 		globalFrontier, err := globalStore.Frontier()
 		if err != nil {

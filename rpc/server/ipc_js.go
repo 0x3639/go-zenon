@@ -26,12 +26,16 @@ import (
 
 var errNotSupported = errors.New("rpc: not supported")
 
-// ipcListen will create a named pipe on the given endpoint.
+// ipcListen is a stub under //go:build js: WASM/JS targets have no
+// access to OS named-pipe syscalls, so this always returns
+// errNotSupported. The other build-tagged ipc_*.go files implement
+// the real listen path on their respective platforms.
 func ipcListen(endpoint string) (net.Listener, error) {
 	return nil, errNotSupported
 }
 
-// newIPCConnection will connect to a named pipe with the given endpoint as name.
+// newIPCConnection is a stub under //go:build js: see [ipcListen] for
+// why this always returns errNotSupported on WASM/JS targets.
 func newIPCConnection(ctx context.Context, endpoint string) (net.Conn, error) {
 	return nil, errNotSupported
 }

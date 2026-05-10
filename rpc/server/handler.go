@@ -111,7 +111,10 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 	if len(calls) == 0 {
 		return
 	}
-	// Process calls on a goroutine because they may block indefinitely:
+	// Process calls on a goroutine because user-supplied handlers
+	// may block (subscription handlers and long-running queries can
+	// hold the goroutine for the duration of the operation; "never
+	// blocks indefinitely" was a wishful claim in earlier revisions).
 	h.startCallProc(func(cp *callProc) {
 		answers := make([]*jsonrpcMessage, 0, len(msgs))
 		for _, msg := range calls {
@@ -215,7 +218,7 @@ func (h *handler) cancelServerSubscriptions(err error) {
 	}
 }
 
-// startCallProc runs fn in a new goroutine and starts tracking it in the h.calls wait group.
+// startCallProc runs fn in a new goroutine and starts tracking it in the h.callWG wait group.
 func (h *handler) startCallProc(fn func(*callProc)) {
 	h.callWG.Add(1)
 	go func() {

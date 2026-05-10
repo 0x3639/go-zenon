@@ -267,9 +267,16 @@ func (t *TokenMarshal) FromTokenMarshal() *Token {
 }
 
 // AccountBlockList is the paginated response shape used by every
-// account-block list endpoint. Count is the total matching count;
-// More is true when the underlying query was truncated and another
-// page may follow.
+// account-block list endpoint. Count and More semantics vary by
+// endpoint:
+//
+//   - Most endpoints set Count to the total matching count and use
+//     More=true when the underlying query was truncated and another
+//     page may follow.
+//   - Some endpoints (notably the unreceived-block listings) only
+//     populate one of the two fields meaningfully; check the producing
+//     endpoint's documentation before treating Count as the global
+//     total or More as a strict pagination signal.
 type AccountBlockList struct {
 	List  []*AccountBlock `json:"list"`
 	Count int             `json:"count"`

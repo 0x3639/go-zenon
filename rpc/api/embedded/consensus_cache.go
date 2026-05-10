@@ -38,13 +38,16 @@ type consensusCache struct {
 
 // Get returns the cached pillar weights and current-epoch stats.
 // Triggers an asynchronous refresh when the cache is stale; in
-// testing mode the refresh runs synchronously so tests see fresh
+// testing mode every Get triggers a synchronous full refresh under the
+// changes mutex (released around the call) so tests observe fresh
 // data without timing dependencies.
 func (cache *consensusCache) Get() (weights map[string]*big.Int, currentStats *api.EpochStats) {
 	cache.changes.Lock()
 	defer cache.changes.Unlock()
 
-	// while testing serve only hot data
+	// testing: refresh synchronously on every call (the inline
+	// Unlock/Lock dance lets update() acquire its own lock as
+	// releaseUpdate expects).
 	if cache.testing {
 		cache.changes.Unlock()
 		cache.update()
