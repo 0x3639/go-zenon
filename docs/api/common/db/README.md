@@ -47,7 +47,7 @@ Commit a transaction \(typically built by the VM and chain layer\):
 if err := mgr.Add(tx); err != nil { /* handle */ }
 ```
 
-Tombstone\-encoded deletion: writes through \[DB.Delete\] are persisted as a single\-byte tombstone so that LevelDB snapshots remain immutable while still letting iteration skip deleted keys via \[newSkipDeletedIterator\].
+Tombstone\-encoded deletion: writes through \[DB.Delete\] are persisted as a zero\-length byte slice \(the empty tombstone\). Live values are stored as \`existsByte || value\` so the read path can distinguish the two. LevelDB snapshots remain immutable while still letting iteration skip deleted keys via \[enableDeleteIterator\]. \(The low\-level \[patchApplierWO\] writer uses a different encoding — a length\-1 \`existsByte\` value — because it bypasses the high\-level decorator.\)
 
 ### Concurrency
 
@@ -246,16 +246,16 @@ func DisableNotFound(db DB) DB
 DisableNotFound wraps db so missing\-key reads return an empty slice and nil error. Useful in code paths where absence is not exceptional.
 
 <a name="NewLevelDB"></a>
-### func [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L145>)
+### func [NewLevelDB](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L150>)
 
 ```go
 func NewLevelDB(dirname string) (DB, *leveldb.DB)
 ```
 
-NewLevelDB opens \(or creates\) a LevelDB at dirname and returns both the high\-level [DB](<#DB>) view and the underlying \`\*leveldb.DB\` \(for callers that need to take snapshots, close it, etc.\). Panics on open failure.
+NewLevelDB opens \(or creates\) a LevelDB at dirname \(any caller; not specific to consensus despite \[getConsensusOpenFilesCacheCapacity\]'s historical name\) and returns both the high\-level [DB](<#DB>) view and the underlying \`\*leveldb.DB\` \(for callers that need to take snapshots, close it, etc.\). Panics on open failure.
 
 <a name="NewLevelDBSnapshotWrapper"></a>
-### func [NewLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L124>)
+### func [NewLevelDBSnapshotWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L127>)
 
 ```go
 func NewLevelDBSnapshotWrapper(ldb *leveldb.Snapshot) DB
@@ -264,7 +264,7 @@ func NewLevelDBSnapshotWrapper(ldb *leveldb.Snapshot) DB
 NewLevelDBSnapshotWrapper returns the high\-level [DB](<#DB>) view of a LevelDB snapshot, with deletion support enabled via the tombstone\-byte encoding.
 
 <a name="NewLevelDBWrapper"></a>
-### func [NewLevelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L135>)
+### func [NewLevelDBWrapper](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L138>)
 
 ```go
 func NewLevelDBWrapper(db *leveldb.DB) DB
@@ -282,7 +282,7 @@ func NewMemDB() DB
 NewMemDB returns a fresh in\-memory [DB](<#DB>) with deletion support enabled. Used by tests and by the manager's per\-version overlays.
 
 <a name="LevelDBLike"></a>
-## type [LevelDBLike](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L73-L76>)
+## type [LevelDBLike](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L76-L79>)
 
 LevelDBLike is the read\-write subset of \`\*leveldb.DB\` that \[levelDBWrapper\] adapts.
 
@@ -294,7 +294,7 @@ type LevelDBLike interface {
 ```
 
 <a name="LevelDBLikeRO"></a>
-## type [LevelDBLikeRO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L31-L35>)
+## type [LevelDBLikeRO](<https://github.com/zenon-network/go-zenon/blob/master/common/db/leveldb.go#L34-L38>)
 
 LevelDBLikeRO is the read\-only subset of \`\*leveldb.DB\` that \[levelDBROWrapper\] adapts. Snapshots and the live database both satisfy this interface.
 

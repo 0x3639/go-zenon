@@ -152,9 +152,13 @@ var (
     // ErrInvalidPath is returned by [DeriveForPath] when the supplied
     // path does not parse as a hardened BIP-44 path.
     ErrInvalidPath = errors.New("invalid derivation path")
-    // ErrNoPublicDerivation is returned by [DeriveForPath] when a
-    // non-hardened segment is encountered. Ed25519 has no public-derivation
-    // form.
+    // ErrNoPublicDerivation is returned by the unexported [key.derive]
+    // when called with an index below FirstHardenedIndex (Ed25519 has
+    // no public-derivation form). NOTE: [DeriveForPath] is unable to
+    // trigger this — it adds FirstHardenedIndex to every parsed
+    // segment before calling derive, so non-hardened input is rejected
+    // upstream by [ErrInvalidPath]. ErrNoPublicDerivation is only
+    // reachable when something calls key.derive directly.
     ErrNoPublicDerivation = errors.New("no public derivation for ed25519")
 )
 ```
@@ -178,9 +182,11 @@ func VerifySignature(pubkey ed25519.PublicKey, message, sig []byte) (bool, error
 VerifySignature checks an Ed25519 signature. Returns an error if pubkey is not the expected length; otherwise returns the bool result of \[ed25519.Verify\] with a nil error.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L19-L22>)
+## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L24-L27>)
 
-Config configures a [Manager](<#Manager>): where to find key files on disk and the default derivation\-index ceiling for address searches.
+Config configures a [Manager](<#Manager>): where to find key files on disk and a derivation\-index ceiling.
+
+NOTE: MaxSearchIndex is currently dead config — [KeyStore.FindAddress](<#KeyStore.FindAddress>) \(keystore.go:90\) uses the file\-local maxSearchIndex constant \(128\), not this field. Setting MaxSearchIndex on a Config has no effect on search behavior. Kept on the struct for API stability.
 
 ```go
 type Config struct {
@@ -317,7 +323,7 @@ func (ks *KeyStore) DeriveForIndexPath(index uint32) (path string, key *KeyPair,
 DeriveForIndexPath is the convenience over [KeyStore.DeriveForFullPath](<#KeyStore.DeriveForFullPath>) that builds the canonical Zenon account path for the supplied index.
 
 <a name="KeyStore.Encrypt"></a>
-### func \(\*KeyStore\) [Encrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L106>)
+### func \(\*KeyStore\) [Encrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L108>)
 
 ```go
 func (ks *KeyStore) Encrypt(password string) (*KeyFile, error)
@@ -326,13 +332,13 @@ func (ks *KeyStore) Encrypt(password string) (*KeyFile, error)
 Encrypt produces a [KeyFile](<#KeyFile>) from ks: derives an Argon2id key from password, AES\-GCM\-encrypts the entropy, and packages the result with the cipher parameters needed to decrypt it later.
 
 <a name="KeyStore.FindAddress"></a>
-### func \(\*KeyStore\) [FindAddress](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L90>)
+### func \(\*KeyStore\) [FindAddress](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L92>)
 
 ```go
 func (ks *KeyStore) FindAddress(address types.Address) (key *KeyPair, index uint32, err error)
 ```
 
-FindAddress walks derivation indexes 0..maxSearchIndex looking for one that derives to address. Returns [ErrAddressNotFound](<#ErrKeyFileInvalidVersion>) if no such index is reached.
+FindAddress walks derivation indexes 0..maxSearchIndex \(the file\-local constant 128, not \[Config.MaxSearchIndex\]\) looking for one that derives to address. Returns [ErrAddressNotFound](<#ErrKeyFileInvalidVersion>) if no such index is reached. The \[Config.MaxSearchIndex\] field is currently ignored — see the note on the Config type.
 
 <a name="KeyStore.Zero"></a>
 ### func \(\*KeyStore\) [Zero](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L63>)
@@ -344,7 +350,7 @@ func (ks *KeyStore) Zero()
 Zero clears every secret\-bearing field on ks. Called when the keystore is locked or the manager is stopped so secret material does not linger in memory.
 
 <a name="Manager"></a>
-## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L30-L36>)
+## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L35-L41>)
 
 Manager is the wallet subsystem: it discovers key files in \[Config.WalletDir\], holds the encrypted \[KeyFile\]s in memory, and tracks which of them have been unlocked \(decrypted into \[KeyStore\]s\) by the user.
 
@@ -357,7 +363,7 @@ type Manager struct {
 ```
 
 <a name="New"></a>
-### func [New](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L40>)
+### func [New](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L45>)
 
 ```go
 func New(config *Config) *Manager
@@ -366,7 +372,7 @@ func New(config *Config) *Manager
 New constructs a [Manager](<#Manager>) from config. Returns nil if config is nil; fills DefaultMaxIndex when \[Config.MaxSearchIndex\] is left at zero.
 
 <a name="Manager.GetKeyFile"></a>
-### func \(\*Manager\) [GetKeyFile](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L100>)
+### func \(\*Manager\) [GetKeyFile](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L105>)
 
 ```go
 func (m *Manager) GetKeyFile(path string) (*KeyFile, error)
@@ -375,7 +381,7 @@ func (m *Manager) GetKeyFile(path string) (*KeyFile, error)
 GetKeyFile returns the encrypted keyfile registered for path, or [ErrKeyStoreNotFound](<#ErrKeyFileInvalidVersion>) if none is.
 
 <a name="Manager.GetKeyFileAndDecrypt"></a>
-### func \(\*Manager\) [GetKeyFileAndDecrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L126>)
+### func \(\*Manager\) [GetKeyFileAndDecrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L131>)
 
 ```go
 func (m *Manager) GetKeyFileAndDecrypt(path, password string) (*KeyStore, error)
@@ -384,7 +390,7 @@ func (m *Manager) GetKeyFileAndDecrypt(path, password string) (*KeyStore, error)
 GetKeyFileAndDecrypt loads the keyfile at path and decrypts it with password. Does not register the resulting keystore on the manager — callers that want persistent unlock should use [Manager.Unlock](<#Manager.Unlock>).
 
 <a name="Manager.GetKeyStore"></a>
-### func \(\*Manager\) [GetKeyStore](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L112>)
+### func \(\*Manager\) [GetKeyStore](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L117>)
 
 ```go
 func (m *Manager) GetKeyStore(path string) (*KeyStore, error)
@@ -393,7 +399,7 @@ func (m *Manager) GetKeyStore(path string) (*KeyStore, error)
 GetKeyStore returns the unlocked keystore for path, or [ErrKeyStoreNotFound](<#ErrKeyFileInvalidVersion>) if the keyfile is unknown / [ErrKeyStoreLocked](<#ErrKeyFileInvalidVersion>) if it is registered but not unlocked.
 
 <a name="Manager.IsUnlocked"></a>
-### func \(\*Manager\) [IsUnlocked](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L192>)
+### func \(\*Manager\) [IsUnlocked](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L197>)
 
 ```go
 func (m *Manager) IsUnlocked(path string) (bool, error)
@@ -402,7 +408,7 @@ func (m *Manager) IsUnlocked(path string) (bool, error)
 IsUnlocked reports whether the keystore at path is currently unlocked. Returns [ErrKeyStoreNotFound](<#ErrKeyFileInvalidVersion>) if path is not a known keyfile.
 
 <a name="Manager.ListEntropyFilesInStandardDir"></a>
-### func \(\*Manager\) [ListEntropyFilesInStandardDir](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L135>)
+### func \(\*Manager\) [ListEntropyFilesInStandardDir](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L140>)
 
 ```go
 func (m *Manager) ListEntropyFilesInStandardDir() ([]*KeyFile, error)
@@ -411,7 +417,7 @@ func (m *Manager) ListEntropyFilesInStandardDir() ([]*KeyFile, error)
 ListEntropyFilesInStandardDir reads them from the disk
 
 <a name="Manager.Lock"></a>
-### func \(\*Manager\) [Lock](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L182>)
+### func \(\*Manager\) [Lock](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L187>)
 
 ```go
 func (m *Manager) Lock(path string)
@@ -420,7 +426,7 @@ func (m *Manager) Lock(path string)
 Lock zeros and forgets the decrypted keystore for path. Subsequent [Manager.GetKeyStore](<#Manager.GetKeyStore>) calls will return [ErrKeyStoreLocked](<#ErrKeyFileInvalidVersion>) until the caller unlocks again.
 
 <a name="Manager.MakePathAbsolut"></a>
-### func \(\*Manager\) [MakePathAbsolut](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L90>)
+### func \(\*Manager\) [MakePathAbsolut](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L95>)
 
 ```go
 func (m *Manager) MakePathAbsolut(path string) string
@@ -429,7 +435,7 @@ func (m *Manager) MakePathAbsolut(path string) string
 MakePathAbsolut resolves path against \[Config.WalletDir\] when it is relative; absolute paths pass through unchanged.
 
 <a name="Manager.Start"></a>
-### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L59>)
+### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L64>)
 
 ```go
 func (m *Manager) Start() error
@@ -438,7 +444,7 @@ func (m *Manager) Start() error
 Start ensures \[Config.WalletDir\] exists and populates the encrypted keyfile index by scanning the directory.
 
 <a name="Manager.Stop"></a>
-### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L80>)
+### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L85>)
 
 ```go
 func (m *Manager) Stop()
@@ -447,7 +453,7 @@ func (m *Manager) Stop()
 Stop zeros out every decrypted keystore and clears the indexes so secret material does not outlive the manager.
 
 <a name="Manager.Unlock"></a>
-### func \(\*Manager\) [Unlock](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L163>)
+### func \(\*Manager\) [Unlock](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L168>)
 
 ```go
 func (m *Manager) Unlock(path, password string) error

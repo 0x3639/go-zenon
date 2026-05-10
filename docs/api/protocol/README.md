@@ -34,7 +34,7 @@ Each peer runs its message loop in its own goroutine; the manager owns one \[Pro
 
 - [github.com/zenon\\\-network/go\\\-zenon/p2p](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/>) — supplies the transport\-layer Peer / MsgReadWriter primitives.
 - [github.com/zenon\\\-network/go\\\-zenon/chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/>) — chain reads and writes through [ChainBridge](<#ChainBridge>).
-- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — validates inbound blocks before insertion.
+- [github.com/zenon\\\-network/go\\\-zenon/verifier](<https://pkg.go.dev/github.com/zenon-network/go-zenon/verifier/>) — supplies the consensus\-rule validators. The protocol layer reaches the verifier transitively through the VM supervisor \(\[vm.Supervisor.ApplyBlock\] / \[vm.Supervisor.ApplyMomentum\] each invoke the verifier\) rather than calling it directly from the chain bridge.
 - [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — applies account blocks and momentums.
 - [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>) — bulk\-sync chain catch\-up.
 - [github.com/zenon\\\-network/go\\\-zenon/protocol/fetcher](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/fetcher/>) — single\-block fetch on announcement.
@@ -127,7 +127,7 @@ var ProtocolVersions = []uint{61}
 ```
 
 <a name="Broadcaster"></a>
-## type [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L91-L102>)
+## type [Broadcaster](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L93-L104>)
 
 Broadcaster is the local\-side surface for self\-produced blocks: the pillar / RPC submit blocks here, and the broadcaster commits them to the chain and announces them to peers.
 
@@ -156,7 +156,7 @@ func NewBroadcaster(chain chain.Chain, protocol *ProtocolManager) Broadcaster
 NewBroadcaster wires a [Broadcaster](<#Broadcaster>) over the chain and the supplied protocol manager. The pillar producer and the RPC signing path call into the returned handle.
 
 <a name="ChainBridge"></a>
-## type [ChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L83-L86>)
+## type [ChainBridge](<https://github.com/zenon-network/go-zenon/blob/master/protocol/interfaces.go#L85-L88>)
 
 ChainBridge is the protocol layer's full view of the chain: transaction pool \+ chain manager. Implemented by \[chainBridge\] and consumed by [ProtocolManager](<#ProtocolManager>) / \[downloader\] / \[fetcher\].
 

@@ -25,11 +25,11 @@ The momentum\-event manager broadcasts insert and delete events to subscribers \
 - Momentum pool — persistent versioned chain managed via [common/db.Manager](<https://pkg.go.dev/common/db/#Manager>); commit and rollback both broadcast events.
 - Stable interface — abstracts the persistent layer the account pool reads from. The momentum pool implements it; tests can substitute a mock.
 - GotAllActiveSporksImplemented — boot\- and per\-momentum check that aborts the node if any active spork is unrecognized.
-- MomentumEventListener — observers of insert/delete; run synchronously on the broadcaster's goroutine.
+- MomentumEventListener — observers of insert/delete; invoked synchronously on the goroutine that drove the underlying \[Chain.AddMomentumTransaction\] or \[Chain.RollbackTo\] call. There is no dedicated broadcast goroutine.
 
 ### Concurrency
 
-Every public method on [Chain](<#Chain>) is safe for concurrent use. The account pool and momentum pool each have their own internal mutex on top of the global insert lock so reads do not block on mutations. Listener callbacks run with the source pool's mutex temporarily released to keep listener re\-entry safe.
+Every public method on [Chain](<#Chain>) is safe for concurrent use. The account pool and momentum pool each have their own internal mutex on top of the global insert lock so reads do not block on mutations. Listener callbacks fire after the database mutation has been committed; they share the calling goroutine, so listeners that need to do heavy work should hand it off to a worker rather than blocking the chain insert path.
 
 ### Related Packages
 
@@ -92,7 +92,7 @@ GotAllActiveSporksImplemented inspects the spork records in store and reports tw
 Used by chain.Init \(boot\-time check\) and \[momentumPool.AddMomentumTransaction\] \(per\-momentum check\) to refuse to operate against an upgraded chain that needs a newer binary.
 
 <a name="AccountPool"></a>
-## type [AccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L94-L132>)
+## type [AccountPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L95-L133>)
 
 AccountPool is the read/write surface for the in\-memory layer of uncommitted account blocks that sit on top of the persistent chain. Inserts may rollback uncommitted blocks but never confirmed ones.
 
@@ -181,9 +181,9 @@ type Chain interface {
 ```
 
 <a name="MomentumEventListener"></a>
-## type [MomentumEventListener](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L49-L56>)
+## type [MomentumEventListener](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L50-L57>)
 
-MomentumEventListener is the contract a subsystem implements to observe momentum\-chain mutations. The chain layer broadcasts InsertMomentum after a momentum is committed and DeleteMomentum after one is rolled back. Listeners run on the chain's broadcast goroutine — heavy work should be deferred.
+MomentumEventListener is the contract a subsystem implements to observe momentum\-chain mutations. The chain layer broadcasts InsertMomentum after a momentum is committed and DeleteMomentum after one is rolled back. Listeners are invoked synchronously on the goroutine that called \[MomentumPool.AddMomentumTransaction\] or \[MomentumPool.RollbackTo\] — heavy work should be deferred.
 
 ```go
 type MomentumEventListener interface {
@@ -197,7 +197,7 @@ type MomentumEventListener interface {
 ```
 
 <a name="MomentumEventManager"></a>
-## type [MomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L61-L69>)
+## type [MomentumEventManager](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L62-L70>)
 
 MomentumEventManager is the registration surface for [MomentumEventListener](<#MomentumEventListener>). The account pool, the broadcaster, and the RPC subscription server all register through this interface.
 
@@ -214,7 +214,7 @@ type MomentumEventManager interface {
 ```
 
 <a name="MomentumPool"></a>
-## type [MomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L73-L89>)
+## type [MomentumPool](<https://github.com/zenon-network/go-zenon/blob/master/chain/interface.go#L74-L90>)
 
 MomentumPool is the read/write surface for the global momentum chain. Mutations require the chain insert lock; readers do not.
 

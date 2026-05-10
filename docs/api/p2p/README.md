@@ -43,7 +43,7 @@ One central goroutine in \[Server.run\] is the single writer of the peer map. Al
 
 Defaults are conservative and exposed via the [Net](<#Net>) config type:
 
-- \[DefaultMaxPeers\]=60, \[DefaultMinPeers\]=8, \[DefaultMinConnectedPeers\]=16, \[DefaultMaxPendingPeers\]=10
+- \[DefaultMaxPeers\]=60, \[DefaultMinConnectedPeers\]=16 \(the p2p dial target\), \[DefaultMaxPendingPeers\]=10. \[DefaultMinPeers\]=8 is consumed by the protocol layer's sync gate, not by the p2p dialer — see protocol/handler.go.
 - \[defaultDialTimeout\]=15s, \[refreshPeersInterval\]=30s, \[staticPeerCheckInterval\]=15s
 - \[frameReadTimeout\]=30s \(effective idle timeout\), \[frameWriteTimeout\]=20s
 - \[handshakeTimeout\]=5s for the combined enc \+ proto handshake
@@ -128,15 +128,19 @@ const (
     // DefaultWSPort is the JSON-RPC WebSocket listen port.
     DefaultWSPort = 35998
 
-    // DefaultMinPeers is the floor before the dialer aggressively
-    // solicits new peers.
+    // DefaultMinPeers is the *protocol-layer* sync floor: the
+    // [github.com/zenon-network/go-zenon/protocol] handler refuses to
+    // drive momentum sync until it has this many connected peers (see
+    // protocol/sync.go and protocol/handler.go's minPeers field). It is
+    // not consulted by the p2p dialer.
     DefaultMinPeers = 8
     // DefaultMaxPeers caps the simultaneous connected peers.
     DefaultMaxPeers = 60
     // DefaultMaxPendingPeers caps concurrent in-flight handshakes.
     DefaultMaxPendingPeers = 10
-    // DefaultMinConnectedPeers is the dynamic-dial target — Server.run
-    // will keep trying to fill up to this many dynamic peers.
+    // DefaultMinConnectedPeers is the p2p dynamic-dial target — Server.run
+    // keeps issuing dial tasks until at least this many dynamic peers
+    // are connected (see p2p/server.go: srv.MinConnectedPeers usage).
     DefaultMinConnectedPeers = 16
 
     // DefaultNetDirName is the subdirectory under DataDir holding
@@ -282,7 +286,7 @@ var ErrPipeClosed = errors.New("p2p: read or write on closed message pipe")
 ```
 
 <a name="Decrypt"></a>
-## func [Decrypt](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L91>)
+## func [Decrypt](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L93>)
 
 ```go
 func Decrypt(prv *ecdsa.PrivateKey, ct []byte) ([]byte, error)
@@ -337,7 +341,7 @@ the message payload will be an RLP list containing the items:
 ```
 
 <a name="ToECDSAPub"></a>
-## func [ToECDSAPub](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L99>)
+## func [ToECDSAPub](<https://github.com/zenon-network/go-zenon/blob/master/p2p/rlpx.go#L101>)
 
 ```go
 func ToECDSAPub(pub []byte) *ecdsa.PublicKey
@@ -448,7 +452,7 @@ Note that a Msg can only be sent once since the Payload reader is consumed durin
 ```go
 type Msg struct {
     Code       uint64
-    Size       uint32 // size of the paylod
+    Size       uint32 // size of the payload
     Payload    io.Reader
     ReceivedAt time.Time
 }
@@ -561,7 +565,7 @@ type MsgWriter interface {
 ```
 
 <a name="Net"></a>
-## type [Net](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L176-L214>)
+## type [Net](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L180-L218>)
 
 Net is the Zenon\-specific p2p configuration consumed by \[node\]. Mirrors the relevant subset of [Server](<#Server>) fields plus the seeder list and key\-file path. Translation to a [Server](<#Server>) happens during node startup.
 
@@ -607,7 +611,7 @@ type Net struct {
 ```
 
 <a name="Net.Nodes"></a>
-### func \(\*Net\) [Nodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L253>)
+### func \(\*Net\) [Nodes](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L257>)
 
 ```go
 func (c *Net) Nodes() ([]*discover.Node, error)
@@ -616,7 +620,7 @@ func (c *Net) Nodes() ([]*discover.Node, error)
 Nodes parses the configured Seeders into discover.Node values for use as bootstrap candidates. Returns the first parse error encountered.
 
 <a name="Net.PrivateKey"></a>
-### func \(\*Net\) [PrivateKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L219>)
+### func \(\*Net\) [PrivateKey](<https://github.com/zenon-network/go-zenon/blob/master/p2p/config.go#L223>)
 
 ```go
 func (c *Net) PrivateKey() *ecdsa.PrivateKey

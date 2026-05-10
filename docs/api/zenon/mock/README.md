@@ -114,13 +114,13 @@ type MockContractCaller struct {
 ```
 
 <a name="MockContractCaller.LateCallFunction"></a>
-### func \(\*MockContractCaller\) [LateCallFunction](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L112>)
+### func \(\*MockContractCaller\) [LateCallFunction](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L114>)
 
 ```go
 func (mcc *MockContractCaller) LateCallFunction() (string, error)
 ```
 
-LateCallFunction is invoked by the \[common.Expecter\] after the receive block is cemented. Returns the contract's recorded error string; if the send hasn't been receipted yet, returns a hint that the test forgot to call InsertNewMomentum.
+LateCallFunction is invoked by the \[common.Expecter\] after the receive block is cemented. Despite the \(string, error\) return signature it always returns \("", err\) — the recorded contract outcome is wrapped in the error. The "hint that the test forgot to call InsertNewMomentum" is also returned as an error \(errors.Errorf\), not as a hint string.
 
 <a name="MockZenon"></a>
 ## type [MockZenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/interfaces.go#L14-L27>)
@@ -145,7 +145,7 @@ type MockZenon interface {
 ```
 
 <a name="NewMockZenon"></a>
-### func [NewMockZenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L460>)
+### func [NewMockZenon](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L463>)
 
 ```go
 func NewMockZenon(t common.T) MockZenon
@@ -154,7 +154,7 @@ func NewMockZenon(t common.T) MockZenon
 NewMockZenon builds a fresh in\-memory test harness using the default consensus EpochDuration. Caller is responsible for invoking \[MockZenon.StopPanic\] \(typically via t.Cleanup\) so log handlers are restored.
 
 <a name="NewMockZenonWithCustomEpochDuration"></a>
-### func [NewMockZenonWithCustomEpochDuration](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L467>)
+### func [NewMockZenonWithCustomEpochDuration](<https://github.com/zenon-network/go-zenon/blob/master/zenon/mock/zenon.go#L470>)
 
 ```go
 func NewMockZenonWithCustomEpochDuration(t common.T, epochDuration time.Duration) MockZenon

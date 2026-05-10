@@ -165,7 +165,7 @@ var (
 ```
 
 <a name="BigIntToBytes"></a>
-## func [BigIntToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L48>)
+## func [BigIntToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L50>)
 
 ```go
 func BigIntToBytes(int *big.Int) []byte
@@ -174,7 +174,7 @@ func BigIntToBytes(int *big.Int) []byte
 BigIntToBytes encodes int as a 32\-byte big\-endian unsigned integer with left\-zero padding. A nil int encodes as 32 zero bytes. Matches the Solidity ABI representation used by the embedded contracts.
 
 <a name="BytesToBigInt"></a>
-## func [BytesToBigInt](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L58>)
+## func [BytesToBigInt](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L60>)
 
 ```go
 func BytesToBigInt(bytes []byte) *big.Int
@@ -183,7 +183,7 @@ func BytesToBigInt(bytes []byte) *big.Int
 BytesToBigInt decodes a big\-endian unsigned integer from bytes. An empty slice decodes as zero, matching the inverse of [BigIntToBytes](<#BigIntToBytes>).
 
 <a name="BytesToUint64"></a>
-## func [BytesToUint64](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L41>)
+## func [BytesToUint64](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L43>)
 
 ```go
 func BytesToUint64(bytes []byte) uint64
@@ -300,16 +300,16 @@ func HideHashes(a string) string
 HideHashes replaces every 64\-character hex run with a stable placeholder and every 86\-character base64 signature with another placeholder. Used to make test golden output stable across runs.
 
 <a name="InitLogging"></a>
-## func [InitLogging](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L43>)
+## func [InitLogging](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L44>)
 
 ```go
 func InitLogging(dataPath, logLevelStr string)
 ```
 
-InitLogging wires the per\-subsystem loggers to two rotating files under \`\<dataPath\>/log/\`: \`zenon.log\` for events at logLevelStr or finer \(but strictly below \`error\`\) and \`zenon.error.log\` for errors. Invalid level strings fall back to Info.
+InitLogging wires the per\-subsystem loggers to two rotating files: \`\<dataPath\>/log/zenon.log\` for events at logLevelStr or finer \(but strictly below \`error\`\), and \`\<dataPath\>/log/error/zenon.error.log\` for errors \(note the additional \`error/\` subdirectory; see \[runErrorLogHandler\]\). Invalid level strings fall back to Info.
 
 <a name="IsHex"></a>
-## func [IsHex](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L72>)
+## func [IsHex](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L74>)
 
 ```go
 func IsHex(str string) bool
@@ -318,7 +318,7 @@ func IsHex(str string) bool
 IsHex validates whether each byte is valid hexadecimal string.
 
 <a name="IsHexCharacter"></a>
-## func [IsHexCharacter](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L67>)
+## func [IsHexCharacter](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L69>)
 
 ```go
 func IsHexCharacter(c byte) bool
@@ -327,13 +327,13 @@ func IsHexCharacter(c byte) bool
 IsHexCharacter returns bool of c being a valid hexadecimal.
 
 <a name="JoinBytes"></a>
-## func [JoinBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L13>)
+## func [JoinBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L15>)
 
 ```go
 func JoinBytes(data ...[]byte) []byte
 ```
 
-JoinBytes concatenates data into a single allocation. Used everywhere the codebase composes canonical key forms or hash inputs from multiple fixed\-size pieces.
+JoinBytes concatenates data using a growing append loop \(so the allocation count is amortized, not strictly one\). Used everywhere the codebase composes canonical key forms or hash inputs from multiple fixed\-size pieces; the inputs are typically small enough that the amortized cost is negligible.
 
 <a name="MaxInt64"></a>
 ## func [MaxInt64](<https://github.com/zenon-network/go-zenon/blob/master/common/math.go#L37>)
@@ -363,7 +363,7 @@ func RecoverStack()
 RecoverStack is a deferred handler that logs the panic value with a captured stack trace and then re\-panics to preserve the original behavior. Used to make panics observable in production logs.
 
 <a name="StringToBigInt"></a>
-## func [StringToBigInt](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L87>)
+## func [StringToBigInt](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L89>)
 
 ```go
 func StringToBigInt(str string) *big.Int
@@ -372,7 +372,7 @@ func StringToBigInt(str string) *big.Int
 StringToBigInt parses a base\-10 \[big.Int\] string. Returns 0 on parse failure or empty input — callers that need to distinguish parse failure from "0" should use \[big.Int.SetString\] directly.
 
 <a name="Uint32ToBytes"></a>
-## func [Uint32ToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L24>)
+## func [Uint32ToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L26>)
 
 ```go
 func Uint32ToBytes(x uint32) []byte
@@ -381,7 +381,7 @@ func Uint32ToBytes(x uint32) []byte
 Uint32ToBytes encodes x as 4 big\-endian bytes. Big\-endian is canonical throughout the chain so that lexicographic LevelDB key order matches numeric height order.
 
 <a name="Uint64ToBytes"></a>
-## func [Uint64ToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L33>)
+## func [Uint64ToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L35>)
 
 ```go
 func Uint64ToBytes(height uint64) []byte
@@ -463,7 +463,7 @@ func LateCaller(f func() (string, error)) *Expecter
 LateCaller defers the production of the received value until [Expecter.Equals](<#Expecter.Equals>) or [Expecter.Error](<#Expecter.Error>) is called. Used by [SaveLogs](<#SaveLogs>) so the captured log content reflects everything written up to assertion time.
 
 <a name="SaveLogs"></a>
-### func [SaveLogs](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L121>)
+### func [SaveLogs](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L122>)
 
 ```go
 func SaveLogs(log log15.Logger) *Expecter
@@ -517,7 +517,7 @@ func (exp *Expecter) SubJson(subJson interface{}) *Expecter
 SubJson decodes the received JSON into subJson before stringifying again. Used to assert on a typed subset of a larger JSON payload.
 
 <a name="LogSaver"></a>
-## type [LogSaver](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L106-L109>)
+## type [LogSaver](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L107-L110>)
 
 LogSaver is a log15.Format that captures every formatted record into an in\-memory buffer instead of \(or in addition to\) writing to disk. Used by tests via [SaveLogs](<#SaveLogs>) to assert on log output. The format also overrides each record's timestamp with [Clock](<#Clock>) so tests on a fake clock get deterministic output.
 
@@ -528,7 +528,7 @@ type LogSaver struct {
 ```
 
 <a name="LogSaver.Format"></a>
-### func \(LogSaver\) [Format](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L113>)
+### func \(LogSaver\) [Format](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L114>)
 
 ```go
 func (f LogSaver) Format(r *log15.Record) []byte

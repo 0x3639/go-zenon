@@ -581,7 +581,7 @@ const (
 
 ## Variables
 
-<a name="ABIBridge"></a>ABIBridge is the parsed \[abi.ABIContract\] for the Bridge contract. Per\-prefix key namespaces: 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo \(singleton\), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair \(per network × token\), 7=feeTokenPair \(per token fee accumulator\).
+<a name="ABIBridge"></a>ABIBridge is the parsed \[abi.ABIContract\] for the Bridge contract. Per\-prefix key namespaces: 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo \(singleton\), 4=orchestratorInfo, 5=networkInfo, 6=requestPair \(id → creation\-height secondary index for wrap requests\), 7=feeTokenPair \(per\-token fee accumulator\). TokenPair records are not stored under their own prefix — they live as byte\-encoded entries inside \[NetworkInfoVariable.TokenPairs\].
 
 Network class discriminators distinguish remote\-network families: [NoMClass](<#ABIBridge>) for sister NoM networks, [EvmClass](<#ABIBridge>) for Ethereum\-compatible chains.
 
@@ -663,7 +663,7 @@ CommunitySporkAddressStartHeight / CommunitySporkAddressEndHeight bracket the wi
 
 ```go
 var (
-    // ABISpork is abi definition of token contract.
+    // ABISpork is the abi definition of the Spork contract.
     ABISpork = abi.JSONToABIContract(strings.NewReader(jsonSpork))
 
     // CommunitySporkAddressStartHeight is the momentum height at
@@ -744,7 +744,7 @@ var HashTypeDigestSizes = map[uint8]uint8{
 ```
 
 <a name="GetNetworkInfoKey"></a>
-## func [GetNetworkInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L644>)
+## func [GetNetworkInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L627>)
 
 ```go
 func GetNetworkInfoKey(networkClass uint32, chainId uint32) []byte
@@ -753,22 +753,22 @@ func GetNetworkInfoKey(networkClass uint32, chainId uint32) []byte
 GetNetworkInfoKey returns the storage key for the [NetworkInfoVariable](<#NetworkInfoVariable>) identified by \(networkClass, chainId\).
 
 <a name="GetPillarInfoKey"></a>
-## func [GetPillarInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L211>)
+## func [GetPillarInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L213>)
 
 ```go
 func GetPillarInfoKey(name string) []byte
 ```
 
-GetPillarInfoKey loads the PillarInfoKey record from storage.
+GetPillarInfoKey builds the storage key for the [PillarInfo](<#PillarInfo>) entry of the pillar with the given display name: pillarInfoKeyPrefix || hash\(name\).
 
 <a name="GetProducingPillarKey"></a>
-## func [GetProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L283>)
+## func [GetProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L292>)
 
 ```go
 func GetProducingPillarKey(producing types.Address) []byte
 ```
 
-GetProducingPillarKey loads the ProducingPillarKey record from storage.
+GetProducingPillarKey builds the storage key for the [ProducingPillar](<#ProducingPillar>) reverse\-index entry keyed by the producing address: producingPillarNameKeyPrefix || producing.Bytes\(\).
 
 <a name="IterateLiquidityStakeEntries"></a>
 ## func [IterateLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L449>)
@@ -814,7 +814,7 @@ type AcceleratorParam struct {
 ```
 
 <a name="BridgeInfoVariable"></a>
-## type [BridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L344-L363>)
+## type [BridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L346-L365>)
 
 BridgeInfoVariable is the singleton bridge configuration record: administrator authority, the active TSS public key \(compressed and decompressed forms cached together\), the allow\-keygen toggle, halt state with its grace window, the TSS message nonce, and a free\-form metadata blob.
 
@@ -851,13 +851,13 @@ func GetBridgeInfoVariable(context db.DB) (*BridgeInfoVariable, error)
 GetBridgeInfoVariable loads the global [BridgeInfoVariable](<#BridgeInfoVariable>) from storage, returning the default initial config if no record exists.
 
 <a name="BridgeInfoVariable.Save"></a>
-### func \(\*BridgeInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L368>)
+### func \(\*BridgeInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L369>)
 
 ```go
 func (b *BridgeInfoVariable) Save(context db.DB) error
 ```
 
-Save persists the receiver under its keyed slot in storage. Save serialises b under [BridgeInfoKeyPrefix](<#ABIBridge>) in the bridge contract's storage.
+Save serialises b under [BridgeInfoKeyPrefix](<#ABIBridge>) in the bridge contract's storage.
 
 <a name="BurnParam"></a>
 ## type [BurnParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L344-L346>)
@@ -871,7 +871,7 @@ type BurnParam struct {
 ```
 
 <a name="ChangeECDSAPubKeyParam"></a>
-## type [ChangeECDSAPubKeyParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1406-L1410>)
+## type [ChangeECDSAPubKeyParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1370-L1374>)
 
 ChangeECDSAPubKeyParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -899,7 +899,7 @@ type CreateHtlcParam struct {
 ```
 
 <a name="DelegationInfo"></a>
-## type [DelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L331-L334>)
+## type [DelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L340-L343>)
 
 DelegationInfo is one delegation record: a backer address directing its weight to a named pillar. One record per backer \(delegations are exclusive — a backer cannot split across pillars\).
 
@@ -911,7 +911,7 @@ type DelegationInfo struct {
 ```
 
 <a name="GetDelegationInfo"></a>
-### func [GetDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L388>)
+### func [GetDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L397>)
 
 ```go
 func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, error)
@@ -920,16 +920,16 @@ func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, e
 GetDelegationInfo loads the DelegationInfo record from storage.
 
 <a name="GetDelegationsList"></a>
-### func [GetDelegationsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L398>)
+### func [GetDelegationsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L410>)
 
 ```go
 func GetDelegationsList(context db.DB) ([]*DelegationInfo, error)
 ```
 
-GetDelegationsList loads the DelegationsList record from storage.
+GetDelegationsList iterates the [DelegationInfo](<#DelegationInfo>) prefix range and returns every recorded delegation. Each backer contributes at most one entry \(delegations are exclusive\). Decode failures abort the iteration with the underlying error.
 
 <a name="DelegationInfo.Delete"></a>
-### func \(\*DelegationInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L349>)
+### func \(\*DelegationInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L358>)
 
 ```go
 func (delegation *DelegationInfo) Delete(context db.DB) error
@@ -938,7 +938,7 @@ func (delegation *DelegationInfo) Delete(context db.DB) error
 Delete removes the receiver's record from storage.
 
 <a name="DelegationInfo.Save"></a>
-### func \(\*DelegationInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L337>)
+### func \(\*DelegationInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L346>)
 
 ```go
 func (delegation *DelegationInfo) Save(context db.DB) error
@@ -1266,7 +1266,7 @@ func (upd *LastUpdateVariable) Save(context db.DB) error
 Save persists the receiver under its keyed slot in storage.
 
 <a name="LegacyPillarEntry"></a>
-## type [LegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L425-L428>)
+## type [LegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L437-L440>)
 
 LegacyPillarEntry is the on\-chain claim of one legacy holder's pillar slot pool. PillarCount is decremented every time a legacy registration consumes a slot; the entry is deleted when it reaches zero.
 
@@ -1278,7 +1278,7 @@ type LegacyPillarEntry struct {
 ```
 
 <a name="GetLegacyPillarEntry"></a>
-### func [GetLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L480>)
+### func [GetLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L492>)
 
 ```go
 func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEntry, error)
@@ -1287,16 +1287,16 @@ func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEnt
 GetLegacyPillarEntry loads the LegacyPillarEntry record from storage.
 
 <a name="GetLegacyPillarList"></a>
-### func [GetLegacyPillarList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L490>)
+### func [GetLegacyPillarList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L505>)
 
 ```go
 func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error)
 ```
 
-GetLegacyPillarList loads the LegacyPillarList record from storage.
+GetLegacyPillarList iterates the [LegacyPillarEntry](<#LegacyPillarEntry>) prefix range and returns every legacy\-claim entry that still has slots remaining. Empty value entries are skipped; decode failures abort the iteration with the underlying error.
 
 <a name="LegacyPillarEntry.Delete"></a>
-### func \(\*LegacyPillarEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L442>)
+### func \(\*LegacyPillarEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L454>)
 
 ```go
 func (legacy *LegacyPillarEntry) Delete(context db.DB) error
@@ -1305,7 +1305,7 @@ func (legacy *LegacyPillarEntry) Delete(context db.DB) error
 Delete removes the receiver's record from storage.
 
 <a name="LegacyPillarEntry.Save"></a>
-### func \(\*LegacyPillarEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L431>)
+### func \(\*LegacyPillarEntry\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L443>)
 
 ```go
 func (legacy *LegacyPillarEntry) Save(context db.DB) error
@@ -1583,25 +1583,23 @@ type MintParam struct {
 ```
 
 <a name="NetworkInfo"></a>
-## type [NetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L520-L529>)
+## type [NetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L514-L521>)
 
 NetworkInfo is the inflated form of [NetworkInfoVariable](<#NetworkInfoVariable>) with TokenPairs decoded into structured records — the shape returned to RPC callers.
 
 ```go
 type NetworkInfo struct {
-    // ZtsFeesInfoMarshal is part of the package's public API; see the surrounding code for usage.
-    NetworkClass    uint32 `json:"networkClass"`
-    Id              uint32 `json:"chainId"`
-    Name            string `json:"name"`
-    ContractAddress string `json:"contractAddress"`
-    Metadata        string `json:"metadata"`
-    // ToZtsFeesInfoMarshal projects the receiver to its JSON-friendly ZtsFeesInfoMarshal twin.
-    TokenPairs []TokenPair `json:"tokenPairs"`
+    NetworkClass    uint32      `json:"networkClass"`
+    Id              uint32      `json:"chainId"`
+    Name            string      `json:"name"`
+    ContractAddress string      `json:"contractAddress"`
+    Metadata        string      `json:"metadata"`
+    TokenPairs      []TokenPair `json:"tokenPairs"`
 }
 ```
 
 <a name="GetNetworkInfoVariable"></a>
-### func [GetNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L749>)
+### func [GetNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L727>)
 
 ```go
 func GetNetworkInfoVariable(context db.DB, networkClass uint32, chainId uint32) (*NetworkInfo, error)
@@ -1610,7 +1608,7 @@ func GetNetworkInfoVariable(context db.DB, networkClass uint32, chainId uint32) 
 GetNetworkInfoVariable loads the [NetworkInfo](<#NetworkInfo>) for \(networkClass, chainId\), returning a zero record \(no error\) when none exists.
 
 <a name="GetNetworkList"></a>
-### func [GetNetworkList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L765>)
+### func [GetNetworkList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L742>)
 
 ```go
 func GetNetworkList(context db.DB) ([]*NetworkInfo, error)
@@ -1619,7 +1617,7 @@ func GetNetworkList(context db.DB) ([]*NetworkInfo, error)
 GetNetworkList iterates the [NetworkInfoKeyPrefix](<#ABIBridge>) range and returns every registered network. Skips entries that fail to decode.
 
 <a name="NetworkInfoParam"></a>
-## type [NetworkInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1390-L1396>)
+## type [NetworkInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1352-L1358>)
 
 NetworkInfoParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -1650,7 +1648,7 @@ type NetworkInfoVariable struct {
 ```
 
 <a name="EncodeNetworkInfo"></a>
-### func [EncodeNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L725>)
+### func [EncodeNetworkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L704>)
 
 ```go
 func EncodeNetworkInfo(networkInfo *NetworkInfo) (*NetworkInfoVariable, error)
@@ -1659,7 +1657,7 @@ func EncodeNetworkInfo(networkInfo *NetworkInfo) (*NetworkInfoVariable, error)
 EncodeNetworkInfo packs networkInfo's TokenPairs slice back into the byte\-encoded form held by [NetworkInfoVariable](<#NetworkInfoVariable>).
 
 <a name="NetworkInfoVariable.Delete"></a>
-### func \(\*NetworkInfoVariable\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L687>)
+### func \(\*NetworkInfoVariable\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L669>)
 
 ```go
 func (nI *NetworkInfoVariable) Delete(context db.DB) error
@@ -1668,7 +1666,7 @@ func (nI *NetworkInfoVariable) Delete(context db.DB) error
 Delete removes nI's record from storage.
 
 <a name="NetworkInfoVariable.Key"></a>
-### func \(\*NetworkInfoVariable\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L676>)
+### func \(\*NetworkInfoVariable\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L658>)
 
 ```go
 func (nI *NetworkInfoVariable) Key() []byte
@@ -1677,16 +1675,16 @@ func (nI *NetworkInfoVariable) Key() []byte
 Key returns the storage key for nI \(network\-class \+ chain\-id scoped\).
 
 <a name="NetworkInfoVariable.Save"></a>
-### func \(\*NetworkInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L655>)
+### func \(\*NetworkInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L637>)
 
 ```go
 func (nI *NetworkInfoVariable) Save(context db.DB) error
 ```
 
-Save persists the receiver under its keyed slot in storage. Save persists nI under its \(NetworkClass, Id\) keyed slot.
+Save persists nI under its \(NetworkClass, Id\) keyed slot.
 
 <a name="OrchestratorInfo"></a>
-## type [OrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1214-L1225>)
+## type [OrchestratorInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1181-L1192>)
 
 OrchestratorInfo captures the corresponding contract state.
 
@@ -1706,16 +1704,16 @@ type OrchestratorInfo struct {
 ```
 
 <a name="GetOrchestratorInfoVariable"></a>
-### func [GetOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1262>)
+### func [GetOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1227>)
 
 ```go
 func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error)
 ```
 
-GetOrchestratorInfoVariable loads the OrchestratorInfoVariable record from storage.
+GetOrchestratorInfoVariable loads the singleton [OrchestratorInfo](<#OrchestratorInfo>) record stored under [OrchestratorInfoKeyPrefix](<#ABIBridge>), returning a zero\-valued [OrchestratorInfo](<#OrchestratorInfo>) when no record exists.
 
 <a name="OrchestratorInfo.Delete"></a>
-### func \(\*OrchestratorInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1287>)
+### func \(\*OrchestratorInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1251>)
 
 ```go
 func (oI *OrchestratorInfo) Delete(context db.DB) error
@@ -1724,7 +1722,7 @@ func (oI *OrchestratorInfo) Delete(context db.DB) error
 Delete removes the receiver's record from storage.
 
 <a name="OrchestratorInfo.Key"></a>
-### func \(\*OrchestratorInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1282>)
+### func \(\*OrchestratorInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1246>)
 
 ```go
 func (oI *OrchestratorInfo) Key() []byte
@@ -1733,7 +1731,7 @@ func (oI *OrchestratorInfo) Key() []byte
 Key returns the storage key for the receiver.
 
 <a name="OrchestratorInfo.Save"></a>
-### func \(\*OrchestratorInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1228>)
+### func \(\*OrchestratorInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1195>)
 
 ```go
 func (oI *OrchestratorInfo) Save(context db.DB) error
@@ -1742,7 +1740,7 @@ func (oI *OrchestratorInfo) Save(context db.DB) error
 Save persists the receiver under its keyed slot in storage.
 
 <a name="OrchestratorInfoParam"></a>
-## type [OrchestratorInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1205-L1211>)
+## type [OrchestratorInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1173-L1178>)
 
 OrchestratorInfoParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -1751,8 +1749,7 @@ type OrchestratorInfoParam struct {
     WindowSize              uint64
     KeyGenThreshold         uint32
     ConfirmationsToFinality uint32
-    // Key returns the storage key for the receiver.
-    EstimatedMomentumTime uint32
+    EstimatedMomentumTime   uint32
 }
 ```
 
@@ -1881,7 +1878,7 @@ type PhaseMarshal struct {
 ```
 
 <a name="PillarEpochHistory"></a>
-## type [PillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L521-L529>)
+## type [PillarEpochHistory](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L536-L544>)
 
 PillarEpochHistory is the per\-\(pillar, epoch\) historical record: the reward\-split percentages active at the time of the epoch, the produced/expected block counts, and the weighted stake. Persisted at reward\-distribution time so that after\-the\-fact rewards calculations remain stable even when pillar metadata changes later.
 
@@ -1898,16 +1895,16 @@ type PillarEpochHistory struct {
 ```
 
 <a name="GetPillarEpochHistoryList"></a>
-### func [GetPillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L584>)
+### func [GetPillarEpochHistoryList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L602>)
 
 ```go
 func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHistory, error)
 ```
 
-GetPillarEpochHistoryList loads the PillarEpochHistoryList record from storage.
+GetPillarEpochHistoryList iterates the per\-epoch [PillarEpochHistory](<#PillarEpochHistory>) prefix range and returns every entry recorded for the given epoch. Decode failures abort the iteration with the underlying error.
 
 <a name="PillarEpochHistory.MarshalJSON"></a>
-### func \(\*PillarEpochHistory\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L634>)
+### func \(\*PillarEpochHistory\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L652>)
 
 ```go
 func (g *PillarEpochHistory) MarshalJSON() ([]byte, error)
@@ -1916,7 +1913,7 @@ func (g *PillarEpochHistory) MarshalJSON() ([]byte, error)
 MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="PillarEpochHistory.Save"></a>
-### func \(\*PillarEpochHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L532>)
+### func \(\*PillarEpochHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L547>)
 
 ```go
 func (peh *PillarEpochHistory) Save(context db.DB) error
@@ -1925,7 +1922,7 @@ func (peh *PillarEpochHistory) Save(context db.DB) error
 Save persists the receiver under its keyed slot in storage.
 
 <a name="PillarEpochHistory.ToPillarEpochHistoryMarshal"></a>
-### func \(\*PillarEpochHistory\) [ToPillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L620>)
+### func \(\*PillarEpochHistory\) [ToPillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L638>)
 
 ```go
 func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMarshal
@@ -1934,7 +1931,7 @@ func (g *PillarEpochHistory) ToPillarEpochHistoryMarshal() *PillarEpochHistoryMa
 ToPillarEpochHistoryMarshal projects the receiver to its JSON\-friendly PillarEpochHistoryMarshal twin.
 
 <a name="PillarEpochHistory.UnmarshalJSON"></a>
-### func \(\*PillarEpochHistory\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L639>)
+### func \(\*PillarEpochHistory\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L657>)
 
 ```go
 func (g *PillarEpochHistory) UnmarshalJSON(data []byte) error
@@ -1943,7 +1940,7 @@ func (g *PillarEpochHistory) UnmarshalJSON(data []byte) error
 UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="PillarEpochHistoryMarshal"></a>
-## type [PillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L609-L617>)
+## type [PillarEpochHistoryMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L627-L635>)
 
 PillarEpochHistoryMarshal is the JSON\-friendly twin of [PillarEpochHistory](<#PillarEpochHistory>) \(Weight as a string so it round\-trips through clients without big\-integer support\).
 
@@ -1980,7 +1977,7 @@ type PillarInfo struct {
 ```
 
 <a name="GetPillarInfo"></a>
-### func [GetPillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L227>)
+### func [GetPillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L229>)
 
 ```go
 func GetPillarInfo(context db.DB, name string) (*PillarInfo, error)
@@ -1989,13 +1986,13 @@ func GetPillarInfo(context db.DB, name string) (*PillarInfo, error)
 GetPillarInfo loads the PillarInfo record from storage.
 
 <a name="GetPillarsList"></a>
-### func [GetPillarsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L237>)
+### func [GetPillarsList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L244>)
 
 ```go
 func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*PillarInfo, error)
 ```
 
-GetPillarsList loads the PillarsList record from storage.
+GetPillarsList iterates the [PillarInfo](<#PillarInfo>) prefix range and returns every registered pillar matching the filters: onlyActive limits to entries with no RevokeTime; pillarType filters by [LegacyPillarType](<#ABIPillars>) / [NormalPillarType](<#ABIPillars>) \(use [AnyPillarType](<#ABIPillars>) to match either\). Decode failures abort the iteration with the underlying error.
 
 <a name="PillarInfo.IsActive"></a>
 ### func \(\*PillarInfo\) [IsActive](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L185>)
@@ -2029,16 +2026,16 @@ type PillarVote struct {
 ```
 
 <a name="GetAllPillarVotes"></a>
-### func [GetAllPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L538>)
+### func [GetAllPillarVotes](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L541>)
 
 ```go
 func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote
 ```
 
-GetAllPillarVotes loads the AllPillarVotes record from storage.
+GetAllPillarVotes iterates the entire pillar\-vote prefix range and returns every [PillarVote](<#PillarVote>) whose Id matches id. Decode failures on individual entries are skipped; iterator errors are panicked via \[common.DealWithErr\].
 
 <a name="GetPillarVote"></a>
-### func [GetPillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L560>)
+### func [GetPillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L563>)
 
 ```go
 func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, error)
@@ -2083,7 +2080,7 @@ func (vote *PillarVote) Save(context db.DB)
 Save persists the receiver under its keyed slot in storage.
 
 <a name="ProducingPillar"></a>
-## type [ProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L265-L268>)
+## type [ProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L272-L275>)
 
 ProducingPillar is the reverse\-index record from producing\-key address to pillar name. Lets the consensus layer resolve a momentum's signer to a registered pillar in O\(1\).
 
@@ -2095,7 +2092,7 @@ type ProducingPillar struct {
 ```
 
 <a name="GetProducingPillarName"></a>
-### func [GetProducingPillarName](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L318>)
+### func [GetProducingPillarName](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L327>)
 
 ```go
 func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPillar, error)
@@ -2104,7 +2101,7 @@ func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPil
 GetProducingPillarName loads the ProducingPillarName record from storage.
 
 <a name="ProducingPillar.Save"></a>
-### func \(\*ProducingPillar\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L271>)
+### func \(\*ProducingPillar\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L278>)
 
 ```go
 func (ppName *ProducingPillar) Save(context db.DB) error
@@ -2215,7 +2212,7 @@ type QsrDeposit struct {
 func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error)
 ```
 
-GetQsrDeposit returns deposited QSR for sentinel/pillar. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
+GetQsrDeposit returns deposited QSR for sentinel/pillar. does not return constants.ErrDataNonExistent; returns a valid deposit with 0 amount instead.
 
 <a name="QsrDeposit.Delete"></a>
 ### func \(\*QsrDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L319>)
@@ -2236,7 +2233,7 @@ func (deposit *QsrDeposit) Save(context db.DB) error
 Save persists the receiver under its keyed slot in storage.
 
 <a name="RedeemParam"></a>
-## type [RedeemParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1325-L1328>)
+## type [RedeemParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1287-L1290>)
 
 RedeemParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -2263,7 +2260,7 @@ type RegisterParam struct {
 ```
 
 <a name="RequestPair"></a>
-## type [RequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L806-L809>)
+## type [RequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L781-L784>)
 
 RequestPair is the \(id → creation height\) lookup used to find a wrap or unwrap request by id without scanning the height\-keyed primary index.
 
@@ -2275,16 +2272,16 @@ type RequestPair struct {
 ```
 
 <a name="GetRequestPairById"></a>
-### func [GetRequestPairById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L849>)
+### func [GetRequestPairById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L822>)
 
 ```go
 func GetRequestPairById(context db.DB, Id types.Hash) (*RequestPair, error)
 ```
 
-GetRequestPairById loads the RequestPairById record from storage. GetRequestPairById loads the RequestPair record for Id, or \[constants.ErrDataNonExistent\] if no such request was ever recorded.
+GetRequestPairById loads the RequestPair record for Id, or \[constants.ErrDataNonExistent\] if no such request was ever recorded.
 
 <a name="RequestPair.Key"></a>
-### func \(\*RequestPair\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L824>)
+### func \(\*RequestPair\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L798>)
 
 ```go
 func (pair *RequestPair) Key() []byte
@@ -2293,7 +2290,7 @@ func (pair *RequestPair) Key() []byte
 Key returns the storage key for pair \(id\-scoped\).
 
 <a name="RequestPair.Save"></a>
-### func \(\*RequestPair\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L812>)
+### func \(\*RequestPair\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L787>)
 
 ```go
 func (pair *RequestPair) Save(context db.DB) error
@@ -2302,7 +2299,7 @@ func (pair *RequestPair) Save(context db.DB) error
 Save persists pair under its keyed slot in storage.
 
 <a name="RevokeUnwrapParam"></a>
-## type [RevokeUnwrapParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1318-L1322>)
+## type [RevokeUnwrapParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1281-L1284>)
 
 RevokeUnwrapParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -2333,7 +2330,7 @@ type RewardDeposit struct {
 func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, error)
 ```
 
-GetRewardDeposit returns uncollected ZNN & QSR reward. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
+GetRewardDeposit returns uncollected ZNN & QSR reward. does not return constants.ErrDataNonExistent; returns a valid deposit with 0 amount instead.
 
 <a name="RewardDeposit.Delete"></a>
 ### func \(\*RewardDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L191>)
@@ -2426,7 +2423,7 @@ type RewardDepositMarshal struct {
 ```
 
 <a name="SecurityInfoVariable"></a>
-## type [SecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L724-L733>)
+## type [SecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L730-L739>)
 
 SecurityInfoVariable This refers to time challenge security
 
@@ -2444,7 +2441,7 @@ type SecurityInfoVariable struct {
 ```
 
 <a name="GetSecurityInfoVariable"></a>
-### func [GetSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L770>)
+### func [GetSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L776>)
 
 ```go
 func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error)
@@ -2453,7 +2450,7 @@ func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error)
 GetSecurityInfoVariable loads the SecurityInfoVariable record from storage.
 
 <a name="SecurityInfoVariable.Save"></a>
-### func \(\*SecurityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L736>)
+### func \(\*SecurityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L742>)
 
 ```go
 func (s *SecurityInfoVariable) Save(context db.DB) error
@@ -2554,9 +2551,9 @@ type SetAdditionalRewardParam struct {
 ```
 
 <a name="SetNetworkMetadataParam"></a>
-## type [SetNetworkMetadataParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1399-L1403>)
+## type [SetNetworkMetadataParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1363-L1367>)
 
-SetNetworkMetadataParam updates the NetworkMetadataParam state on the receiver.
+SetNetworkMetadataParam carries the call parameters for [SetNetworkMetadataMethodName](<#WrapTokenMethodName>) — updates a registered network's free\-form metadata blob.
 
 ```go
 type SetNetworkMetadataParam struct {
@@ -2567,9 +2564,9 @@ type SetNetworkMetadataParam struct {
 ```
 
 <a name="SetTokenPairParam"></a>
-## type [SetTokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1378-L1387>)
+## type [SetTokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1340-L1349>)
 
-SetTokenPairParam updates the TokenPairParam state on the receiver.
+SetTokenPairParam carries the call parameters for the SetTokenPair\-style embedded\-contract methods \(administrator\-only per\-pair updates\).
 
 ```go
 type SetTokenPairParam struct {
@@ -2777,7 +2774,7 @@ func (assets *SwapAssets) Save(context db.DB) error
 Save writes assets into context's storage.
 
 <a name="TimeChallengeInfo"></a>
-## type [TimeChallengeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L662-L666>)
+## type [TimeChallengeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L668-L672>)
 
 TimeChallengeInfo is part of the package's public API; see the surrounding code for usage.
 
@@ -2790,7 +2787,7 @@ type TimeChallengeInfo struct {
 ```
 
 <a name="GetTimeChallengeInfoVariable"></a>
-### func [GetTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L701>)
+### func [GetTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L707>)
 
 ```go
 func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChallengeInfo, error)
@@ -2799,7 +2796,7 @@ func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChalle
 GetTimeChallengeInfoVariable loads the TimeChallengeInfoVariable record from storage.
 
 <a name="TimeChallengeInfo.Delete"></a>
-### func \(\*TimeChallengeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L719>)
+### func \(\*TimeChallengeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L725>)
 
 ```go
 func (t *TimeChallengeInfo) Delete(context db.DB) error
@@ -2808,7 +2805,7 @@ func (t *TimeChallengeInfo) Delete(context db.DB) error
 Delete removes the receiver's record from storage.
 
 <a name="TimeChallengeInfo.Key"></a>
-### func \(\*TimeChallengeInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L714>)
+### func \(\*TimeChallengeInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L720>)
 
 ```go
 func (t *TimeChallengeInfo) Key() []byte
@@ -2817,7 +2814,7 @@ func (t *TimeChallengeInfo) Key() []byte
 Key returns the storage key for the receiver.
 
 <a name="TimeChallengeInfo.Save"></a>
-### func \(\*TimeChallengeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L669>)
+### func \(\*TimeChallengeInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L675>)
 
 ```go
 func (t *TimeChallengeInfo) Save(context db.DB) error
@@ -2896,7 +2893,7 @@ type TokenPair struct {
 ```
 
 <a name="GetTokenPairVariable"></a>
-### func [GetTokenPairVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L789>)
+### func [GetTokenPairVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L765>)
 
 ```go
 func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zts types.ZenonTokenStandard) (*TokenPair, error)
@@ -2905,7 +2902,7 @@ func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zt
 GetTokenPairVariable returns the [TokenPair](<#TokenPair>) for zts on the \(networkClass, chainId\) network, or \[leveldb.ErrNotFound\] if no such pair is configured.
 
 <a name="TokenPair.MarshalJSON"></a>
-### func \(\*TokenPair\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L490>)
+### func \(\*TokenPair\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L487>)
 
 ```go
 func (t *TokenPair) MarshalJSON() ([]byte, error)
@@ -2914,7 +2911,7 @@ func (t *TokenPair) MarshalJSON() ([]byte, error)
 MarshalJSON forwards through [TokenPair.ToMarshalJson](<#TokenPair.ToMarshalJson>) so the decimal\-string Marshall form is what hits the wire.
 
 <a name="TokenPair.ToMarshalJson"></a>
-### func \(\*TokenPair\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L471>)
+### func \(\*TokenPair\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L470>)
 
 ```go
 func (t *TokenPair) ToMarshalJson() *TokenPairMarshall
@@ -2923,7 +2920,7 @@ func (t *TokenPair) ToMarshalJson() *TokenPairMarshall
 ToMarshalJson projects t to its JSON\-friendly Marshall twin \(decimal\-string MinAmount\).
 
 <a name="TokenPair.UnmarshalJSON"></a>
-### func \(\*TokenPair\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L496>)
+### func \(\*TokenPair\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L493>)
 
 ```go
 func (t *TokenPair) UnmarshalJSON(data []byte) error
@@ -2932,7 +2929,7 @@ func (t *TokenPair) UnmarshalJSON(data []byte) error
 UnmarshalJSON inflates the wire form back into native big.Int fields.
 
 <a name="TokenPairMarshall"></a>
-## type [TokenPairMarshall](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L456-L467>)
+## type [TokenPairMarshall](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L456-L466>)
 
 TokenPairMarshall is the JSON\-friendly twin of [TokenPair](<#TokenPair>) \(MinAmount as a string for clients without big\-integer support\).
 
@@ -2945,27 +2942,24 @@ type TokenPairMarshall struct {
     Owned         bool                     `json:"owned"`
     MinAmount     string                   `json:"minAmount"`
     FeePercentage uint32                   `json:"feePercentage"`
-    // ToMarshalJson projects the receiver to its JSON wire form.
-    RedeemDelay uint32 `json:"redeemDelay"`
-    Metadata    string `json:"metadata"`
+    RedeemDelay   uint32                   `json:"redeemDelay"`
+    Metadata      string                   `json:"metadata"`
 }
 ```
 
 <a name="TokenPairParam"></a>
-## type [TokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1331-L1345>)
+## type [TokenPairParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1293-L1305>)
 
 TokenPairParam carries the call parameters for the corresponding embedded\-contract method.
 
 ```go
 type TokenPairParam struct {
-    // SetNetworkMetadataParam updates the NetworkMetadataParam state on the receiver.
     NetworkClass  uint32
     ChainId       uint32
     TokenStandard types.ZenonTokenStandard
     TokenAddress  string
     Bridgeable    bool
     Redeemable    bool
-    // ChangeECDSAPubKeyParam is part of the package's public API; see the surrounding code for usage.
     Owned         bool
     MinAmount     *big.Int
     FeePercentage uint32
@@ -2975,7 +2969,7 @@ type TokenPairParam struct {
 ```
 
 <a name="TokenPairParam.Hash"></a>
-### func \(\*TokenPairParam\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1348>)
+### func \(\*TokenPairParam\) [Hash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1308>)
 
 ```go
 func (p *TokenPairParam) Hash() []byte
@@ -3065,15 +3059,14 @@ type UnlockHtlcParam struct {
 ```
 
 <a name="UnwrapTokenParam"></a>
-## type [UnwrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1305-L1315>)
+## type [UnwrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1269-L1278>)
 
 UnwrapTokenParam carries the call parameters for the corresponding embedded\-contract method.
 
 ```go
 type UnwrapTokenParam struct {
-    NetworkClass uint32
-    ChainId      uint32
-    // SetTokenPairParam updates the TokenPairParam state on the receiver.
+    NetworkClass    uint32
+    ChainId         uint32
     TransactionHash types.Hash
     LogIndex        uint32
     ToAddress       types.Address
@@ -3084,13 +3077,12 @@ type UnwrapTokenParam struct {
 ```
 
 <a name="UnwrapTokenRequest"></a>
-## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1032-L1047>)
+## type [UnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1005-L1018>)
 
-UnwrapTokenRequest is part of the package's public API; see the surrounding code for usage.
+UnwrapTokenRequest is the on\-chain record of an inbound bridge transfer \(remote chain → Zenon\). Indexed by \(TransactionHash, LogIndex\) so the same remote burn cannot be claimed twice. Redeemed / Revoked are uint8 booleans tracking lifecycle: a pending request is redeemed via [RedeemUnwrapMethodName](<#WrapTokenMethodName>) after the per\-pair redeem delay or revoked by the administrator via [RevokeUnwrapRequestMethodName](<#WrapTokenMethodName>).
 
 ```go
 type UnwrapTokenRequest struct {
-    // GetUnwrapTokenRequestByTxHashAndLog loads the UnwrapTokenRequestByTxHashAndLog record from storage.
     RegistrationMomentumHeight uint64                   `json:"registrationMomentumHeight"`
     NetworkClass               uint32                   `json:"networkClass"`
     ChainId                    uint32                   `json:"chainId"`
@@ -3100,33 +3092,32 @@ type UnwrapTokenRequest struct {
     TokenAddress               string                   `json:"tokenAddress"`
     TokenStandard              types.ZenonTokenStandard `json:"tokenStandard"`
     Amount                     *big.Int                 `json:"amount"`
-    // GetUnwrapTokenRequests loads the UnwrapTokenRequests record from storage.
-    Signature string `json:"signature"`
-    Redeemed  uint8  `json:"redeemed"`
-    Revoked   uint8  `json:"revoked"`
+    Signature                  string                   `json:"signature"`
+    Redeemed                   uint8                    `json:"redeemed"`
+    Revoked                    uint8                    `json:"revoked"`
 }
 ```
 
 <a name="GetUnwrapTokenRequestByTxHashAndLog"></a>
-### func [GetUnwrapTokenRequestByTxHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1104>)
+### func [GetUnwrapTokenRequestByTxHashAndLog](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1075>)
 
 ```go
 func GetUnwrapTokenRequestByTxHashAndLog(context db.DB, txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error)
 ```
 
-GetUnwrapTokenRequestByTxHashAndLog loads the UnwrapTokenRequestByTxHashAndLog record from storage.
+GetUnwrapTokenRequestByTxHashAndLog returns the [UnwrapTokenRequest](<#UnwrapTokenRequest>) keyed by \(txHash, logIndex\), or \[constants.ErrDataNonExistent\] if no such request was recorded.
 
 <a name="GetUnwrapTokenRequests"></a>
-### func [GetUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1116>)
+### func [GetUnwrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1088>)
 
 ```go
 func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error)
 ```
 
-GetUnwrapTokenRequests loads the UnwrapTokenRequests record from storage.
+GetUnwrapTokenRequests iterates the \[unwrapTokenRequestKeyPrefix\] range and returns every recorded inbound unwrap request. Decode failures abort the iteration with the underlying error.
 
 <a name="UnwrapTokenRequest.Delete"></a>
-### func \(\*UnwrapTokenRequest\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1076>)
+### func \(\*UnwrapTokenRequest\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1046>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Delete(context db.DB) error
@@ -3135,7 +3126,7 @@ func (unwrapRequest *UnwrapTokenRequest) Delete(context db.DB) error
 Delete removes the receiver's record from storage.
 
 <a name="UnwrapTokenRequest.Key"></a>
-### func \(\*UnwrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1071>)
+### func \(\*UnwrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1041>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Key() []byte
@@ -3144,7 +3135,7 @@ func (unwrapRequest *UnwrapTokenRequest) Key() []byte
 Key returns the storage key for the receiver.
 
 <a name="UnwrapTokenRequest.MarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1177>)
+### func \(\*UnwrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1146>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) MarshalJSON() ([]byte, error)
@@ -3153,7 +3144,7 @@ func (unwrapRequest *UnwrapTokenRequest) MarshalJSON() ([]byte, error)
 MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="UnwrapTokenRequest.Save"></a>
-### func \(\*UnwrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1050>)
+### func \(\*UnwrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1021>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) Save(context db.DB) error
@@ -3162,7 +3153,7 @@ func (unwrapRequest *UnwrapTokenRequest) Save(context db.DB) error
 Save persists the receiver under its keyed slot in storage.
 
 <a name="UnwrapTokenRequest.ToMarshalJson"></a>
-### func \(\*UnwrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1157>)
+### func \(\*UnwrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1127>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) ToMarshalJson() *UnwrapTokenRequestMarshal
@@ -3171,7 +3162,7 @@ func (unwrapRequest *UnwrapTokenRequest) ToMarshalJson() *UnwrapTokenRequestMars
 ToMarshalJson projects the receiver to its JSON wire form.
 
 <a name="UnwrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1182>)
+### func \(\*UnwrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1151>)
 
 ```go
 func (unwrapRequest *UnwrapTokenRequest) UnmarshalJSON(data []byte) error
@@ -3180,25 +3171,24 @@ func (unwrapRequest *UnwrapTokenRequest) UnmarshalJSON(data []byte) error
 UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="UnwrapTokenRequestMarshal"></a>
-## type [UnwrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1140-L1154>)
+## type [UnwrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1111-L1124>)
 
 UnwrapTokenRequestMarshal is the JSON\-friendly twin of the corresponding in\-memory type.
 
 ```go
 type UnwrapTokenRequestMarshal struct {
-    RegistrationMomentumHeight uint64 `json:"registrationMomentumHeight"`
-    NetworkClass               uint32 `json:"networkClass"`
-    ChainId                    uint32 `json:"chainId"`
-    // OrchestratorInfo is part of the package's public API; see the surrounding code for usage.
-    TransactionHash types.Hash               `json:"transactionHash"`
-    LogIndex        uint32                   `json:"logIndex"`
-    ToAddress       types.Address            `json:"toAddress"`
-    TokenAddress    string                   `json:"tokenAddress"`
-    TokenStandard   types.ZenonTokenStandard `json:"tokenStandard"`
-    Amount          string                   `json:"amount"`
-    Signature       string                   `json:"signature"`
-    Redeemed        uint8                    `json:"redeemed"`
-    Revoked         uint8                    `json:"revoked"`
+    RegistrationMomentumHeight uint64                   `json:"registrationMomentumHeight"`
+    NetworkClass               uint32                   `json:"networkClass"`
+    ChainId                    uint32                   `json:"chainId"`
+    TransactionHash            types.Hash               `json:"transactionHash"`
+    LogIndex                   uint32                   `json:"logIndex"`
+    ToAddress                  types.Address            `json:"toAddress"`
+    TokenAddress               string                   `json:"tokenAddress"`
+    TokenStandard              types.ZenonTokenStandard `json:"tokenStandard"`
+    Amount                     string                   `json:"amount"`
+    Signature                  string                   `json:"signature"`
+    Redeemed                   uint8                    `json:"redeemed"`
+    Revoked                    uint8                    `json:"revoked"`
 }
 ```
 
@@ -3217,7 +3207,7 @@ type UpdateTokenParam struct {
 ```
 
 <a name="UpdateWrapRequestParam"></a>
-## type [UpdateWrapRequestParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1299-L1302>)
+## type [UpdateWrapRequestParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1263-L1266>)
 
 UpdateWrapRequestParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -3229,7 +3219,7 @@ type UpdateWrapRequestParam struct {
 ```
 
 <a name="VotableHash"></a>
-## type [VotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L570-L573>)
+## type [VotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L573-L576>)
 
 VotableHash is part of the package's public API; see the surrounding code for usage.
 
@@ -3241,7 +3231,7 @@ type VotableHash struct {
 ```
 
 <a name="GetVotableHash"></a>
-### func [GetVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L624>)
+### func [GetVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L627>)
 
 ```go
 func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error)
@@ -3250,7 +3240,7 @@ func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error)
 GetVotableHash loads the VotableHash record from storage.
 
 <a name="VotableHash.Data"></a>
-### func \(\*VotableHash\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L591>)
+### func \(\*VotableHash\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L594>)
 
 ```go
 func (votable *VotableHash) Data() []byte
@@ -3259,7 +3249,7 @@ func (votable *VotableHash) Data() []byte
 Data ABI\-encodes the votable\-hash marker for storage.
 
 <a name="VotableHash.Delete"></a>
-### func \(\*VotableHash\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L581>)
+### func \(\*VotableHash\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L584>)
 
 ```go
 func (votable *VotableHash) Delete(context db.DB)
@@ -3268,7 +3258,7 @@ func (votable *VotableHash) Delete(context db.DB)
 Delete removes the receiver's record from storage.
 
 <a name="VotableHash.Key"></a>
-### func \(\*VotableHash\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L586>)
+### func \(\*VotableHash\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L589>)
 
 ```go
 func (votable *VotableHash) Key() []byte
@@ -3277,7 +3267,7 @@ func (votable *VotableHash) Key() []byte
 Key returns the storage key for the receiver.
 
 <a name="VotableHash.Save"></a>
-### func \(\*VotableHash\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L576>)
+### func \(\*VotableHash\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L579>)
 
 ```go
 func (votable *VotableHash) Save(context db.DB)
@@ -3286,7 +3276,7 @@ func (votable *VotableHash) Save(context db.DB)
 Save persists the receiver under its keyed slot in storage.
 
 <a name="VoteBreakdown"></a>
-## type [VoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L634-L639>)
+## type [VoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L637-L642>)
 
 VoteBreakdown is part of the package's public API; see the surrounding code for usage.
 
@@ -3300,16 +3290,16 @@ type VoteBreakdown struct {
 ```
 
 <a name="GetVoteBreakdown"></a>
-### func [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L642>)
+### func [GetVoteBreakdown](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L648>)
 
 ```go
 func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown
 ```
 
-GetVoteBreakdown loads the VoteBreakdown record from storage.
+GetVoteBreakdown aggregates [GetAllPillarVotes](<#GetAllPillarVotes>) for id into a [VoteBreakdown](<#VoteBreakdown>) with Total / Yes / No tallies. There is no stored breakdown record — counts are recomputed from per\-vote entries on every call.
 
 <a name="WrapTokenParam"></a>
-## type [WrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1292-L1296>)
+## type [WrapTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1256-L1260>)
 
 WrapTokenParam carries the call parameters for the corresponding embedded\-contract method.
 
@@ -3322,28 +3312,27 @@ type WrapTokenParam struct {
 ```
 
 <a name="WrapTokenRequest"></a>
-## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L862-L874>)
+## type [WrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L835-L846>)
 
 WrapTokenRequest is the on\-chain record of an outbound bridge transfer \(Zenon → remote chain\). Indexed by creation\-height \+ id; the orchestrator signs Signature once the bridge has approved the transfer.
 
 ```go
 type WrapTokenRequest struct {
-    NetworkClass  uint32                   `json:"networkClass"`
-    ChainId       uint32                   `json:"chainId"`
-    Id            types.Hash               `json:"id"`
-    ToAddress     string                   `json:"toAddress"`
-    TokenStandard types.ZenonTokenStandard `json:"tokenStandard"`
-    // GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
-    TokenAddress           string   `json:"tokenAddress"`
-    Amount                 *big.Int `json:"amount"`
-    Fee                    *big.Int `json:"fee"`
-    Signature              string   `json:"signature"`
-    CreationMomentumHeight uint64   `json:"creationMomentumHeight"`
+    NetworkClass           uint32                   `json:"networkClass"`
+    ChainId                uint32                   `json:"chainId"`
+    Id                     types.Hash               `json:"id"`
+    ToAddress              string                   `json:"toAddress"`
+    TokenStandard          types.ZenonTokenStandard `json:"tokenStandard"`
+    TokenAddress           string                   `json:"tokenAddress"`
+    Amount                 *big.Int                 `json:"amount"`
+    Fee                    *big.Int                 `json:"fee"`
+    Signature              string                   `json:"signature"`
+    CreationMomentumHeight uint64                   `json:"creationMomentumHeight"`
 }
 ```
 
 <a name="GetWrapTokenRequestById"></a>
-### func [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L933>)
+### func [GetWrapTokenRequestById](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L903>)
 
 ```go
 func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, error)
@@ -3352,16 +3341,16 @@ func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, e
 GetWrapTokenRequestById resolves Id through the [RequestPair](<#RequestPair>) index and returns the corresponding [WrapTokenRequest](<#WrapTokenRequest>).
 
 <a name="GetWrapTokenRequests"></a>
-### func [GetWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L949>)
+### func [GetWrapTokenRequests](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L920>)
 
 ```go
 func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error)
 ```
 
-GetWrapTokenRequests loads the WrapTokenRequests record from storage.
+GetWrapTokenRequests iterates the \[wrapTokenRequestKeyPrefix\] range and returns every recorded outbound wrap request. Decode failures abort the iteration with the underlying error. The MaxInt64\-height key encoding produces newest\-first ordering.
 
 <a name="WrapTokenRequest.Key"></a>
-### func \(\*WrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L908>)
+### func \(\*WrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L879>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) Key() []byte
@@ -3370,7 +3359,7 @@ func (wrapRequest *WrapTokenRequest) Key() []byte
 Key returns the height\-keyed storage key for wrapRequest. The height is encoded as MaxInt64\-height so iteration sorts newest first.
 
 <a name="WrapTokenRequest.MarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1007>)
+### func \(\*WrapTokenRequest\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L974>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) MarshalJSON() ([]byte, error)
@@ -3379,7 +3368,7 @@ func (wrapRequest *WrapTokenRequest) MarshalJSON() ([]byte, error)
 MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 
 <a name="WrapTokenRequest.Save"></a>
-### func \(\*WrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L878>)
+### func \(\*WrapTokenRequest\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L850>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) Save(context db.DB) error
@@ -3388,7 +3377,7 @@ func (wrapRequest *WrapTokenRequest) Save(context db.DB) error
 Save writes wrapRequest into both indexes \(height\-keyed primary and id\-keyed [RequestPair](<#RequestPair>)\).
 
 <a name="WrapTokenRequest.ToMarshalJson"></a>
-### func \(\*WrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L988>)
+### func \(\*WrapTokenRequest\) [ToMarshalJson](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L957>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) ToMarshalJson() *WrapTokenRequestMarshal
@@ -3397,7 +3386,7 @@ func (wrapRequest *WrapTokenRequest) ToMarshalJson() *WrapTokenRequestMarshal
 ToMarshalJson projects the receiver to its JSON wire form.
 
 <a name="WrapTokenRequest.UnmarshalJSON"></a>
-### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1012>)
+### func \(\*WrapTokenRequest\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L979>)
 
 ```go
 func (wrapRequest *WrapTokenRequest) UnmarshalJSON(data []byte) error
@@ -3406,17 +3395,16 @@ func (wrapRequest *WrapTokenRequest) UnmarshalJSON(data []byte) error
 UnmarshalJSON inflates the JSON wire form back into the in\-memory receiver.
 
 <a name="WrapTokenRequestMarshal"></a>
-## type [WrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L973-L985>)
+## type [WrapTokenRequestMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L943-L954>)
 
 WrapTokenRequestMarshal is the JSON\-friendly twin of the corresponding in\-memory type.
 
 ```go
 type WrapTokenRequestMarshal struct {
-    NetworkClass uint32     `json:"networkClass"`
-    ChainId      uint32     `json:"chainId"`
-    Id           types.Hash `json:"id"`
-    ToAddress    string     `json:"toAddress"`
-    // Save persists the receiver under its keyed slot in storage.
+    NetworkClass           uint32                   `json:"networkClass"`
+    ChainId                uint32                   `json:"chainId"`
+    Id                     types.Hash               `json:"id"`
+    ToAddress              string                   `json:"toAddress"`
     TokenStandard          types.ZenonTokenStandard `json:"tokenStandard"`
     TokenAddress           string                   `json:"tokenAddress"`
     Amount                 string                   `json:"amount"`
@@ -3427,7 +3415,7 @@ type WrapTokenRequestMarshal struct {
 ```
 
 <a name="ZtsFeesInfo"></a>
-## type [ZtsFeesInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L532-L535>)
+## type [ZtsFeesInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L524-L527>)
 
 ZtsFeesInfo tracks accumulated bridge fees per token standard.
 
@@ -3439,7 +3427,7 @@ type ZtsFeesInfo struct {
 ```
 
 <a name="GetZtsFeesInfoVariable"></a>
-### func [GetZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L621>)
+### func [GetZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L605>)
 
 ```go
 func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandard) (*ZtsFeesInfo, error)
@@ -3448,16 +3436,16 @@ func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandar
 GetZtsFeesInfoVariable loads the [ZtsFeesInfo](<#ZtsFeesInfo>) for tokenStandard, returning a zero record \(no error\) when none exists.
 
 <a name="ZtsFeesInfo.Delete"></a>
-### func \(\*ZtsFeesInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L595>)
+### func \(\*ZtsFeesInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L580>)
 
 ```go
 func (zfi *ZtsFeesInfo) Delete(context db.DB) error
 ```
 
-Delete removes the receiver's record from storage. Delete removes zfi's record from storage.
+Delete removes zfi's record from storage.
 
 <a name="ZtsFeesInfo.Key"></a>
-### func \(\*ZtsFeesInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L589>)
+### func \(\*ZtsFeesInfo\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L575>)
 
 ```go
 func (zfi *ZtsFeesInfo) Key() ([]byte, error)
@@ -3466,7 +3454,7 @@ func (zfi *ZtsFeesInfo) Key() ([]byte, error)
 Key returns the storage key for zfi \(token\-standard\-scoped\).
 
 <a name="ZtsFeesInfo.MarshalJSON"></a>
-### func \(\*ZtsFeesInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L558>)
+### func \(\*ZtsFeesInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L546>)
 
 ```go
 func (zfi *ZtsFeesInfo) MarshalJSON() ([]byte, error)
@@ -3475,7 +3463,7 @@ func (zfi *ZtsFeesInfo) MarshalJSON() ([]byte, error)
 MarshalJSON forwards through the Marshal twin.
 
 <a name="ZtsFeesInfo.Save"></a>
-### func \(\*ZtsFeesInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L576>)
+### func \(\*ZtsFeesInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L562>)
 
 ```go
 func (zfi *ZtsFeesInfo) Save(context db.DB) error
@@ -3484,7 +3472,7 @@ func (zfi *ZtsFeesInfo) Save(context db.DB) error
 Save persists zfi under its keyed slot in storage.
 
 <a name="ZtsFeesInfo.ToZtsFeesInfoMarshal"></a>
-### func \(\*ZtsFeesInfo\) [ToZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L548>)
+### func \(\*ZtsFeesInfo\) [ToZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L537>)
 
 ```go
 func (zfi *ZtsFeesInfo) ToZtsFeesInfoMarshal() *ZtsFeesInfoMarshal
@@ -3493,7 +3481,7 @@ func (zfi *ZtsFeesInfo) ToZtsFeesInfoMarshal() *ZtsFeesInfoMarshal
 ToZtsFeesInfoMarshal projects zfi to its JSON\-friendly twin.
 
 <a name="ZtsFeesInfo.UnmarshalJSON"></a>
-### func \(\*ZtsFeesInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L563>)
+### func \(\*ZtsFeesInfo\) [UnmarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L551>)
 
 ```go
 func (zfi *ZtsFeesInfo) UnmarshalJSON(data []byte) error
@@ -3502,13 +3490,12 @@ func (zfi *ZtsFeesInfo) UnmarshalJSON(data []byte) error
 UnmarshalJSON inflates the wire form back into native big.Int.
 
 <a name="ZtsFeesInfoMarshal"></a>
-## type [ZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L541-L545>)
+## type [ZtsFeesInfoMarshal](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L531-L534>)
 
 ZtsFeesInfoMarshal is the JSON\-friendly twin of [ZtsFeesInfo](<#ZtsFeesInfo>) \(decimal\-string AccumulatedFee\).
 
 ```go
 type ZtsFeesInfoMarshal struct {
-    // UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
     TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
     AccumulatedFee string                   `json:"accumulatedFee"`
 }

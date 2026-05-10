@@ -107,9 +107,14 @@ var (
         Usage: "Node's name. Visible in the network.",
     }
 
+    // ListenHostFlag — confusingly named "--host"; despite the
+    // "Network" framing, app/config.go maps this flag to
+    // cfg.RPC.HTTPHost (the HTTP-RPC listen interface), NOT to
+    // cfg.Net.ListenHost. Use --http-addr to set the same value
+    // explicitly. Kept for back-compat.
     ListenHostFlag = &cli.StringFlag{
         Name:  "host",
-        Usage: "Network listening host",
+        Usage: "HTTP-RPC server listening interface (despite the name; see flags.go for history)",
         Value: p2p.DefaultListenHost,
     }
     ListenPortFlag = &cli.IntFlag{
@@ -122,9 +127,13 @@ var (
         Usage: "Maximum number of network peers (network disabled if set to 0)",
         Value: p2p.DefaultMaxPeers,
     }
+    // MaxPendingPeersFlag — caps concurrent in-flight p2p
+    // handshakes (counted separately for inbound/outbound); maps to
+    // cfg.Net.MaxPendingPeers. Has nothing to do with database
+    // connection attempts despite older Usage wording.
     MaxPendingPeersFlag = &cli.UintFlag{
         Name:  "max-pending-peers",
-        Usage: "Maximum number of db connection attempts (defaults used if set to 0)",
+        Usage: "Maximum concurrent in-flight peer handshakes (defaults used if set to 0)",
         Value: p2p.DefaultMaxPeers,
     }
 
@@ -204,7 +213,7 @@ func MakeConfig(ctx *cli.Context) (*node.Config, error)
 MakeConfig assembles the final \[node.Config\] used by the running process. Layered: \[node.DefaultNodeConfig\] → optional config.json → CLI flag overrides → path resolution → logging init. Returns the fully populated config.
 
 <a name="Run"></a>
-## func [Run](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L33>)
+## func [Run](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L35>)
 
 ```go
 func Run()
@@ -213,7 +222,7 @@ func Run()
 Run is the CLI entry point. Dispatches the urfave/cli App against os.Args and exits non\-zero on error. Called by both znnd's main and the libznn\-exported RunNode shim.
 
 <a name="Stop"></a>
-## func [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L45>)
+## func [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/cli.go#L47>)
 
 ```go
 func Stop()
@@ -242,16 +251,20 @@ func NewNodeManager(ctx *cli.Context) (*Manager, error)
 NewNodeManager builds the node config, instantiates a \[node.Node\] \(which acquires the data\-dir lock\), and wraps it in a Manager ready for [Manager.Start](<#Manager.Start>).
 
 <a name="Manager.Start"></a>
-### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L53>)
+### func \(\*Manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L64>)
 
 ```go
 func (nodeManager *Manager) Start() error
 ```
 
-Start launches the node, prints producer\-status detection, installs SIGINT/SIGTERM handlers \(a second signal still does not quit; up to 10 are required to escape a graceful shutdown\), and blocks on \[node.Node.Wait\] until the node stops.
+Start launches the node, prints producer\-status detection, installs SIGINT/SIGTERM handlers, and blocks on \[node.Node.Wait\] until the node stops.
+
+Signal semantics: the first SIGINT/SIGTERM triggers Stop in a background goroutine. The handler then drains up to \*\*ten\*\* additional signals before returning — every additional signal in that window is logged as a warning \("Please DO NOT interrupt the shutdown process, panic may occur."\). After ten extra signals the drain loop exits but the process keeps running until \[node.Node.Wait\] returns.
+
+Note: signal.Notify is also asked to listen for SIGKILL, but SIGKILL is uncatchable on Unix — that entry has no effect and is kept only for source\-code symmetry with the other names.
 
 <a name="Manager.Stop"></a>
-### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L99>)
+### func \(\*Manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/app/manager.go#L110>)
 
 ```go
 func (nodeManager *Manager) Stop() error

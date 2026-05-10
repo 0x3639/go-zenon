@@ -379,7 +379,7 @@ func CanPerformEpochUpdate(context vm_context.AccountVmContext, epoch *definitio
 
 CanPerformEpochUpdate checks if embedded contract can perform an epoch update, used most commonly to give rewards
 
-- returns util.EpochUpdateNotDue if not due
+- returns constants.ErrEpochUpdateTooRecent if not due
 
 <a name="CanPerformUpdate"></a>
 ## func [CanPerformUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/common.go#L24>)
@@ -390,7 +390,7 @@ func CanPerformUpdate(context vm_context.AccountVmContext) error
 
 CanPerformUpdate checks if embedded contract can be updated
 
-- returns util.ErrUpdateTooRecent if not due
+- returns constants.ErrUpdateTooRecent if not due
 
 <a name="CheckBridgeHalted"></a>
 ## func [CheckBridgeHalted](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L107>)
@@ -456,40 +456,40 @@ func CheckSwapSignature(messageType int, addr types.Address, pubKeyStr string, s
 CheckSwapSignature recovers the secp256k1 public key from signatureStr and confirms it matches pubKeyStr. messageType selects the operation pre\-image. Returns one of \[constants.ErrInvalidB64Decode\], \[constants.ErrInvalidSwapCode\], or \[constants.ErrInvalidSignature\] on failure.
 
 <a name="GetBasicMethodMessage"></a>
-## func [GetBasicMethodMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L983>)
+## func [GetBasicMethodMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1002>)
 
 ```go
 func GetBasicMethodMessage(methodName string, tssNonce uint64, networkClass uint32, chainId uint64) ([]byte, error)
 ```
 
-GetBasicMethodMessage loads the BasicMethodMessage record from storage.
+GetBasicMethodMessage returns the signing digest used to authorize parameterless administrator/guardian calls \(Halt, Emergency, etc.\): the ABI\-packed \(methodName, networkClass, chainId, tssNonce\) tuple, hashed via [HashByNetworkClass](<#HashByNetworkClass>) for the given network class.
 
 <a name="GetChangePubKeyMessage"></a>
-## func [GetChangePubKeyMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1205>)
+## func [GetChangePubKeyMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1230>)
 
 ```go
 func GetChangePubKeyMessage(methodName string, networkClass uint32, chainId, tssNonce uint64, pubKey string) ([]byte, error)
 ```
 
-GetChangePubKeyMessage loads the ChangePubKeyMessage record from storage.
+GetChangePubKeyMessage returns the signing digest used to authorize a TSS\-key rotation: the ABI\-packed \(methodName, networkClass, chainId, tssNonce, base64\-decoded pubKey\) tuple, hashed via [HashByNetworkClass](<#HashByNetworkClass>). Both the old and new keys must produce a signature over this digest.
 
 <a name="GetHtlcProxyUnlockStatus"></a>
-## func [GetHtlcProxyUnlockStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L24>)
+## func [GetHtlcProxyUnlockStatus](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L29>)
 
 ```go
 func GetHtlcProxyUnlockStatus(context vm_context.AccountVmContext, address types.Address) (bool, error)
 ```
 
-GetHtlcProxyUnlockStatus loads the HtlcProxyUnlockStatus record from storage. This means there are really 3 states: Default, ExplicitDeny, ExplicitAllow And once an address has explicitly denied/allowed proxy unlock, it can no longer go back to using the default This is to ensure that if we ever change the default to deny, addresses that have called the Allow method will still work as expected
+GetHtlcProxyUnlockStatus reads the \[definition.HtlcProxyUnlockInfo\] record for address and returns its Allowed flag. There are really 3 states: Default, ExplicitDeny, ExplicitAllow — when no record exists \(\[constants.ErrDataNonExistent\]\) the function returns the current default \(true / proxy\-unlock allowed\). Once an address has explicitly denied or allowed proxy unlock it can no longer go back to the default; this guarantees that addresses which have already called Allow keep working even if the default is later flipped to deny.
 
 <a name="GetMessageToSignEvm"></a>
-## func [GetMessageToSignEvm](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L246>)
+## func [GetMessageToSignEvm](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L250>)
 
 ```go
 func GetMessageToSignEvm(data []byte) ([]byte, error)
 ```
 
-GetMessageToSignEvm loads the MessageToSignEvm record from storage.
+GetMessageToSignEvm wraps the 32\-byte data argument in the EIP\-191 personal\_sign envelope \("\\x19Ethereum Signed Message:\\n32" \+ data\) and returns the keccak256 digest that an EVM\-compatible signer would actually sign. Returns an error if data is not 32 bytes.
 
 <a name="GetQsrCostForNextPillar"></a>
 ## func [GetQsrCostForNextPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/pillars.go#L118>)
@@ -528,31 +528,31 @@ double-SHA256(serialize(hashHeader) || serialize(operation || pub || addr))
 ```
 
 <a name="GetUnwrapTokenRequestMessage"></a>
-## func [GetUnwrapTokenRequestMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L379>)
+## func [GetUnwrapTokenRequestMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L394>)
 
 ```go
 func GetUnwrapTokenRequestMessage(param *definition.UnwrapTokenParam) ([]byte, error)
 ```
 
-GetUnwrapTokenRequestMessage loads the UnwrapTokenRequestMessage record from storage.
+GetUnwrapTokenRequestMessage returns the signing digest the orchestrator's TSS key must produce for an inbound unwrap claim: the ABI\-packed \(NetworkClass, ChainId, TransactionHash, LogIndex, ToAddress, TokenAddress, Amount\) tuple, hashed via [HashByNetworkClass](<#HashByNetworkClass>) for the param's network class.
 
 <a name="GetWrapTokenRequestMessage"></a>
-## func [GetWrapTokenRequestMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L267>)
+## func [GetWrapTokenRequestMessage](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L278>)
 
 ```go
 func GetWrapTokenRequestMessage(request *definition.WrapTokenRequest, contractAddress *ecommon.Address) ([]byte, error)
 ```
 
-GetWrapTokenRequestMessage loads the WrapTokenRequestMessage record from storage.
+GetWrapTokenRequestMessage returns the signing digest the orchestrator's TSS key must sign to authorize a wrap request: the ABI\-packed \(NetworkClass, ChainId, contractAddress, requestId, ToAddress, TokenAddress, Amount\-Fee\) tuple, hashed via [HashByNetworkClass](<#HashByNetworkClass>) for the request's network class.
 
 <a name="HashByNetworkClass"></a>
-## func [HashByNetworkClass](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L255>)
+## func [HashByNetworkClass](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L262>)
 
 ```go
 func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error)
 ```
 
-HashByNetworkClass reports whether the receiver has the hByNetworkClass property.
+HashByNetworkClass returns the canonical signing digest for data under the given networkClass: a single Hash for \[definition.NoMClass\] or the EIP\-191\-wrapped keccak256\-of\-keccak256 for \[definition.EvmClass\]. Returns an error for unsupported classes.
 
 <a name="IsAcceleratorRunning"></a>
 ## func [IsAcceleratorRunning](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/accelerator.go#L21>)
@@ -564,7 +564,7 @@ func IsAcceleratorRunning(context vm_context.AccountVmContext) error
 IsAcceleratorRunning reports whether the receiver satisfies the AcceleratorRunning predicate.
 
 <a name="IsJSON"></a>
-## func [IsJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L758>)
+## func [IsJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L773>)
 
 ```go
 func IsJSON(s string) bool
@@ -714,7 +714,7 @@ func (p *AddPhaseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="AllowHtlcProxyUnlockMethod"></a>
-## type [AllowHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L366-L368>)
+## type [AllowHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L371-L373>)
 
 AllowHtlcProxyUnlockMethod sets the per\-account proxy\-unlock flag to true, so any caller in possession of the preimage may unlock entries on this account's behalf.
 
@@ -725,7 +725,7 @@ type AllowHtlcProxyUnlockMethod struct {
 ```
 
 <a name="AllowHtlcProxyUnlockMethod.GetPlasma"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L372>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L377>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -734,7 +734,7 @@ func (p *AllowHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="AllowHtlcProxyUnlockMethod.ReceiveBlock"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L395>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L400>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -743,7 +743,7 @@ func (p *AllowHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmCo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="AllowHtlcProxyUnlockMethod.ValidateSendBlock"></a>
-### func \(\*AllowHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L378>)
+### func \(\*AllowHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L383>)
 
 ```go
 func (p *AllowHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -951,7 +951,7 @@ func (p *CancelStakeMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the target stake id and rejects value\-bearing calls.
 
 <a name="ChangeAdministratorLiquidity"></a>
-## type [ChangeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1037-L1039>)
+## type [ChangeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1040-L1042>)
 
 ChangeAdministratorLiquidity rotates the liquidity\-contract administrator after a time\-locked proposal completes.
 
@@ -962,7 +962,7 @@ type ChangeAdministratorLiquidity struct {
 ```
 
 <a name="ChangeAdministratorLiquidity.GetPlasma"></a>
-### func \(\*ChangeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1043>)
+### func \(\*ChangeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1046>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -971,7 +971,7 @@ func (p *ChangeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTa
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ChangeAdministratorLiquidity.ReceiveBlock"></a>
-### func \(\*ChangeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1075>)
+### func \(\*ChangeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1078>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -980,7 +980,7 @@ func (p *ChangeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVm
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ChangeAdministratorLiquidity.ValidateSendBlock"></a>
-### func \(\*ChangeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1049>)
+### func \(\*ChangeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1052>)
 
 ```go
 func (p *ChangeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -989,7 +989,7 @@ func (p *ChangeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="ChangeAdministratorMethod"></a>
-## type [ChangeAdministratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1361-L1363>)
+## type [ChangeAdministratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1386-L1388>)
 
 ChangeAdministratorMethod rotates the administrator address after a [ProposeAdministratorMethod](<#ProposeAdministratorMethod>) proposal has cleared the time\-locked challenge window. Administrator\-only.
 
@@ -1000,7 +1000,7 @@ type ChangeAdministratorMethod struct {
 ```
 
 <a name="ChangeAdministratorMethod.GetPlasma"></a>
-### func \(\*ChangeAdministratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1367>)
+### func \(\*ChangeAdministratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1392>)
 
 ```go
 func (p *ChangeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1009,7 +1009,7 @@ func (p *ChangeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ChangeAdministratorMethod.ReceiveBlock"></a>
-### func \(\*ChangeAdministratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1398>)
+### func \(\*ChangeAdministratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1423>)
 
 ```go
 func (p *ChangeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1018,7 +1018,7 @@ func (p *ChangeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmCon
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ChangeAdministratorMethod.ValidateSendBlock"></a>
-### func \(\*ChangeAdministratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1373>)
+### func \(\*ChangeAdministratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1398>)
 
 ```go
 func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1027,7 +1027,7 @@ func (p *ChangeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) e
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="ChangeTssECDSAPubKeyMethod"></a>
-## type [ChangeTssECDSAPubKeyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1241-L1243>)
+## type [ChangeTssECDSAPubKeyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1266-L1268>)
 
 ChangeTssECDSAPubKeyMethod rotates the TSS public key. Requires signatures from both the old and new keys to prove that the orchestrator key\-generation ceremony has completed and produced a usable key.
 
@@ -1038,7 +1038,7 @@ type ChangeTssECDSAPubKeyMethod struct {
 ```
 
 <a name="ChangeTssECDSAPubKeyMethod.GetPlasma"></a>
-### func \(\*ChangeTssECDSAPubKeyMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1247>)
+### func \(\*ChangeTssECDSAPubKeyMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1272>)
 
 ```go
 func (p *ChangeTssECDSAPubKeyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1047,7 +1047,7 @@ func (p *ChangeTssECDSAPubKeyMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ChangeTssECDSAPubKeyMethod.ReceiveBlock"></a>
-### func \(\*ChangeTssECDSAPubKeyMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1277>)
+### func \(\*ChangeTssECDSAPubKeyMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1302>)
 
 ```go
 func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1056,7 +1056,7 @@ func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmCo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ChangeTssECDSAPubKeyMethod.ValidateSendBlock"></a>
-### func \(\*ChangeTssECDSAPubKeyMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1253>)
+### func \(\*ChangeTssECDSAPubKeyMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1278>)
 
 ```go
 func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1106,7 +1106,7 @@ func (p *CollectRewardMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="CreateHtlcMethod"></a>
-## type [CreateHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L55-L57>)
+## type [CreateHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L60-L62>)
 
 CreateHtlcMethod creates a new hashed\-timelock entry: locks the caller's transferred amount behind \(hashLock, expirationTime\) for the named hashLocked recipient. The recipient may unlock by revealing the preimage before expiration; afterwards the caller may [ReclaimHtlcMethod](<#ReclaimHtlcMethod>) the funds.
 
@@ -1117,7 +1117,7 @@ type CreateHtlcMethod struct {
 ```
 
 <a name="CreateHtlcMethod.GetPlasma"></a>
-### func \(\*CreateHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L61>)
+### func \(\*CreateHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L66>)
 
 ```go
 func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1126,7 +1126,7 @@ func (p *CreateHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="CreateHtlcMethod.ReceiveBlock"></a>
-### func \(\*CreateHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L98>)
+### func \(\*CreateHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L103>)
 
 ```go
 func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1135,7 +1135,7 @@ func (p *CreateHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="CreateHtlcMethod.ValidateSendBlock"></a>
-### func \(\*CreateHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L67>)
+### func \(\*CreateHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L72>)
 
 ```go
 func (p *CreateHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1258,7 +1258,7 @@ func (p *DelegateMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="DenyHtlcProxyUnlockMethod"></a>
-## type [DenyHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L318-L320>)
+## type [DenyHtlcProxyUnlockMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L323-L325>)
 
 DenyHtlcProxyUnlockMethod sets the per\-account proxy\-unlock flag to false \(default\), so only the hashLocked recipient may unlock entries.
 
@@ -1269,7 +1269,7 @@ type DenyHtlcProxyUnlockMethod struct {
 ```
 
 <a name="DenyHtlcProxyUnlockMethod.GetPlasma"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L324>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L329>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1278,7 +1278,7 @@ func (p *DenyHtlcProxyUnlockMethod) GetPlasma(plasmaTable *constants.PlasmaTable
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="DenyHtlcProxyUnlockMethod.ReceiveBlock"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L347>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L352>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1287,7 +1287,7 @@ func (p *DenyHtlcProxyUnlockMethod) ReceiveBlock(context vm_context.AccountVmCon
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="DenyHtlcProxyUnlockMethod.ValidateSendBlock"></a>
-### func \(\*DenyHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L330>)
+### func \(\*DenyHtlcProxyUnlockMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L335>)
 
 ```go
 func (p *DenyHtlcProxyUnlockMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1372,7 +1372,7 @@ func (p *DonateMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="EmergencyLiquidity"></a>
-## type [EmergencyLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1342-L1344>)
+## type [EmergencyLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1345-L1347>)
 
 EmergencyLiquidity is the panic button for the liquidity contract: halts the program, nominates the caller as administrator, and zeroes guardian configuration.
 
@@ -1383,7 +1383,7 @@ type EmergencyLiquidity struct {
 ```
 
 <a name="EmergencyLiquidity.GetPlasma"></a>
-### func \(\*EmergencyLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1348>)
+### func \(\*EmergencyLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1351>)
 
 ```go
 func (p *EmergencyLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1392,7 +1392,7 @@ func (p *EmergencyLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="EmergencyLiquidity.ReceiveBlock"></a>
-### func \(\*EmergencyLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1370>)
+### func \(\*EmergencyLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1373>)
 
 ```go
 func (p *EmergencyLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1401,7 +1401,7 @@ func (p *EmergencyLiquidity) ReceiveBlock(context vm_context.AccountVmContext, s
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="EmergencyLiquidity.ValidateSendBlock"></a>
-### func \(\*EmergencyLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1354>)
+### func \(\*EmergencyLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1357>)
 
 ```go
 func (p *EmergencyLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1410,9 +1410,9 @@ func (p *EmergencyLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="EmergencyMethod"></a>
-## type [EmergencyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1143-L1145>)
+## type [EmergencyMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1164-L1166>)
 
-EmergencyMethod is the panic button: halts the bridge, nominates the caller as administrator, and zeroes guardian / TSS configuration so an incident\-response governance can re\-bootstrap the bridge.
+EmergencyMethod is the panic button: halts the bridge, zeroes the administrator address \(resets to \[types.ZeroAddress\]\) and clears both compressed and decompressed TSS public keys. Administrator\-only; the cleared state forces guardian\-driven re\-bootstrap via [ProposeAdministratorMethod](<#ProposeAdministratorMethod>) / TSS keygen before the bridge can resume.
 
 ```go
 type EmergencyMethod struct {
@@ -1421,7 +1421,7 @@ type EmergencyMethod struct {
 ```
 
 <a name="EmergencyMethod.GetPlasma"></a>
-### func \(\*EmergencyMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1149>)
+### func \(\*EmergencyMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1170>)
 
 ```go
 func (p *EmergencyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1430,7 +1430,7 @@ func (p *EmergencyMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64,
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="EmergencyMethod.ReceiveBlock"></a>
-### func \(\*EmergencyMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1171>)
+### func \(\*EmergencyMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1192>)
 
 ```go
 func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1439,7 +1439,7 @@ func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, send
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="EmergencyMethod.ValidateSendBlock"></a>
-### func \(\*EmergencyMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1155>)
+### func \(\*EmergencyMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1176>)
 
 ```go
 func (p *EmergencyMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1533,7 +1533,7 @@ func (p *FuseMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock checks the call carries QSR \(not ZNN\), the amount meets \[constants.FuseMinAmount\] and is a whole multiple of \[constants.CostPerFusionUnit\].
 
 <a name="HaltMethod"></a>
-## type [HaltMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1006-L1008>)
+## type [HaltMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1025-L1027>)
 
 HaltMethod halts the bridge: any guardian \(or administrator with the right TSS signature\) may halt; halting suspends new wraps and redeems until the configured grace window elapses after [UnhaltMethod](<#UnhaltMethod>) is called.
 
@@ -1544,7 +1544,7 @@ type HaltMethod struct {
 ```
 
 <a name="HaltMethod.GetPlasma"></a>
-### func \(\*HaltMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1012>)
+### func \(\*HaltMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1031>)
 
 ```go
 func (p *HaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1553,7 +1553,7 @@ func (p *HaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, erro
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="HaltMethod.ReceiveBlock"></a>
-### func \(\*HaltMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1036>)
+### func \(\*HaltMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1055>)
 
 ```go
 func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1562,7 +1562,7 @@ func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="HaltMethod.ValidateSendBlock"></a>
-### func \(\*HaltMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1018>)
+### func \(\*HaltMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1037>)
 
 ```go
 func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1723,7 +1723,7 @@ func (p *MintMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the \(token, amount, recipient\) tuple and rejects zero amounts or value\-bearing calls.
 
 <a name="NominateGuardiansLiquidity"></a>
-## type [NominateGuardiansLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1129-L1131>)
+## type [NominateGuardiansLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1132-L1134>)
 
 NominateGuardiansLiquidity sets the liquidity\-program guardian set. Administrator\-only; takes effect after the time\-locked challenge window.
 
@@ -1734,7 +1734,7 @@ type NominateGuardiansLiquidity struct {
 ```
 
 <a name="NominateGuardiansLiquidity.GetPlasma"></a>
-### func \(\*NominateGuardiansLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1135>)
+### func \(\*NominateGuardiansLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1138>)
 
 ```go
 func (p *NominateGuardiansLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1743,7 +1743,7 @@ func (p *NominateGuardiansLiquidity) GetPlasma(plasmaTable *constants.PlasmaTabl
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="NominateGuardiansLiquidity.ReceiveBlock"></a>
-### func \(\*NominateGuardiansLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1172>)
+### func \(\*NominateGuardiansLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1175>)
 
 ```go
 func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1752,7 +1752,7 @@ func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmCo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="NominateGuardiansLiquidity.ValidateSendBlock"></a>
-### func \(\*NominateGuardiansLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1141>)
+### func \(\*NominateGuardiansLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1144>)
 
 ```go
 func (p *NominateGuardiansLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1761,7 +1761,7 @@ func (p *NominateGuardiansLiquidity) ValidateSendBlock(block *nom.AccountBlock) 
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="NominateGuardiansMethod"></a>
-## type [NominateGuardiansMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1834-L1836>)
+## type [NominateGuardiansMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1859-L1861>)
 
 NominateGuardiansMethod sets the bridge guardian set: addresses that may halt the bridge. Administrator\-only; takes effect after the time\-locked governance challenge window.
 
@@ -1772,7 +1772,7 @@ type NominateGuardiansMethod struct {
 ```
 
 <a name="NominateGuardiansMethod.GetPlasma"></a>
-### func \(\*NominateGuardiansMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1840>)
+### func \(\*NominateGuardiansMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1865>)
 
 ```go
 func (p *NominateGuardiansMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1781,7 +1781,7 @@ func (p *NominateGuardiansMethod) GetPlasma(plasmaTable *constants.PlasmaTable) 
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="NominateGuardiansMethod.ReceiveBlock"></a>
-### func \(\*NominateGuardiansMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1877>)
+### func \(\*NominateGuardiansMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1902>)
 
 ```go
 func (p *NominateGuardiansMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1790,7 +1790,7 @@ func (p *NominateGuardiansMethod) ReceiveBlock(context vm_context.AccountVmConte
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="NominateGuardiansMethod.ValidateSendBlock"></a>
-### func \(\*NominateGuardiansMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1846>)
+### func \(\*NominateGuardiansMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1871>)
 
 ```go
 func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1799,7 +1799,7 @@ func (p *NominateGuardiansMethod) ValidateSendBlock(block *nom.AccountBlock) err
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="ProposeAdministratorLiquidity"></a>
-## type [ProposeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1230-L1232>)
+## type [ProposeAdministratorLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1233-L1235>)
 
 ProposeAdministratorLiquidity queues an administrator\-rotation proposal that any guardian can subsequently confirm via [ChangeAdministratorLiquidity](<#ChangeAdministratorLiquidity>) after the time\-lock elapses.
 
@@ -1810,7 +1810,7 @@ type ProposeAdministratorLiquidity struct {
 ```
 
 <a name="ProposeAdministratorLiquidity.GetPlasma"></a>
-### func \(\*ProposeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1236>)
+### func \(\*ProposeAdministratorLiquidity\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1239>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1819,7 +1819,7 @@ func (p *ProposeAdministratorLiquidity) GetPlasma(plasmaTable *constants.PlasmaT
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ProposeAdministratorLiquidity.ReceiveBlock"></a>
-### func \(\*ProposeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1268>)
+### func \(\*ProposeAdministratorLiquidity\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1271>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1828,7 +1828,7 @@ func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountV
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ProposeAdministratorLiquidity.ValidateSendBlock"></a>
-### func \(\*ProposeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1242>)
+### func \(\*ProposeAdministratorLiquidity\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L1245>)
 
 ```go
 func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1837,7 +1837,7 @@ func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBloc
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="ProposeAdministratorMethod"></a>
-## type [ProposeAdministratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1936-L1938>)
+## type [ProposeAdministratorMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1961-L1963>)
 
 ProposeAdministratorMethod queues an administrator\-rotation proposal that any guardian can subsequently confirm via [ChangeAdministratorMethod](<#ChangeAdministratorMethod>) after the time\-lock elapses. Administrator\-only.
 
@@ -1848,7 +1848,7 @@ type ProposeAdministratorMethod struct {
 ```
 
 <a name="ProposeAdministratorMethod.GetPlasma"></a>
-### func \(\*ProposeAdministratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1942>)
+### func \(\*ProposeAdministratorMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1967>)
 
 ```go
 func (p *ProposeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1857,7 +1857,7 @@ func (p *ProposeAdministratorMethod) GetPlasma(plasmaTable *constants.PlasmaTabl
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ProposeAdministratorMethod.ReceiveBlock"></a>
-### func \(\*ProposeAdministratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1974>)
+### func \(\*ProposeAdministratorMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1999>)
 
 ```go
 func (p *ProposeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1866,7 +1866,7 @@ func (p *ProposeAdministratorMethod) ReceiveBlock(context vm_context.AccountVmCo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ProposeAdministratorMethod.ValidateSendBlock"></a>
-### func \(\*ProposeAdministratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1948>)
+### func \(\*ProposeAdministratorMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1973>)
 
 ```go
 func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1875,7 +1875,7 @@ func (p *ProposeAdministratorMethod) ValidateSendBlock(block *nom.AccountBlock) 
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="ReclaimHtlcMethod"></a>
-## type [ReclaimHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L136-L138>)
+## type [ReclaimHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L141-L143>)
 
 ReclaimHtlcMethod refunds an HTLC entry to the original sender once expirationTime has elapsed without a successful unlock.
 
@@ -1886,7 +1886,7 @@ type ReclaimHtlcMethod struct {
 ```
 
 <a name="ReclaimHtlcMethod.GetPlasma"></a>
-### func \(\*ReclaimHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L142>)
+### func \(\*ReclaimHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L147>)
 
 ```go
 func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1895,7 +1895,7 @@ func (p *ReclaimHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint6
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="ReclaimHtlcMethod.ReceiveBlock"></a>
-### func \(\*ReclaimHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L166>)
+### func \(\*ReclaimHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L171>)
 
 ```go
 func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1904,7 +1904,7 @@ func (p *ReclaimHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="ReclaimHtlcMethod.ValidateSendBlock"></a>
-### func \(\*ReclaimHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L148>)
+### func \(\*ReclaimHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L153>)
 
 ```go
 func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -1913,7 +1913,7 @@ func (p *ReclaimHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="RedeemMethod"></a>
-## type [RedeemMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1715-L1717>)
+## type [RedeemMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1740-L1742>)
 
 RedeemMethod claims tokens for a confirmed inbound unwrap once the per\-pair redeem\-delay window has elapsed. Mints \(Owned pairs\) or transfers from escrow \(non\-Owned pairs\) the claimed amount to the recipient.
 
@@ -1924,7 +1924,7 @@ type RedeemMethod struct {
 ```
 
 <a name="RedeemMethod.GetPlasma"></a>
-### func \(\*RedeemMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1721>)
+### func \(\*RedeemMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1746>)
 
 ```go
 func (p *RedeemMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -1933,7 +1933,7 @@ func (p *RedeemMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, er
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="RedeemMethod.ReceiveBlock"></a>
-### func \(\*RedeemMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1745>)
+### func \(\*RedeemMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1770>)
 
 ```go
 func (p *RedeemMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -1942,7 +1942,7 @@ func (p *RedeemMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="RedeemMethod.ValidateSendBlock"></a>
-### func \(\*RedeemMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1727>)
+### func \(\*RedeemMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1752>)
 
 ```go
 func (p *RedeemMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2027,7 +2027,7 @@ func (method *RegisterSentinelMethod) ValidateSendBlock(block *nom.AccountBlock)
 ValidateSendBlock requires exactly the configured ZNN registration amount.
 
 <a name="RemoveNetworkMethod"></a>
-## type [RemoveNetworkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L620-L622>)
+## type [RemoveNetworkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L635-L637>)
 
 RemoveNetworkMethod de\-registers a remote network and all its configured token pairs. Administrator\-only.
 
@@ -2038,7 +2038,7 @@ type RemoveNetworkMethod struct {
 ```
 
 <a name="RemoveNetworkMethod.GetPlasma"></a>
-### func \(\*RemoveNetworkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L626>)
+### func \(\*RemoveNetworkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L641>)
 
 ```go
 func (p *RemoveNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2047,7 +2047,7 @@ func (p *RemoveNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="RemoveNetworkMethod.ReceiveBlock"></a>
-### func \(\*RemoveNetworkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L650>)
+### func \(\*RemoveNetworkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L665>)
 
 ```go
 func (p *RemoveNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2056,7 +2056,7 @@ func (p *RemoveNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="RemoveNetworkMethod.ValidateSendBlock"></a>
-### func \(\*RemoveNetworkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L632>)
+### func \(\*RemoveNetworkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L647>)
 
 ```go
 func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2065,7 +2065,7 @@ func (p *RemoveNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="RemoveTokenPairMethod"></a>
-## type [RemoveTokenPairMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L899-L901>)
+## type [RemoveTokenPairMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L914-L916>)
 
 RemoveTokenPairMethod removes a \(network, token\) pair. Administrator\-only.
 
@@ -2076,7 +2076,7 @@ type RemoveTokenPairMethod struct {
 ```
 
 <a name="RemoveTokenPairMethod.GetPlasma"></a>
-### func \(\*RemoveTokenPairMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L905>)
+### func \(\*RemoveTokenPairMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L920>)
 
 ```go
 func (p *RemoveTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2085,7 +2085,7 @@ func (p *RemoveTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (u
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="RemoveTokenPairMethod.ReceiveBlock"></a>
-### func \(\*RemoveTokenPairMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L933>)
+### func \(\*RemoveTokenPairMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L948>)
 
 ```go
 func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2094,7 +2094,7 @@ func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="RemoveTokenPairMethod.ValidateSendBlock"></a>
-### func \(\*RemoveTokenPairMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L911>)
+### func \(\*RemoveTokenPairMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L926>)
 
 ```go
 func (p *RemoveTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2179,7 +2179,7 @@ func (method *RevokeSentinelMethod) ValidateSendBlock(block *nom.AccountBlock) e
 ValidateSendBlock requires no transferred value and an empty argument list.
 
 <a name="RevokeUnwrapRequestMethod"></a>
-## type [RevokeUnwrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1651-L1653>)
+## type [RevokeUnwrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1676-L1678>)
 
 RevokeUnwrapRequestMethod cancels a queued inbound unwrap \(administrator\-only\) — used when an unwrap should not be paid out \(e.g., orchestrator submitted a malformed claim\).
 
@@ -2190,7 +2190,7 @@ type RevokeUnwrapRequestMethod struct {
 ```
 
 <a name="RevokeUnwrapRequestMethod.GetPlasma"></a>
-### func \(\*RevokeUnwrapRequestMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1657>)
+### func \(\*RevokeUnwrapRequestMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1682>)
 
 ```go
 func (p *RevokeUnwrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2199,7 +2199,7 @@ func (p *RevokeUnwrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="RevokeUnwrapRequestMethod.ReceiveBlock"></a>
-### func \(\*RevokeUnwrapRequestMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1681>)
+### func \(\*RevokeUnwrapRequestMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1706>)
 
 ```go
 func (p *RevokeUnwrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2208,7 +2208,7 @@ func (p *RevokeUnwrapRequestMethod) ReceiveBlock(context vm_context.AccountVmCon
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="RevokeUnwrapRequestMethod.ValidateSendBlock"></a>
-### func \(\*RevokeUnwrapRequestMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1663>)
+### func \(\*RevokeUnwrapRequestMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1688>)
 
 ```go
 func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2217,7 +2217,7 @@ func (p *RevokeUnwrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) e
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetAdditionalReward"></a>
-## type [SetAdditionalReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L951-L953>)
+## type [SetAdditionalReward](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L954-L956>)
 
 SetAdditionalReward credits extra rewards into the liquidity pool from the administrator's discretionary funds. Administrator\-only.
 
@@ -2228,7 +2228,7 @@ type SetAdditionalReward struct {
 ```
 
 <a name="SetAdditionalReward.GetPlasma"></a>
-### func \(\*SetAdditionalReward\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L957>)
+### func \(\*SetAdditionalReward\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L960>)
 
 ```go
 func (p *SetAdditionalReward) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2237,7 +2237,7 @@ func (p *SetAdditionalReward) GetPlasma(plasmaTable *constants.PlasmaTable) (uin
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetAdditionalReward.ReceiveBlock"></a>
-### func \(\*SetAdditionalReward\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L981>)
+### func \(\*SetAdditionalReward\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L984>)
 
 ```go
 func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2246,7 +2246,7 @@ func (p *SetAdditionalReward) ReceiveBlock(context vm_context.AccountVmContext, 
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetAdditionalReward.ValidateSendBlock"></a>
-### func \(\*SetAdditionalReward\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L963>)
+### func \(\*SetAdditionalReward\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L966>)
 
 ```go
 func (p *SetAdditionalReward) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2255,7 +2255,7 @@ func (p *SetAdditionalReward) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetAllowKeygenMethod"></a>
-## type [SetAllowKeygenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1442-L1444>)
+## type [SetAllowKeygenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1467-L1469>)
 
 SetAllowKeygenMethod toggles whether the orchestrator may run a TSS key\-generation ceremony. Administrator\-only.
 
@@ -2266,7 +2266,7 @@ type SetAllowKeygenMethod struct {
 ```
 
 <a name="SetAllowKeygenMethod.GetPlasma"></a>
-### func \(\*SetAllowKeygenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1448>)
+### func \(\*SetAllowKeygenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1473>)
 
 ```go
 func (p *SetAllowKeygenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2275,7 +2275,7 @@ func (p *SetAllowKeygenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (ui
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetAllowKeygenMethod.ReceiveBlock"></a>
-### func \(\*SetAllowKeygenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1472>)
+### func \(\*SetAllowKeygenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1497>)
 
 ```go
 func (p *SetAllowKeygenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2284,7 +2284,7 @@ func (p *SetAllowKeygenMethod) ReceiveBlock(context vm_context.AccountVmContext,
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetAllowKeygenMethod.ValidateSendBlock"></a>
-### func \(\*SetAllowKeygenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1454>)
+### func \(\*SetAllowKeygenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1479>)
 
 ```go
 func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2293,7 +2293,7 @@ func (p *SetAllowKeygenMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetBridgeMetadataMethod"></a>
-## type [SetBridgeMetadataMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1589-L1591>)
+## type [SetBridgeMetadataMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1614-L1616>)
 
 SetBridgeMetadataMethod updates the bridge\-level metadata blob. Administrator\-only.
 
@@ -2304,7 +2304,7 @@ type SetBridgeMetadataMethod struct {
 ```
 
 <a name="SetBridgeMetadataMethod.GetPlasma"></a>
-### func \(\*SetBridgeMetadataMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1595>)
+### func \(\*SetBridgeMetadataMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1620>)
 
 ```go
 func (p *SetBridgeMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2313,7 +2313,7 @@ func (p *SetBridgeMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) 
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetBridgeMetadataMethod.ReceiveBlock"></a>
-### func \(\*SetBridgeMetadataMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1623>)
+### func \(\*SetBridgeMetadataMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1648>)
 
 ```go
 func (p *SetBridgeMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2322,7 +2322,7 @@ func (p *SetBridgeMetadataMethod) ReceiveBlock(context vm_context.AccountVmConte
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetBridgeMetadataMethod.ValidateSendBlock"></a>
-### func \(\*SetBridgeMetadataMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1601>)
+### func \(\*SetBridgeMetadataMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1626>)
 
 ```go
 func (p *SetBridgeMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2369,7 +2369,7 @@ func (p *SetIsHalted) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetNetworkMetadataMethod"></a>
-## type [SetNetworkMetadataMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L687-L689>)
+## type [SetNetworkMetadataMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L702-L704>)
 
 SetNetworkMetadataMethod updates a network's free\-form metadata blob \(administrator\-only\).
 
@@ -2380,7 +2380,7 @@ type SetNetworkMetadataMethod struct {
 ```
 
 <a name="SetNetworkMetadataMethod.GetPlasma"></a>
-### func \(\*SetNetworkMetadataMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L693>)
+### func \(\*SetNetworkMetadataMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L708>)
 
 ```go
 func (p *SetNetworkMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2389,7 +2389,7 @@ func (p *SetNetworkMetadataMethod) GetPlasma(plasmaTable *constants.PlasmaTable)
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetNetworkMetadataMethod.ReceiveBlock"></a>
-### func \(\*SetNetworkMetadataMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L721>)
+### func \(\*SetNetworkMetadataMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L736>)
 
 ```go
 func (p *SetNetworkMetadataMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2398,7 +2398,7 @@ func (p *SetNetworkMetadataMethod) ReceiveBlock(context vm_context.AccountVmCont
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetNetworkMetadataMethod.ValidateSendBlock"></a>
-### func \(\*SetNetworkMetadataMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L699>)
+### func \(\*SetNetworkMetadataMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L714>)
 
 ```go
 func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2407,7 +2407,7 @@ func (p *SetNetworkMetadataMethod) ValidateSendBlock(block *nom.AccountBlock) er
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetNetworkMethod"></a>
-## type [SetNetworkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L532-L534>)
+## type [SetNetworkMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L547-L549>)
 
 SetNetworkMethod registers \(or updates\) a remote network's \(NetworkClass, ChainId, Name, ContractAddress, metadata\). Administrator\-only.
 
@@ -2418,7 +2418,7 @@ type SetNetworkMethod struct {
 ```
 
 <a name="SetNetworkMethod.GetPlasma"></a>
-### func \(\*SetNetworkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L538>)
+### func \(\*SetNetworkMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L553>)
 
 ```go
 func (p *SetNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2427,7 +2427,7 @@ func (p *SetNetworkMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetNetworkMethod.ReceiveBlock"></a>
-### func \(\*SetNetworkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L578>)
+### func \(\*SetNetworkMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L593>)
 
 ```go
 func (p *SetNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2436,7 +2436,7 @@ func (p *SetNetworkMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetNetworkMethod.ValidateSendBlock"></a>
-### func \(\*SetNetworkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L544>)
+### func \(\*SetNetworkMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L559>)
 
 ```go
 func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2445,7 +2445,7 @@ func (p *SetNetworkMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetOrchestratorInfoMethod"></a>
-## type [SetOrchestratorInfoMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1519-L1521>)
+## type [SetOrchestratorInfoMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1544-L1546>)
 
 SetOrchestratorInfoMethod updates orchestrator\-level configuration \(window thresholds, signing\-key info\). Administrator\-only.
 
@@ -2456,7 +2456,7 @@ type SetOrchestratorInfoMethod struct {
 ```
 
 <a name="SetOrchestratorInfoMethod.GetPlasma"></a>
-### func \(\*SetOrchestratorInfoMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1525>)
+### func \(\*SetOrchestratorInfoMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1550>)
 
 ```go
 func (p *SetOrchestratorInfoMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2465,7 +2465,7 @@ func (p *SetOrchestratorInfoMethod) GetPlasma(plasmaTable *constants.PlasmaTable
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetOrchestratorInfoMethod.ReceiveBlock"></a>
-### func \(\*SetOrchestratorInfoMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1553>)
+### func \(\*SetOrchestratorInfoMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1578>)
 
 ```go
 func (p *SetOrchestratorInfoMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2474,7 +2474,7 @@ func (p *SetOrchestratorInfoMethod) ReceiveBlock(context vm_context.AccountVmCon
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetOrchestratorInfoMethod.ValidateSendBlock"></a>
-### func \(\*SetOrchestratorInfoMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1531>)
+### func \(\*SetOrchestratorInfoMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1556>)
 
 ```go
 func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2483,7 +2483,7 @@ func (p *SetOrchestratorInfoMethod) ValidateSendBlock(block *nom.AccountBlock) e
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="SetTokenPairMethod"></a>
-## type [SetTokenPairMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L766-L768>)
+## type [SetTokenPairMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L781-L783>)
 
 SetTokenPairMethod registers or updates a \(network, token\) pair's bridgeability flags, fee percentage, redeem delay, and per\-pair metadata. Administrator\-only.
 
@@ -2494,7 +2494,7 @@ type SetTokenPairMethod struct {
 ```
 
 <a name="SetTokenPairMethod.GetPlasma"></a>
-### func \(\*SetTokenPairMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L772>)
+### func \(\*SetTokenPairMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L787>)
 
 ```go
 func (p *SetTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2503,7 +2503,7 @@ func (p *SetTokenPairMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="SetTokenPairMethod.ReceiveBlock"></a>
-### func \(\*SetTokenPairMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L821>)
+### func \(\*SetTokenPairMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L836>)
 
 ```go
 func (p *SetTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2512,7 +2512,7 @@ func (p *SetTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext, s
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="SetTokenPairMethod.ValidateSendBlock"></a>
-### func \(\*SetTokenPairMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L778>)
+### func \(\*SetTokenPairMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L793>)
 
 ```go
 func (p *SetTokenPairMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2673,7 +2673,7 @@ func (p *UndelegateMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="UnhaltMethod"></a>
-## type [UnhaltMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1079-L1081>)
+## type [UnhaltMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1098-L1100>)
 
 UnhaltMethod begins lifting the halt: starts a grace window of \[BridgeInfoVariable.UnhaltDurationInMomentums\] before the bridge becomes operational again. Administrator\-only.
 
@@ -2684,7 +2684,7 @@ type UnhaltMethod struct {
 ```
 
 <a name="UnhaltMethod.GetPlasma"></a>
-### func \(\*UnhaltMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1085>)
+### func \(\*UnhaltMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1104>)
 
 ```go
 func (p *UnhaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2693,7 +2693,7 @@ func (p *UnhaltMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, er
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="UnhaltMethod.ReceiveBlock"></a>
-### func \(\*UnhaltMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1107>)
+### func \(\*UnhaltMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1126>)
 
 ```go
 func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2702,7 +2702,7 @@ func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="UnhaltMethod.ValidateSendBlock"></a>
-### func \(\*UnhaltMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1091>)
+### func \(\*UnhaltMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L1110>)
 
 ```go
 func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2711,7 +2711,7 @@ func (p *UnhaltMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="UnlockHtlcMethod"></a>
-## type [UnlockHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L217-L219>)
+## type [UnlockHtlcMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L222-L224>)
 
 UnlockHtlcMethod claims an HTLC by revealing the preimage. The caller must be the hashLocked recipient \(or have proxy\-unlock permission via [AllowHtlcProxyUnlockMethod](<#AllowHtlcProxyUnlockMethod>)\) and the preimage must hash to the entry's hashLock under its declared hash type.
 
@@ -2722,7 +2722,7 @@ type UnlockHtlcMethod struct {
 ```
 
 <a name="UnlockHtlcMethod.GetPlasma"></a>
-### func \(\*UnlockHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L223>)
+### func \(\*UnlockHtlcMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L228>)
 
 ```go
 func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2731,7 +2731,7 @@ func (p *UnlockHtlcMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="UnlockHtlcMethod.ReceiveBlock"></a>
-### func \(\*UnlockHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L247>)
+### func \(\*UnlockHtlcMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L252>)
 
 ```go
 func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2740,7 +2740,7 @@ func (p *UnlockHtlcMethod) ReceiveBlock(context vm_context.AccountVmContext, sen
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="UnlockHtlcMethod.ValidateSendBlock"></a>
-### func \(\*UnlockHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L229>)
+### func \(\*UnlockHtlcMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/htlc.go#L234>)
 
 ```go
 func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2749,9 +2749,9 @@ func (p *UnlockHtlcMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="UnlockLiquidityStakeEntries"></a>
-## type [UnlockLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L892-L894>)
+## type [UnlockLiquidityStakeEntries](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L895-L897>)
 
-UnlockLiquidityStakeEntries refunds every cancelled\-and\-due stake entry for the caller in one batch.
+UnlockLiquidityStakeEntries iterates every liquidity\-stake entry matching the send block's token standard and forces its ExpirationTime down to the current frontier\-momentum timestamp, effectively early\-unlocking the entire population for that token. Administrator\-only.
 
 ```go
 type UnlockLiquidityStakeEntries struct {
@@ -2760,7 +2760,7 @@ type UnlockLiquidityStakeEntries struct {
 ```
 
 <a name="UnlockLiquidityStakeEntries.GetPlasma"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L898>)
+### func \(\*UnlockLiquidityStakeEntries\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L901>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2769,7 +2769,7 @@ func (p *UnlockLiquidityStakeEntries) GetPlasma(plasmaTable *constants.PlasmaTab
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="UnlockLiquidityStakeEntries.ReceiveBlock"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L921>)
+### func \(\*UnlockLiquidityStakeEntries\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L924>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2778,7 +2778,7 @@ func (p *UnlockLiquidityStakeEntries) ReceiveBlock(context vm_context.AccountVmC
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="UnlockLiquidityStakeEntries.ValidateSendBlock"></a>
-### func \(\*UnlockLiquidityStakeEntries\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L904>)
+### func \(\*UnlockLiquidityStakeEntries\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/liquidity.go#L907>)
 
 ```go
 func (p *UnlockLiquidityStakeEntries) ValidateSendBlock(block *nom.AccountBlock) error
@@ -2787,7 +2787,7 @@ func (p *UnlockLiquidityStakeEntries) ValidateSendBlock(block *nom.AccountBlock)
 ValidateSendBlock decodes call data and checks token, amount, and method\-specific send\-block invariants.
 
 <a name="UnwrapTokenMethod"></a>
-## type [UnwrapTokenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L419-L421>)
+## type [UnwrapTokenMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L434-L436>)
 
 UnwrapTokenMethod admits an inbound unwrap claim: the caller supplies the remote\-chain transaction reference and a TSS\-signed payload proving the remote burn / lock. Persists a \[definition.UnwrapTokenRequest\] entry; tokens become claimable via [RedeemMethod](<#RedeemMethod>) after the redeem\-delay window.
 
@@ -2798,7 +2798,7 @@ type UnwrapTokenMethod struct {
 ```
 
 <a name="UnwrapTokenMethod.GetPlasma"></a>
-### func \(\*UnwrapTokenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L425>)
+### func \(\*UnwrapTokenMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L440>)
 
 ```go
 func (p *UnwrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -2807,7 +2807,7 @@ func (p *UnwrapTokenMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint6
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="UnwrapTokenMethod.ReceiveBlock"></a>
-### func \(\*UnwrapTokenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L454>)
+### func \(\*UnwrapTokenMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L469>)
 
 ```go
 func (p *UnwrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -2816,7 +2816,7 @@ func (p *UnwrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, se
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="UnwrapTokenMethod.ValidateSendBlock"></a>
-### func \(\*UnwrapTokenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L431>)
+### func \(\*UnwrapTokenMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L446>)
 
 ```go
 func (p *UnwrapTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error
@@ -3167,7 +3167,7 @@ func (p *UpdateTokenMethod) ValidateSendBlock(block *nom.AccountBlock) error
 ValidateSendBlock decodes the update parameters and rejects value\-bearing calls.
 
 <a name="UpdateWrapRequestMethod"></a>
-## type [UpdateWrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L294-L296>)
+## type [UpdateWrapRequestMethod](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L305-L307>)
 
 UpdateWrapRequestMethod attaches a TSS signature to a queued wrap request — the orchestrator calls this once threshold\-signing produces the signature so the request can be relayed to the remote chain.
 
@@ -3178,7 +3178,7 @@ type UpdateWrapRequestMethod struct {
 ```
 
 <a name="UpdateWrapRequestMethod.GetPlasma"></a>
-### func \(\*UpdateWrapRequestMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L300>)
+### func \(\*UpdateWrapRequestMethod\) [GetPlasma](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L311>)
 
 ```go
 func (p *UpdateWrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) (uint64, error)
@@ -3187,7 +3187,7 @@ func (p *UpdateWrapRequestMethod) GetPlasma(plasmaTable *constants.PlasmaTable) 
 GetPlasma returns this method's plasma requirement from the supplied table or method\-specific configuration.
 
 <a name="UpdateWrapRequestMethod.ReceiveBlock"></a>
-### func \(\*UpdateWrapRequestMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L324>)
+### func \(\*UpdateWrapRequestMethod\) [ReceiveBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L335>)
 
 ```go
 func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error)
@@ -3196,7 +3196,7 @@ func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmConte
 ReceiveBlock applies the validated call to context and returns any descendant account blocks emitted by the method.
 
 <a name="UpdateWrapRequestMethod.ValidateSendBlock"></a>
-### func \(\*UpdateWrapRequestMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L306>)
+### func \(\*UpdateWrapRequestMethod\) [ValidateSendBlock](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/implementation/bridge.go#L317>)
 
 ```go
 func (p *UpdateWrapRequestMethod) ValidateSendBlock(block *nom.AccountBlock) error

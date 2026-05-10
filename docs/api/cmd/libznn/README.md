@@ -21,16 +21,16 @@ Per\-command documentation is being filled in incrementally. See docs/STYLE.md f
 
 
 <a name="RunNode"></a>
-## func [RunNode](<https://github.com/zenon-network/go-zenon/blob/master/cmd/libznn/main_libznn.go#L16>)
+## func [RunNode](<https://github.com/zenon-network/go-zenon/blob/master/cmd/libznn/main_libznn.go#L20>)
 
 ```go
 func RunNode()
 ```
 
-RunNode is the C\-exported entry point. Called by embedders to boot a node; equivalent to running the znnd binary. Blocks until StopNode is called \(or a SIGINT is delivered\).
+RunNode is the C\-exported entry point. Called by embedders to boot a node; equivalent to running the znnd binary. Returns after \[app.Run\] returns — under the libznn build tag, app.Run invokes the libznn manager's Start which itself returns immediately after node startup \(no node.Wait\), so embedders must keep their host process alive themselves and call [StopNode](<#StopNode>) for graceful teardown.
 
 <a name="StopNode"></a>
-## func [StopNode](<https://github.com/zenon-network/go-zenon/blob/master/cmd/libznn/main_libznn.go#L24>)
+## func [StopNode](<https://github.com/zenon-network/go-zenon/blob/master/cmd/libznn/main_libznn.go#L28>)
 
 ```go
 func StopNode()

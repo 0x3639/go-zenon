@@ -86,7 +86,9 @@ var (
     // another znnd instance.
     ErrDataDirUsed = errors.New("dataDir already used by another process")
     // ErrNodeStopped — Stop or one of its subsystem teardown
-    // helpers was called against an already-stopped Node.
+    // helpers was called against a Node that has not been Started
+    // (or has already been Stopped). The error string reads "node
+    // not started" because the same sentinel covers both states.
     ErrNodeStopped = errors.New("node not started")
 )
 ```
@@ -161,19 +163,22 @@ func ReplaceHomeVariable(path string) string
 ReplaceHomeVariable expands a leading \`\~\` in path to the user's home directory. Returns "" for empty input.
 
 <a name="Config"></a>
-## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L66-L78>)
+## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L66-L81>)
 
 Config is the per\-process node configuration. Constructed by the CLI from flags and an optional config.json. [DefaultNodeConfig](<#DefaultNodeConfig>) supplies sensible defaults; only the fields the operator overrides need to be set.
 
 ```go
 type Config struct {
-    DataPath    string // default ~/.zenon
+    DataPath    string // default DefaultDataDir() — ~/.znn on Unix, OS-specific elsewhere
     WalletPath  string // default DataPath/wallet
     GenesisFile string // GenesisFile is the absolute path to the genesis file
 
     Name string
 
-    LogLevel string // "debug", "dbug" | "info" | "warn" | "error", "error" | "crit"
+    // LogLevel is parsed by log15.LvlFromString. Accepted values:
+    // "crit", "error" (alias "eror"), "warn", "info", "debug"
+    // (alias "dbug"). Unrecognized values fall back to "info".
+    LogLevel string
 
     Producer *ProducerConfig
     RPC      RPCConfig
@@ -182,7 +187,7 @@ type Config struct {
 ```
 
 <a name="Config.HTTPEndpoint"></a>
-### func \(\*Config\) [HTTPEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L245>)
+### func \(\*Config\) [HTTPEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L248>)
 
 ```go
 func (c *Config) HTTPEndpoint() string
@@ -191,7 +196,7 @@ func (c *Config) HTTPEndpoint() string
 HTTPEndpoint formats the HTTP\-RPC listen address as host:port, or "" when no HTTPHost is configured.
 
 <a name="Config.MakePathsAbsolute"></a>
-### func \(\*Config\) [MakePathsAbsolute](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L84>)
+### func \(\*Config\) [MakePathsAbsolute](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L87>)
 
 ```go
 func (c *Config) MakePathsAbsolute() error
@@ -200,7 +205,7 @@ func (c *Config) MakePathsAbsolute() error
 MakePathsAbsolute resolves DataPath, WalletPath, and GenesisFile to absolute paths and expands a leading \`\~\` into the user's home. Mutates c in place; returns the first filesystem error encountered.
 
 <a name="Config.WSEndpoint"></a>
-### func \(\*Config\) [WSEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L254>)
+### func \(\*Config\) [WSEndpoint](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L257>)
 
 ```go
 func (c *Config) WSEndpoint() string

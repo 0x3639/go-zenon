@@ -120,7 +120,7 @@ type Account interface {
 ```
 
 <a name="AccountMailbox"></a>
-## type [AccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L84-L117>)
+## type [AccountMailbox](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/account.go#L84-L121>)
 
 AccountMailbox is the per\-recipient queue of inbound sends awaiting consumption. Together with the sequencer rules in [Account](<#Account>) it lets embedded contracts process inbound traffic in a deterministic, FIFO order that every node agrees on.
 
@@ -153,7 +153,11 @@ type AccountMailbox interface {
     // of pending sends) and is called when a new send to this address is
     // confirmed.
     SequencerPushBack(types.AccountHeader)
-    // SequencerSize returns the number of pending sends in the queue.
+    // SequencerSize returns the persistent monotonic counter of sends
+    // ever pushed onto this mailbox's sequencer queue. NOT the current
+    // pending depth: the counter is never decremented when an entry is
+    // consumed; consumption is tracked separately via the [Account]
+    // sequencer cursor.
     SequencerSize() uint64
     // SequencerByHeight returns the queued send at position height (1-based),
     // or nil if it is out of range.
@@ -186,7 +190,7 @@ type Genesis interface {
 ```
 
 <a name="Momentum"></a>
-## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/momentum.go#L24-L126>)
+## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/chain/store/momentum.go#L24-L127>)
 
 Momentum is the read/write surface for the global momentum chain at a specific point in time. It is the unifying view consumers use: any chain\-state question \(which momentum, which account block, what's the active spork set, who are the active pillars, what's the balance of X\) is answered through a [Momentum](<#Momentum>).
 
@@ -265,8 +269,9 @@ type Momentum interface {
     GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definition.TokenInfo, error)
     // ComputePillarDelegations re-derives every pillar's aggregated
     // delegation weight (and the per-backer breakdown) from the current
-    // stake and vote records. Used by the consensus layer when
-    // constructing election snapshots.
+    // pillar registrations + delegation records (NOT stake or vote
+    // records). Used by the consensus layer when constructing election
+    // snapshots.
     ComputePillarDelegations() ([]*types.PillarDelegationDetail, error)
 
     // GetAccountStore returns the [Account] view for address pinned at

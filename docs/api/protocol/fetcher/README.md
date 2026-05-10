@@ -12,7 +12,7 @@ Package fetcher retrieves and validates individual blocks announced by peers.
 
 The fetcher is the announce\-driven counterpart to the [github.com/zenon\\\-network/go\\\-zenon/protocol/downloader](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/downloader/>): optimized for the latency\-sensitive case where a peer has just produced a single block and the local node should fetch it promptly to keep up with the chain head.
 
-On a peer announcement \(\[NewBlockHashesMsg\]\), the fetcher records the announce, waits a brief window \(\[arriveTimeout\] = 500ms\) in case the block arrives via natural broadcast, then explicitly requests it. Validated blocks are inserted via the \[chainInsertFn\] callback, with per\-peer hash and block caps \(\[hashLimit\], \[blockLimit\]\) for DOS protection.
+On a peer announcement \(\[NewBlockHashesMsg\]\), the fetcher records the announce, waits a brief window \(\[arriveTimeout\] = 500ms\) in case the block arrives via natural broadcast, then explicitly requests it. The \[blockValidatorFn\] callback the protocol layer wires in is currently a stub that returns nil \(see protocol/handler.go's \`validator := func\(...\) error \{ return nil \}\`\); real consensus validation happens later when the chain layer applies the block via the supervisor. Inserted via the \[chainInsertFn\] callback, with per\-peer hash and block caps \(\[hashLimit\], \[blockLimit\]\) for DOS protection.
 
 ### Concurrency
 

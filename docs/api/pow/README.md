@@ -14,8 +14,8 @@ Plasma may be paid either by fusing QSR \(steady yield through the Plasma embedd
 
 ### Key Concepts
 
-- Difficulty — a \[big.Int\] target. Higher values demand more hashes; [GetThresholdByDifficulty](<#GetThresholdByDifficulty>) converts the target to the 64\-bit threshold the resulting hash must exceed.
-- Nonce — 8 random bytes that, when hashed with the seed, yield a value above the threshold. Stored in [github.com/zenon\\\-network/go\\\-zenon/chain/nom.AccountBlock.Nonce](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.Nonce>).
+- Difficulty — a \[big.Int\] target. Higher values demand more hashes; [GetThresholdByDifficulty](<#GetThresholdByDifficulty>) converts the target to the 64\-bit threshold the resulting hash must reach \(the comparison in \[greaterDifficulty\] returns true on equal values, so the rule is "≥ threshold"\).
+- Nonce — 8 random bytes that, when hashed with the seed, yield a value at or above the threshold. Stored in [github.com/zenon\\\-network/go\\\-zenon/chain/nom.AccountBlock.Nonce](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock.Nonce>).
 - Seed — \`Hash\(address || previousHash\)\`. Computed by [GetAccountBlockHash](<#GetAccountBlockHash>).
 
 ### Usage

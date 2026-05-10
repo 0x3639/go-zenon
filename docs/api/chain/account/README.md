@@ -41,14 +41,15 @@ The embedded\-contract sequencer cursor lives here too \(\[sequencer.go\]\): it 
 
 ## Constants
 
-<a name="ReceiveStatusUnknown"></a>Receive\-status sentinels stored under \[receivedBlockPrefix\]. Values other than [Received](<#ReceiveStatusUnknown>) are treated as "not received yet"; only the presence of a tombstone\-marker matters at the lookup site.
+<a name="ReceiveStatusUnknown"></a>Receive\-status sentinels stored under \[receivedBlockPrefix\]. The stored value is informational only — \[accountStore.IsReceived\] \(received.go:26\-33\) decides "received" purely by key presence: any successful Get returns true, leveldb.ErrNotFound returns false. Other values are never written by \[accountStore.MarkAsReceived\].
 
 ```go
 const (
     // ReceiveStatusUnknown is the implicit value before a send is
     // recorded as received. Equivalent to the key being absent.
     ReceiveStatusUnknown uint64 = iota
-    // Received marks a send hash that the account has consumed.
+    // Received is the sentinel value MarkAsReceived writes; the
+    // IsReceived check ignores it and only inspects key presence.
     Received
 )
 ```

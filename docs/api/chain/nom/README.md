@@ -55,7 +55,7 @@ if err := mgr.Add(tx); err != nil { /* handle */ }
 
 - For any [AccountBlock](<#AccountBlock>), the stored Hash equals [AccountBlock.ComputeHash](<#AccountBlock.ComputeHash>).
 - For any [Momentum](<#Momentum>), the stored Hash equals [Momentum.ComputeHash](<#Momentum.ComputeHash>).
-- Every send eventually has exactly one matching receive \(cross\-chain invariant; enforced by the verifier and chain\).
+- Every non\-genesis send eventually has exactly one matching receive \(cross\-chain invariant; enforced by the verifier and chain\). [BlockTypeGenesisReceive](<#BlockTypeGenesisReceive>) blocks have no matching send — they bootstrap the per\-address chains at height 1 with the genesis\-configured balances and have no FromBlockHash.
 - [MomentumContent](<#MomentumContent>) is sorted by canonical header bytes so producers building from the same account\-block set agree on the same content hash.
 
 ### Related Packages

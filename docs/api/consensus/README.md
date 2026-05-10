@@ -12,7 +12,7 @@ Package consensus runs the pillar\-election scheduler that determines which pill
 
 Time is divided into ticks; each tick maps deterministically to one elected pillar through a weighted shuffle of the registered pillar set. consensus owns:
 
-- The tick scheduler \(\[consensus.work\]\) running in a background goroutine that broadcasts a [ProducerEvent](<#ProducerEvent>) at every elected pillar's start time.
+- The tick scheduler — an unexported \`work\` loop on the consensus type — runs in a background goroutine started by \[Consensus.Start\] and broadcasts a [ProducerEvent](<#ProducerEvent>) at every elected pillar's start time.
 - The election manager \(\[electionManager\], \[electionAlgorithm\]\) that resolves any tick to its producer slate. Results are cached keyed by the proof block's hash so reorgs invalidate them implicitly.
 - The points subsystem \([Points](<#Points>), \[periodPoints\], \[compoundPoints\]\) that aggregates per\-pillar performance per period \(one election cycle\) and per epoch \(24h by default\).
 - The verifier hook \(\[Consensus.VerifyMomentumProducer\]\) that gates momentum acceptance on the elected\-pillar match.
@@ -306,13 +306,16 @@ type EventManager interface {
 ```
 
 <a name="Points"></a>
-## type [Points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L17-L25>)
+## type [Points](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L18-L29>)
 
-Points is the per\-pillar performance subsystem. It tracks two granularities — period \(one election cycle\) and epoch \(24h by default\) — and pre\-computes both as new momentums arrive so RPC callers see hot data.
+Points is the per\-pillar performance subsystem. It tracks two granularities — period \(one election cycle\) and epoch \(24h by default\) — and pre\-computes both as new momentums arrive so RPC callers can read pre\-computed values rather than re\-aggregating on demand.
 
 ```go
 type Points interface {
-    // MomentumEventListener is used to precompute points as momentums come, so API calls have hot data
+    // MomentumEventListener is embedded so the implementation receives
+    // per-momentum callbacks; the InsertMomentum hook advances the
+    // pre-compute frontier so subsequent RPC reads hit pre-computed
+    // values instead of triggering a synchronous aggregate.
     chain.MomentumEventListener
     // GetPeriodPoints returns the per-period reader.
     GetPeriodPoints() PointsReader
@@ -323,7 +326,7 @@ type Points interface {
 ```
 
 <a name="PointsReader"></a>
-## type [PointsReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L132-L137>)
+## type [PointsReader](<https://github.com/zenon-network/go-zenon/blob/master/consensus/points.go#L136-L141>)
 
 PointsReader can read pillar statistics of epoch or period.
 
