@@ -152,8 +152,18 @@ func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock 
 //     supervisor (force-add since the chain content is already
 //     committed by the producer), then commit the momentum.
 //
-// Returns the number of momentums successfully inserted before
-// any error.
+// Return value:
+//
+//   - On success returns (0, nil) regardless of how many momentums
+//     were appended (including the "all already inserted" case).
+//   - On error during the head-skip read or the pre-insert sanity
+//     checks, returns (0, err) or — for the head-skip read failure
+//     specifically — (start, err) where start is the loop index that
+//     hit the failure.
+//   - On error during the per-momentum apply/insert loop, returns
+//     (index+start, err) where index+start identifies the position in
+//     the original input slice that failed, so callers can resync from
+//     that point.
 func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error) {
 	a := momentums[0]
 	b := momentums[len(momentums)-1]

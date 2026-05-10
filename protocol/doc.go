@@ -54,8 +54,12 @@
 //     transport-layer Peer / MsgReadWriter primitives.
 //   - [github.com/zenon-network/go-zenon/chain] — chain reads
 //     and writes through [ChainBridge].
-//   - [github.com/zenon-network/go-zenon/verifier] — validates
-//     inbound blocks before insertion.
+//   - [github.com/zenon-network/go-zenon/verifier] — supplies the
+//     consensus-rule validators. The protocol layer reaches the
+//     verifier transitively through the VM supervisor
+//     ([vm.Supervisor.ApplyBlock] / [vm.Supervisor.ApplyMomentum]
+//     each invoke the verifier) rather than calling it directly from
+//     the chain bridge.
 //   - [github.com/zenon-network/go-zenon/vm] — applies account
 //     blocks and momentums.
 //   - [github.com/zenon-network/go-zenon/protocol/downloader] —

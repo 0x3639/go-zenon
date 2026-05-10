@@ -72,8 +72,10 @@ type chainManager interface {
 	Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash)
 
 	// InsertChain admits a contiguous batch of momentums (with
-	// their account blocks). Returns the number of momentums
-	// successfully inserted before any error.
+	// their account blocks). The int is 0 on success; on error it
+	// identifies the input-slice index that failed so callers can
+	// resume from there. See [chainBridge.InsertChain] for the full
+	// return-value table.
 	InsertChain(chain []*nom.DetailedMomentum) (int, error)
 }
 
