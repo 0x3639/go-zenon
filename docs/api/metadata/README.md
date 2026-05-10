@@ -15,7 +15,7 @@ metadata holds two values: the human\-readable [Version](<#Version>) string \(a 
 ### Key Concepts
 
 - Version — the release\-channel string. Two variants are defined, gated by the \`libznn\` build tag, so the standalone \`znnd\` and the \`libznn\` C\-shared\-library builds advertise themselves distinctly.
-- GitCommit — the VCS revision from [debug.BuildInfo](<https://pkg.go.dev/runtime/debug/#BuildInfo>), populated when the binary is built inside a VCS\-aware context.
+- GitCommit — the VCS revision from \[debug.BuildInfo\], populated when the binary is built inside a VCS\-aware context.
 
 ### Related Packages
 
@@ -40,7 +40,7 @@ const (
 
 ## Variables
 
-<a name="GitCommit"></a>GitCommit is the VCS revision recorded by the Go toolchain at build time \(the value of the \`vcs.revision\` setting in [debug.BuildInfo](<https://pkg.go.dev/runtime/debug/#BuildInfo>)\). Empty if the binary was built outside a VCS\-aware context.
+<a name="GitCommit"></a>GitCommit is the VCS revision recorded by the Go toolchain at build time \(the value of the \`vcs.revision\` setting in \[debug.BuildInfo\]\). Empty if the binary was built outside a VCS\-aware context.
 
 It is consumed by RPC \`utility\` calls and by structured log lines so a running node can be traced back to a specific commit.
 

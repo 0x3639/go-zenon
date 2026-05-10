@@ -18,15 +18,15 @@ On each accepted ProducerEvent the worker runs three stages:
 
 1. Generate momentum — assemble pending account blocks \(\[worker.generateMomentum\]\), sign with the coinbase keypair, commit through chain.AcquireInsert.
 2. Auto\-receive embedded contracts — for each embedded contract with pending sends, generate a paired receive block via the VM supervisor \(\[worker.generateNext\]\) until the sequencer queue is drained.
-3. Periodic embedded updates — for contracts that expose an \`Update\` method \(Pillar, Token, Plasma, etc.\), call it if [implementation.CanPerformUpdate](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/implementation/#CanPerformUpdate>) reports the cooldown has elapsed \(\[worker.updateContracts\]\).
+3. Periodic embedded updates — for contracts that expose an \`Update\` method \(Pillar, Token, Plasma, etc.\), call it if \[implementation.CanPerformUpdate\] reports the cooldown has elapsed \(\[worker.updateContracts\]\).
 
-Each stage checks \[worker.shouldStop\] and the per\-task [common.TaskResolver](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#TaskResolver>) so the manager can force\-stop the worker when the producer slot is about to expire.
+Each stage checks \[worker.shouldStop\] and the per\-task \[common.TaskResolver\] so the manager can force\-stop the worker when the producer slot is about to expire.
 
 ### Admission Rules
 
 \[manager.shouldProcess\] gates each ProducerEvent — events are dropped \(with a log line\) when:
 
-- the node is not yet [protocol.SyncDone](<https://pkg.go.dev/github.com/zenon-network/go-zenon/protocol/#SyncDone>);
+- the node is not yet \[protocol.SyncDone\];
 - no coinbase keypair is configured;
 - the elected producer is not our coinbase;
 - the slot's StartTime is in the future or EndTime in the past.
@@ -49,30 +49,8 @@ None. Files are Zenon\-specific \(no upstream header\).
 ## Index
 
 - [Variables](<#variables>)
-- [func canPerformEmbeddedUpdate\(momentumStore store.Momentum, pool chain.AccountPool, contract types.Address\) error](<#canPerformEmbeddedUpdate>)
 - [type Manager](<#Manager>)
   - [func NewPillar\(chain chain.Chain, consensus consensus.Consensus, broadcaster protocol.Broadcaster\) Manager](<#NewPillar>)
-- [type manager](<#manager>)
-  - [func \(m \*manager\) GetCoinBase\(\) \*types.Address](<#manager.GetCoinBase>)
-  - [func \(m \*manager\) Init\(\) error](<#manager.Init>)
-  - [func \(m \*manager\) NewProducerEvent\(e consensus.ProducerEvent\)](<#manager.NewProducerEvent>)
-  - [func \(m \*manager\) Process\(e consensus.ProducerEvent\) common.Task](<#manager.Process>)
-  - [func \(m \*manager\) SetCoinBase\(coinbase \*wallet.KeyPair\)](<#manager.SetCoinBase>)
-  - [func \(m \*manager\) Start\(\) error](<#manager.Start>)
-  - [func \(m \*manager\) Stop\(\) error](<#manager.Stop>)
-  - [func \(m \*manager\) processSupervised\(e consensus.ProducerEvent\)](<#manager.processSupervised>)
-  - [func \(m \*manager\) shouldProcess\(e consensus.ProducerEvent\) error](<#manager.shouldProcess>)
-- [type worker](<#worker>)
-  - [func newWorker\(chain chain.Chain, supervisor \*vm.Supervisor, broadcaster protocol.Broadcaster\) \*worker](<#newWorker>)
-  - [func \(w \*worker\) Init\(\) error](<#worker.Init>)
-  - [func \(w \*worker\) Process\(e consensus.ProducerEvent\) common.Task](<#worker.Process>)
-  - [func \(w \*worker\) Start\(\) error](<#worker.Start>)
-  - [func \(w \*worker\) Stop\(\) error](<#worker.Stop>)
-  - [func \(w \*worker\) generateMomentum\(e consensus.ProducerEvent\) \(\*nom.MomentumTransaction, error\)](<#worker.generateMomentum>)
-  - [func \(w \*worker\) generateNext\(momentumStore store.Momentum, embedded types.Address\) \(\*nom.AccountBlockTransaction, error\)](<#worker.generateNext>)
-  - [func \(w \*worker\) shouldStop\(\) bool](<#worker.shouldStop>)
-  - [func \(w \*worker\) updateContracts\(momentumStore store.Momentum\) error](<#worker.updateContracts>)
-  - [func \(w \*worker\) work\(task common.TaskResolver, e consensus.ProducerEvent\)](<#worker.work>)
 
 
 ## Variables
@@ -105,19 +83,10 @@ var (
 )
 ```
 
-<a name="canPerformEmbeddedUpdate"></a>
-## func [canPerformEmbeddedUpdate](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker_updater.go#L18>)
-
-```go
-func canPerformEmbeddedUpdate(momentumStore store.Momentum, pool chain.AccountPool, contract types.Address) error
-```
-
-canPerformEmbeddedUpdate asks the contract whether its periodic Update method is currently callable \(returns nil\) or is suppressed by cooldown / missing\-method \(returns the relevant constants.Err\* value\).
-
 <a name="Manager"></a>
 ## type [Manager](<https://github.com/zenon-network/go-zenon/blob/master/pillar/interfaces.go#L15-L30>)
 
-Manager is the production\-side surface of a pillar. Subscribes to consensus ProducerEvents \(via the embedded [consensus.EventListener](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#EventListener>)\) and produces momentums when its coinbase wins the slot. SetCoinBase / GetCoinBase wire the keypair from \[zenon.Config\].
+Manager is the production\-side surface of a pillar. Subscribes to consensus ProducerEvents \(via the embedded \[consensus.EventListener\]\) and produces momentums when its coinbase wins the slot. SetCoinBase / GetCoinBase wire the keypair from \[zenon.Config\].
 
 ```go
 type Manager interface {
@@ -146,217 +115,5 @@ func NewPillar(chain chain.Chain, consensus consensus.Consensus, broadcaster pro
 ```
 
 NewPillar constructs a pillar manager wired to the given chain, consensus, and broadcaster. The returned Manager is non\-producing until \[Manager.SetCoinBase\] is called.
-
-<a name="manager"></a>
-## type [manager](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L21-L29>)
-
-manager is the production [Manager](<#Manager>) implementation. Wraps a single \[worker\] that handles the actual momentum / contract receive / contract update pipeline.
-
-```go
-type manager struct {
-    log      log15.Logger
-    coinbase *wallet.KeyPair
-
-    worker *worker
-
-    consensus   consensus.Consensus
-    broadcaster protocol.Broadcaster
-}
-```
-
-<a name="manager.GetCoinBase"></a>
-### func \(\*manager\) [GetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L169>)
-
-```go
-func (m *manager) GetCoinBase() *types.Address
-```
-
-GetCoinBase returns the configured coinbase address, or nil for a non\-producing pillar.
-
-<a name="manager.Init"></a>
-### func \(\*manager\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L45>)
-
-```go
-func (m *manager) Init() error
-```
-
-Init prepares the receiver for use.
-
-<a name="manager.NewProducerEvent"></a>
-### func \(\*manager\) [NewProducerEvent](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L85>)
-
-```go
-func (m *manager) NewProducerEvent(e consensus.ProducerEvent)
-```
-
-NewProducerEvent is the [consensus.EventListener](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/#EventListener>) callback — dispatches each event to a goroutine so the consensus loop continues without blocking on the producer pipeline.
-
-<a name="manager.Process"></a>
-### func \(\*manager\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L147>)
-
-```go
-func (m *manager) Process(e consensus.ProducerEvent) common.Task
-```
-
-Process bypasses the admission rules and synchronously hands the event to the worker. Used by tests \(and by [zenon/mock](<https://pkg.go.dev/zenon/mock/>)\) to drive the pipeline at virtual\-clock speed.
-
-<a name="manager.SetCoinBase"></a>
-### func \(\*manager\) [SetCoinBase](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L162>)
-
-```go
-func (m *manager) SetCoinBase(coinbase *wallet.KeyPair)
-```
-
-SetCoinBase configures the keypair this pillar produces under. Must be called before \[Manager.Start\] for the pillar to act on any ProducerEvent. Updates both the manager \(used in admission checks\) and the worker \(used to sign produced blocks\).
-
-<a name="manager.Start"></a>
-### func \(\*manager\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L57>)
-
-```go
-func (m *manager) Start() error
-```
-
-Start begins the receiver's background work.
-
-<a name="manager.Stop"></a>
-### func \(\*manager\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L70>)
-
-```go
-func (m *manager) Stop() error
-```
-
-Stop tears down the receiver.
-
-<a name="manager.processSupervised"></a>
-### func \(\*manager\) [processSupervised](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L116>)
-
-```go
-func (m *manager) processSupervised(e consensus.ProducerEvent)
-```
-
-processSupervised drives one slot end\-to\-end: applies the admission rules, then waits for the worker task to finish, force\- stopping it 250ms before slot EndTime so a late finish does not produce a momentum that other pillars will reject as expired.
-
-<a name="manager.shouldProcess"></a>
-### func \(\*manager\) [shouldProcess](<https://github.com/zenon-network/go-zenon/blob/master/pillar/manager.go#L93>)
-
-```go
-func (m *manager) shouldProcess(e consensus.ProducerEvent) error
-```
-
-shouldProcess gates whether this pillar should act on event e. Returns one of the \[errors.go\] sentinels when the event is not actionable; nil means "produce now". Each rule is checked before any work begins so we never half\-commit a momentum.
-
-<a name="worker"></a>
-## type [worker](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L26-L39>)
-
-worker is the per\-pillar production engine. One Process call drives a complete slot's work \(momentum \+ auto\-receives \+ embedded updates\). Init / Start / Stop control its lifetime: Start opens the closed channel; Stop closes it and waits for in\-flight Process calls to drain via the children WaitGroup.
-
-The worker can run only one Process at a time — the working mutex serializes them and the embedded contracts list defines which addresses participate in the auto\-receive sweep.
-
-```go
-type worker struct {
-    log      common.Logger
-    closed   chan struct{}
-    working  sync.Mutex
-    children sync.WaitGroup
-
-    contracts []types.Address
-    coinbase  *wallet.KeyPair
-
-    // modules
-    chain       chain.Chain
-    supervisor  *vm.Supervisor
-    broadcaster protocol.Broadcaster
-}
-```
-
-<a name="newWorker"></a>
-### func [newWorker](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L41>)
-
-```go
-func newWorker(chain chain.Chain, supervisor *vm.Supervisor, broadcaster protocol.Broadcaster) *worker
-```
-
-
-
-<a name="worker.Init"></a>
-### func \(\*worker\) [Init](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L52>)
-
-```go
-func (w *worker) Init() error
-```
-
-Init prepares the receiver for use.
-
-<a name="worker.Process"></a>
-### func \(\*worker\) [Process](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L90>)
-
-```go
-func (w *worker) Process(e consensus.ProducerEvent) common.Task
-```
-
-Process schedules one slot of producer work for event e and returns a Task the caller can wait on \(or force\-stop\). Returns nil if the worker has already been Stop'd.
-
-<a name="worker.Start"></a>
-### func \(\*worker\) [Start](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L57>)
-
-```go
-func (w *worker) Start() error
-```
-
-Start begins the receiver's background work.
-
-<a name="worker.Stop"></a>
-### func \(\*worker\) [Stop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L65>)
-
-```go
-func (w *worker) Stop() error
-```
-
-Stop tears down the receiver.
-
-<a name="worker.generateMomentum"></a>
-### func \(\*worker\) [generateMomentum](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker_momentum.go#L13>)
-
-```go
-func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTransaction, error)
-```
-
-generateMomentum acquires the chain insert lock, snapshots the pending\-block content, and asks the supervisor to produce and sign a momentum at the current frontier\+1 with timestamp = slot StartTime. Holds the insert lock for the full call to avoid racing with concurrent inserts.
-
-<a name="worker.generateNext"></a>
-### func \(\*worker\) [generateNext](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker_contract_generator.go#L25>)
-
-```go
-func (w *worker) generateNext(momentumStore store.Momentum, embedded types.Address) (*nom.AccountBlockTransaction, error)
-```
-
-generateNext produces one auto\-receive block for the next pending send addressed to embedded. Returns ErrNothingToGenerate when the contract's mailbox is empty; any other error is fatal to the sweep.
-
-<a name="worker.shouldStop"></a>
-### func \(\*worker\) [shouldStop](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L78>)
-
-```go
-func (w *worker) shouldStop() bool
-```
-
-shouldStop reports whether Stop has been called. Polled at every stage boundary in \[worker.work\] so a late Stop bails out promptly.
-
-<a name="worker.updateContracts"></a>
-### func \(\*worker\) [updateContracts](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker_updater.go#L29>)
-
-```go
-func (w *worker) updateContracts(momentumStore store.Momentum) error
-```
-
-updateContracts walks every embedded contract that participates in periodic updates \([types.EmbeddedWUpdate](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#EmbeddedWUpdate>)\) and produces a signed Update send\-block whenever the cooldown has elapsed. Cooldown / method\-not\-found errors are swallowed; any other error aborts the sweep.
-
-<a name="worker.work"></a>
-### func \(\*worker\) [work](<https://github.com/zenon-network/go-zenon/blob/master/pillar/worker.go#L116>)
-
-```go
-func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent)
-```
-
-work is the actual slot pipeline: generate\-momentum → broadcast → auto\-receive embedded contracts → periodic\-update embedded contracts. Bails out at every stage on task.ShouldStop or worker.shouldStop. Skips the broadcast step if the momentum took more than 3 seconds to generate \(peers would reject it as stale\).
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

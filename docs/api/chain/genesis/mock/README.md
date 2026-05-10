@@ -21,12 +21,12 @@ The package name is \`g\` \(a single\-letter package name\) to keep call sites s
 - Spork — the spork\-controlling keypair.
 - Pillar1Name..Pillar8Name — fixed display names matched to the pillar keypairs.
 - PillarKeys, AllKeyPairs — convenience slices for iteration.
-- EmbeddedGenesis — the canonical [genesis.GenesisConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/#GenesisConfig>) every test starts from.
+- EmbeddedGenesis — the canonical \[genesis.GenesisConfig\] every test starts from.
 - genesisTimestamp, Zexp — anchor constants for time and balance arithmetic.
 
 ### Related Packages
 
-- [github.com/zenon\\\-network/go\\\-zenon/chain/genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/>) — the production genesis loader; this package's [EmbeddedGenesis](<#Secp1PrvKey>) conforms to its [genesis.GenesisConfig](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/#GenesisConfig>) schema.
+- [github.com/zenon\\\-network/go\\\-zenon/chain/genesis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/genesis/>) — the production genesis loader; this package's [EmbeddedGenesis](<#Secp1PrvKey>) conforms to its \[genesis.GenesisConfig\] schema.
 - [github.com/zenon\\\-network/go\\\-zenon/zenon/mock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/mock/>) — consumes this genesis to construct an in\-memory test node.
 - [github.com/zenon\\\-network/go\\\-zenon/wallet](<https://pkg.go.dev/github.com/zenon-network/go-zenon/wallet/>) — supplies the deterministic key derivation that produces the fixtures.
 
@@ -38,14 +38,11 @@ The package name is \`g\` \(a single\-letter package name\) to keep call sites s
 
 ## Constants
 
-<a name="genesisTimestamp"></a>Test\-only constants used to anchor every mock\-genesis fixture in this package.
+<a name="Zexp"></a>Test\-only constants used to anchor every mock\-genesis fixture in this package.
 
 ```go
 const (
-    // genesisTimestamp is the Unix timestamp every mock genesis claims as
-    // its birth time. Sunday, September 9, 2001 1:46:40 UTC — the
-    // well-known "1000000000" pop-culture epoch.
-    genesisTimestamp = 1000000000
+
     // Zexp is 10^8, the power-of-ten scale factor convenience used in
     // test balance arithmetic.
     Zexp = 100000000
@@ -72,31 +69,31 @@ var (
     Secp2PubKeyB64 = base64.StdEncoding.EncodeToString(hexutil.MustDecode("0x047e21bcfbb9bba1da40e373922d8a14c19d11bd3b58eb0c2700f29655e389e70c9291e32d929b54ae6efc04ad3e3a82c1ebd8222ccc0e29ea1c4c3fb97f80f4fe"))
 
     // Spork is the test spork-controlling keypair.
-    Spork, _ = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678900"))
+    Spork = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678900"))
     // Pillar1..Pillar8 are deterministic pillar test keypairs derived
     // from a single seed via [wallet.DeriveWithIndex]. Tests that need
     // multiple producers cycle through these.
-    Pillar1, _ = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar2, _ = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar3, _ = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar4, _ = wallet.DeriveWithIndex(4, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar5, _ = wallet.DeriveWithIndex(5, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar6, _ = wallet.DeriveWithIndex(6, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar7, _ = wallet.DeriveWithIndex(7, hexutil.MustDecode("0x01234567890123456789012345678901"))
-    Pillar8, _ = wallet.DeriveWithIndex(8, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar1 = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar2 = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar3 = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar4 = wallet.DeriveWithIndex(4, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar5 = wallet.DeriveWithIndex(5, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar6 = wallet.DeriveWithIndex(6, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar7 = wallet.DeriveWithIndex(7, hexutil.MustDecode("0x01234567890123456789012345678901"))
+    Pillar8 = wallet.DeriveWithIndex(8, hexutil.MustDecode("0x01234567890123456789012345678901"))
 
     // User1..User10 are deterministic user-account test keypairs derived
     // from a single seed. Tests that need many distinct users use them.
-    User1, _  = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User2, _  = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User3, _  = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User4, _  = wallet.DeriveWithIndex(4, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User5, _  = wallet.DeriveWithIndex(5, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User6, _  = wallet.DeriveWithIndex(6, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User7, _  = wallet.DeriveWithIndex(7, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User8, _  = wallet.DeriveWithIndex(8, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User9, _  = wallet.DeriveWithIndex(9, hexutil.MustDecode("0x01234567890123456789012345678902"))
-    User10, _ = wallet.DeriveWithIndex(10, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User1  = wallet.DeriveWithIndex(1, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User2  = wallet.DeriveWithIndex(2, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User3  = wallet.DeriveWithIndex(3, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User4  = wallet.DeriveWithIndex(4, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User5  = wallet.DeriveWithIndex(5, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User6  = wallet.DeriveWithIndex(6, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User7  = wallet.DeriveWithIndex(7, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User8  = wallet.DeriveWithIndex(8, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User9  = wallet.DeriveWithIndex(9, hexutil.MustDecode("0x01234567890123456789012345678902"))
+    User10 = wallet.DeriveWithIndex(10, hexutil.MustDecode("0x01234567890123456789012345678902"))
 
     // Pillar1Name..Pillar8Name are the fixed display names tied to
     // Pillar1..Pillar8. Names are arbitrary; the `TEST-` prefix

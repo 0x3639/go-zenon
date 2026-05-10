@@ -30,7 +30,7 @@ Wire types \(suffix \-Marshal\) decouple JSON serialisation from the in\-memory 
 
 ### Concurrency
 
-API instances are stateless after construction. The underlying [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) / [chain.Chain](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/#Chain>) objects are shared and goroutine\-safe.
+API instances are stateless after construction. The underlying \[zenon.Zenon\] / \[chain.Chain\] objects are shared and goroutine\-safe.
 
 ### Generated Files
 
@@ -49,19 +49,12 @@ None. Files are Zenon\-specific \(no upstream header\).
 - [Variables](<#variables>)
 - [func GetFrontierContext\(c chain.Chain, addr types.Address\) \(\*nom.Momentum, vm\_context.AccountVmContext, error\)](<#GetFrontierContext>)
 - [func GetRange\(index, count, listLen uint32\) \(uint32, uint32\)](<#GetRange>)
-- [func checkTokenIdValid\(chain chain.Chain, ts \*types.ZenonTokenStandard\) error](<#checkTokenIdValid>)
 - [type AccountBlock](<#AccountBlock>)
-  - [func ledgerAccountBlockToRpc\(chain chain.Chain, lAb \*nom.AccountBlock\) \(\*AccountBlock, error\)](<#ledgerAccountBlockToRpc>)
-  - [func ledgerAccountBlocksToRpc\(chain chain.Chain, list \[\]\*nom.AccountBlock\) \(\[\]\*AccountBlock, error\)](<#ledgerAccountBlocksToRpc>)
   - [func \(block \*AccountBlock\) ComputeHash\(\) \(\*types.Hash, error\)](<#AccountBlock.ComputeHash>)
   - [func \(block \*AccountBlock\) MarshalJSON\(\) \(\[\]byte, error\)](<#AccountBlock.MarshalJSON>)
   - [func \(block \*AccountBlock\) ToAccountBlockMarshal\(\) \*AccountBlockMarshal](<#AccountBlock.ToAccountBlockMarshal>)
   - [func \(block \*AccountBlock\) ToLedgerBlock\(\) \(\*nom.AccountBlock, error\)](<#AccountBlock.ToLedgerBlock>)
   - [func \(block \*AccountBlock\) UnmarshalJSON\(data \[\]byte\) error](<#AccountBlock.UnmarshalJSON>)
-  - [func \(block \*AccountBlock\) addAllExtraInfo\(chain chain.Chain\) error](<#AccountBlock.addAllExtraInfo>)
-  - [func \(block \*AccountBlock\) addConfirmationInfo\(chain chain.Chain\) error](<#AccountBlock.addConfirmationInfo>)
-  - [func \(block \*AccountBlock\) prefetchPaired\(chain chain.Chain\) error](<#AccountBlock.prefetchPaired>)
-  - [func \(block \*AccountBlock\) prefetchToken\(chain chain.Chain\) error](<#AccountBlock.prefetchToken>)
 - [type AccountBlockConfirmationDetail](<#AccountBlockConfirmationDetail>)
 - [type AccountBlockList](<#AccountBlockList>)
   - [func \(abl \*AccountBlockList\) MarshalJSON\(\) \(\[\]byte, error\)](<#AccountBlockList.MarshalJSON>)
@@ -78,7 +71,6 @@ None. Files are Zenon\-specific \(no upstream header\).
 - [type BalanceInfoMarshal](<#BalanceInfoMarshal>)
 - [type DetailedMomentum](<#DetailedMomentum>)
 - [type DetailedMomentumList](<#DetailedMomentumList>)
-  - [func momentumListToDetailedList\(chain chain.Chain, list \*MomentumList\) \(\*DetailedMomentumList, error\)](<#momentumListToDetailedList>)
 - [type LedgerApi](<#LedgerApi>)
   - [func NewLedgerApi\(z zenon.Zenon\) \*LedgerApi](<#NewLedgerApi>)
   - [func \(l \*LedgerApi\) GetAccountBlockByHash\(blockHash types.Hash\) \(\*AccountBlock, error\)](<#LedgerApi.GetAccountBlockByHash>)
@@ -97,15 +89,11 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(l \*LedgerApi\) PublishRawTransaction\(block \*AccountBlock\) error](<#LedgerApi.PublishRawTransaction>)
   - [func \(l LedgerApi\) String\(\) string](<#LedgerApi.String>)
 - [type Momentum](<#Momentum>)
-  - [func ledgerMomentumToRpc\(m \*nom.Momentum\) \(\*Momentum, error\)](<#ledgerMomentumToRpc>)
-  - [func ledgerMomentumsToRpc\(list \[\]\*nom.Momentum\) \(\[\]\*Momentum, error\)](<#ledgerMomentumsToRpc>)
 - [type MomentumHeader](<#MomentumHeader>)
 - [type MomentumList](<#MomentumList>)
 - [type NetworkInfoResponse](<#NetworkInfoResponse>)
 - [type OsInfoResponse](<#OsInfoResponse>)
 - [type Peer](<#Peer>)
-  - [func p2pPeerToPeer\(peer \*p2p.Peer\) \(\*Peer, error\)](<#p2pPeerToPeer>)
-  - [func selfToPeer\(node \*discover.Node\) \*Peer](<#selfToPeer>)
 - [type ProcessInfoResponse](<#ProcessInfoResponse>)
 - [type StatsApi](<#StatsApi>)
   - [func NewStatsApi\(z zenon.Zenon, p2p \*p2p.Server\) \*StatsApi](<#NewStatsApi>)
@@ -124,21 +112,6 @@ None. Files are Zenon\-specific \(no upstream header\).
 
 
 ## Constants
-
-<a name="unreceivedMaxPageIndex"></a>Caps for the unreceived\-block query — separate from the generic pagination limits because GetUnreceivedBlocksByAddress walks an in\-memory mailbox and the cost grows with index\*size.
-
-```go
-const (
-    // unreceivedMaxPageIndex caps pageIndex on
-    // GetUnreceivedBlocksByAddress.
-    unreceivedMaxPageIndex = 10
-    // unreceivedMaxPageSize caps pageSize on the same endpoint.
-    unreceivedMaxPageSize = 50
-    // unreceivedQuerySize is the underlying mailbox fetch limit
-    // (max possible result set across all pages).
-    unreceivedQuerySize = unreceivedMaxPageIndex * unreceivedMaxPageSize
-)
-```
 
 <a name="RpcMaxPageSize"></a>
 
@@ -194,19 +167,10 @@ func GetRange(index, count, listLen uint32) (uint32, uint32)
 
 GetRange computes the \[start, end\) slice indices for a paginated query, clamping to listLen so callers never overrun. start==end is returned for out\-of\-range pages, signalling an empty result.
 
-<a name="checkTokenIdValid"></a>
-## func [checkTokenIdValid](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/utils.go#L60>)
-
-```go
-func checkTokenIdValid(chain chain.Chain, ts *types.ZenonTokenStandard) error
-```
-
-checkTokenIdValid validates that ts \(when non\-nil and non\-zero\) resolves to a known token in the frontier momentum store. Used by PublishRawTransaction to reject blocks that reference a non\-existent token before they enter VM dispatch.
-
 <a name="AccountBlock"></a>
 ## type [AccountBlock](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L49-L55>)
 
-AccountBlock is the wire\-form account block. Embeds the canonical [nom.AccountBlock](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#AccountBlock>) and decorates it with the resolved token info, confirmation details, and the paired \(send⇄receive\) sibling block.
+AccountBlock is the wire\-form account block. Embeds the canonical \[nom.AccountBlock\] and decorates it with the resolved token info, confirmation details, and the paired \(send⇄receive\) sibling block.
 
 ```go
 type AccountBlock struct {
@@ -217,24 +181,6 @@ type AccountBlock struct {
     PairedAccountBlock *AccountBlock                   `json:"pairedAccountBlock"`
 }
 ```
-
-<a name="ledgerAccountBlockToRpc"></a>
-### func [ledgerAccountBlockToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L524>)
-
-```go
-func ledgerAccountBlockToRpc(chain chain.Chain, lAb *nom.AccountBlock) (*AccountBlock, error)
-```
-
-ledgerAccountBlockToRpc projects a chain\-layer account block to the wire form, eagerly resolving the token info, paired block, and confirmation details.
-
-<a name="ledgerAccountBlocksToRpc"></a>
-### func [ledgerAccountBlocksToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L534>)
-
-```go
-func ledgerAccountBlocksToRpc(chain chain.Chain, list []*nom.AccountBlock) ([]*AccountBlock, error)
-```
-
-
 
 <a name="AccountBlock.ComputeHash"></a>
 ### func \(\*AccountBlock\) [ComputeHash](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L355>)
@@ -280,42 +226,6 @@ func (block *AccountBlock) UnmarshalJSON(data []byte) error
 ```
 
 UnmarshalJSON is the inverse of MarshalJSON — decodes the wire form back into an in\-memory AccountBlock with native big.Int values.
-
-<a name="AccountBlock.addAllExtraInfo"></a>
-### func \(\*AccountBlock\) [addAllExtraInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L441>)
-
-```go
-func (block *AccountBlock) addAllExtraInfo(chain chain.Chain) error
-```
-
-
-
-<a name="AccountBlock.addConfirmationInfo"></a>
-### func \(\*AccountBlock\) [addConfirmationInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L419>)
-
-```go
-func (block *AccountBlock) addConfirmationInfo(chain chain.Chain) error
-```
-
-
-
-<a name="AccountBlock.prefetchPaired"></a>
-### func \(\*AccountBlock\) [prefetchPaired](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L374>)
-
-```go
-func (block *AccountBlock) prefetchPaired(chain chain.Chain) error
-```
-
-
-
-<a name="AccountBlock.prefetchToken"></a>
-### func \(\*AccountBlock\) [prefetchToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L363>)
-
-```go
-func (block *AccountBlock) prefetchToken(chain chain.Chain) error
-```
-
-
 
 <a name="AccountBlockConfirmationDetail"></a>
 ## type [AccountBlockConfirmationDetail](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L39-L44>)
@@ -495,15 +405,6 @@ type DetailedMomentumList struct {
 }
 ```
 
-<a name="momentumListToDetailedList"></a>
-### func [momentumListToDetailedList](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L458>)
-
-```go
-func momentumListToDetailedList(chain chain.Chain, list *MomentumList) (*DetailedMomentumList, error)
-```
-
-momentumListToDetailedList expands every momentum in list with its constituent account blocks, returning the heavyweight DetailedMomentumList shape used by GetDetailedMomentumsByHeight.
-
 <a name="LedgerApi"></a>
 ## type [LedgerApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger.go#L33-L37>)
 
@@ -511,9 +412,7 @@ LedgerApi is the "ledger" JSON\-RPC namespace. Methods cover account\-block and 
 
 ```go
 type LedgerApi struct {
-    z     zenon.Zenon
-    chain chain.Chain
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -650,7 +549,7 @@ GetUnreceivedBlocksByAddress returns send\-blocks targeting address that have no
 func (l *LedgerApi) PublishRawTransaction(block *AccountBlock) error
 ```
 
-PublishRawTransaction is the write path: validates a client\-built account block, runs it through [vm.Supervisor](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#Supervisor>) for state checks, and publishes it via the [zenon.Broadcaster](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Broadcaster>) for chain inclusion. Rejects blocks whose ChainIdentifier does not match this node's chain to prevent cross\-network replay.
+PublishRawTransaction is the write path: validates a client\-built account block, runs it through \[vm.Supervisor\] for state checks, and publishes it via the \[zenon.Broadcaster\] for chain inclusion. Rejects blocks whose ChainIdentifier does not match this node's chain to prevent cross\-network replay.
 
 <a name="LedgerApi.String"></a>
 ### func \(LedgerApi\) [String](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger.go#L54>)
@@ -664,7 +563,7 @@ String implements fmt.Stringer for log output.
 <a name="Momentum"></a>
 ## type [Momentum](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L23-L26>)
 
-Momentum is the wire\-form momentum, embedding [nom.Momentum](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/#Momentum>) and adding the Producer pillar address derived from the signature.
+Momentum is the wire\-form momentum, embedding \[nom.Momentum\] and adding the Producer pillar address derived from the signature.
 
 ```go
 type Momentum struct {
@@ -672,24 +571,6 @@ type Momentum struct {
     Producer types.Address `json:"producer"`
 }
 ```
-
-<a name="ledgerMomentumToRpc"></a>
-### func [ledgerMomentumToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L486>)
-
-```go
-func ledgerMomentumToRpc(m *nom.Momentum) (*Momentum, error)
-```
-
-ledgerMomentumToRpc projects a chain\-layer momentum into the wire\-form Momentum, populating the cached Producer address and substituting empty slices for nil Data / Content so the JSON output is stable.
-
-<a name="ledgerMomentumsToRpc"></a>
-### func [ledgerMomentumsToRpc](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L505>)
-
-```go
-func ledgerMomentumsToRpc(list []*nom.Momentum) ([]*Momentum, error)
-```
-
-
 
 <a name="MomentumHeader"></a>
 ## type [MomentumHeader](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/ledger_types.go#L30-L34>)
@@ -761,24 +642,6 @@ type Peer struct {
 }
 ```
 
-<a name="p2pPeerToPeer"></a>
-### func [p2pPeerToPeer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/stats.go#L114>)
-
-```go
-func p2pPeerToPeer(peer *p2p.Peer) (*Peer, error)
-```
-
-p2pPeerToPeer projects a [p2p.Peer](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/#Peer>) into the wire\-form [Peer](<#Peer>). Strips the port suffix from RemoteAddr to produce a bare IP.
-
-<a name="selfToPeer"></a>
-### func [selfToPeer](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/stats.go#L127>)
-
-```go
-func selfToPeer(node *discover.Node) *Peer
-```
-
-selfToPeer renders the local node as a Peer — IP is hard\-coded to loopback because the local listening interface is not meaningful to remote callers.
-
 <a name="ProcessInfoResponse"></a>
 ## type [ProcessInfoResponse](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/stats.go#L83-L86>)
 
@@ -798,9 +661,7 @@ StatsApi is the "stats" JSON\-RPC namespace. Exposes process / OS / network / sy
 
 ```go
 type StatsApi struct {
-    z   zenon.Zenon
-    p2p *p2p.Server
-    log log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 

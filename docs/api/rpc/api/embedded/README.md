@@ -28,7 +28,7 @@ One namespace per contract, each providing read accessors over that contract's o
 
 ### Conventions
 
-Each constructor takes the ambient [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) handle and caches the chain / consensus pointers it needs. APIs are stateless after construction; safe for concurrent use.
+Each constructor takes the ambient \[zenon.Zenon\] handle and caches the chain / consensus pointers it needs. APIs are stateless after construction; safe for concurrent use.
 
 All paginated endpoints honour the same \[api.RpcMaxPageSize\]=1024 cap as the parent package. Big.Int values render as decimal strings via \-Marshal twin types — the same convention used throughout the rpc/api surface.
 
@@ -47,8 +47,6 @@ None. Files are Zenon\-specific \(no upstream header\).
 ## Index
 
 - [Variables](<#variables>)
-- [func getDepositedQsr\(chain chain.Chain, contract types.Address, address types.Address\) \(\*big.Int, error\)](<#getDepositedQsr>)
-- [func getUncollectedReward\(chain chain.Chain, contract types.Address, address types.Address\) \(\*definition.RewardDeposit, error\)](<#getUncollectedReward>)
 - [type AcceleratorApi](<#AcceleratorApi>)
   - [func NewAcceleratorApi\(z zenon.Zenon\) \*AcceleratorApi](<#NewAcceleratorApi>)
   - [func \(a \*AcceleratorApi\) GetAll\(pageIndex, pageSize uint32\) \(\*ProjectList, error\)](<#AcceleratorApi.GetAll>)
@@ -56,7 +54,6 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(a \*AcceleratorApi\) GetPillarVotes\(name string, hashes \[\]types.Hash\) \(\[\]\*definition.PillarVote, error\)](<#AcceleratorApi.GetPillarVotes>)
   - [func \(a \*AcceleratorApi\) GetProjectById\(id types.Hash\) \(\*Project, error\)](<#AcceleratorApi.GetProjectById>)
   - [func \(a \*AcceleratorApi\) GetVoteBreakdown\(id types.Hash\) \(\*definition.VoteBreakdown, error\)](<#AcceleratorApi.GetVoteBreakdown>)
-  - [func \(a \*AcceleratorApi\) toProject\(context vm\_context.AccountVmContext, abiProject \*definition.Project\) \*Project](<#AcceleratorApi.toProject>)
 - [type BridgeApi](<#BridgeApi>)
   - [func NewBridgeApi\(z zenon.Zenon\) \*BridgeApi](<#NewBridgeApi>)
   - [func \(a \*BridgeApi\) GetAllNetworks\(pageIndex, pageSize uint32\) \(\*NetworkInfoList, error\)](<#BridgeApi.GetAllNetworks>)
@@ -74,10 +71,6 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(a \*BridgeApi\) GetTimeChallengesInfo\(\) \(\*TimeChallengesList, error\)](<#BridgeApi.GetTimeChallengesInfo>)
   - [func \(a \*BridgeApi\) GetUnwrapTokenRequestByHashAndLog\(txHash types.Hash, logIndex uint32\) \(\*UnwrapTokenRequest, error\)](<#BridgeApi.GetUnwrapTokenRequestByHashAndLog>)
   - [func \(a \*BridgeApi\) GetWrapTokenRequestById\(id types.Hash\) \(\*WrapTokenRequest, error\)](<#BridgeApi.GetWrapTokenRequestById>)
-  - [func \(a \*BridgeApi\) getConfirmationsToFinality\(wrapTokenRequest definition.WrapTokenRequest, confirmationsToFinality uint32, momentum nom.Momentum\) \(uint64, error\)](<#BridgeApi.getConfirmationsToFinality>)
-  - [func \(a \*BridgeApi\) getRedeemableIn\(unwrapTokenRequest definition.UnwrapTokenRequest, tokenPair definition.TokenPair, momentum nom.Momentum\) uint64](<#BridgeApi.getRedeemableIn>)
-  - [func \(a \*BridgeApi\) getToken\(zts types.ZenonTokenStandard\) \(\*api.Token, error\)](<#BridgeApi.getToken>)
-  - [func \(a \*BridgeApi\) toRequest\(context vm\_context.AccountVmContext, abiRequest \*definition.WrapTokenRequest\) \*definition.WrapTokenRequest](<#BridgeApi.toRequest>)
 - [type ConsensusCache](<#ConsensusCache>)
   - [func NewConsensusCache\(z zenon.Zenon, testing bool\) ConsensusCache](<#NewConsensusCache>)
 - [type FusionEntry](<#FusionEntry>)
@@ -163,7 +156,6 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(r \*RewardHistoryEntry\) UnmarshalJSON\(data \[\]byte\) error](<#RewardHistoryEntry.UnmarshalJSON>)
 - [type RewardHistoryEntryMarshal](<#RewardHistoryEntryMarshal>)
 - [type RewardHistoryList](<#RewardHistoryList>)
-  - [func getFrontierRewardByPage\(chain chain.Chain, contract types.Address, address types.Address, pageIndex, pageSize uint32\) \(\*RewardHistoryList, error\)](<#getFrontierRewardByPage>)
 - [type SentinelApi](<#SentinelApi>)
   - [func NewSentinelApi\(z zenon.Zenon\) \*SentinelApi](<#NewSentinelApi>)
   - [func \(api \*SentinelApi\) GetAllActive\(pageIndex, pageSize uint32\) \(\*SentinelInfoList, error\)](<#SentinelApi.GetAllActive>)
@@ -171,7 +163,6 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(api \*SentinelApi\) GetDepositedQsr\(address types.Address\) \(string, error\)](<#SentinelApi.GetDepositedQsr>)
   - [func \(api \*SentinelApi\) GetFrontierRewardByPage\(address types.Address, pageIndex, pageSize uint32\) \(\*RewardHistoryList, error\)](<#SentinelApi.GetFrontierRewardByPage>)
   - [func \(api \*SentinelApi\) GetUncollectedReward\(address types.Address\) \(\*definition.RewardDeposit, error\)](<#SentinelApi.GetUncollectedReward>)
-  - [func \(api \*SentinelApi\) toSentinelInfo\(sentinel \*definition.SentinelInfo\) \*SentinelInfo](<#SentinelApi.toSentinelInfo>)
 - [type SentinelInfo](<#SentinelInfo>)
 - [type SentinelInfoList](<#SentinelInfoList>)
 - [type SortFusionEntryByHeight](<#SortFusionEntryByHeight>)
@@ -228,11 +219,6 @@ None. Files are Zenon\-specific \(no upstream header\).
   - [func \(w \*WrapTokenRequest\) MarshalJSON\(\) \(\[\]byte, error\)](<#WrapTokenRequest.MarshalJSON>)
   - [func \(w \*WrapTokenRequest\) UnmarshalJSON\(data \[\]byte\) error](<#WrapTokenRequest.UnmarshalJSON>)
 - [type WrapTokenRequestList](<#WrapTokenRequestList>)
-- [type consensusCache](<#consensusCache>)
-  - [func \(cache \*consensusCache\) Get\(\) \(weights map\[string\]\*big.Int, currentStats \*api.EpochStats\)](<#consensusCache.Get>)
-  - [func \(cache \*consensusCache\) releaseUpdate\(\)](<#consensusCache.releaseUpdate>)
-  - [func \(cache \*consensusCache\) shouldUpdate\(\) bool](<#consensusCache.shouldUpdate>)
-  - [func \(cache \*consensusCache\) update\(\)](<#consensusCache.update>)
 
 
 ## Variables
@@ -249,24 +235,6 @@ var (
 )
 ```
 
-<a name="getDepositedQsr"></a>
-## func [getDepositedQsr](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L17>)
-
-```go
-func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Address) (*big.Int, error)
-```
-
-getDepositedQsr returns the QSR balance fused on contract for address, or nil if no deposit exists. Used by APIs that surface per\-user fused\-QSR figures \(sentinel, stake, etc.\).
-
-<a name="getUncollectedReward"></a>
-## func [getUncollectedReward](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L33>)
-
-```go
-func getUncollectedReward(chain chain.Chain, contract types.Address, address types.Address) (*definition.RewardDeposit, error)
-```
-
-getUncollectedReward returns address's pending reward balance \(ZNN \+ QSR\) on contract — i.e., rewards already credited but not yet withdrawn.
-
 <a name="AcceleratorApi"></a>
 ## type [AcceleratorApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L23-L26>)
 
@@ -274,8 +242,7 @@ AcceleratorApi is the "embedded.accelerator" namespace — read access to projec
 
 ```go
 type AcceleratorApi struct {
-    chain chain.Chain
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -333,15 +300,6 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 
 GetVoteBreakdown loads the VoteBreakdown record from storage.
 
-<a name="AcceleratorApi.toProject"></a>
-### func \(\*AcceleratorApi\) [toProject](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/accelerator.go#L40>)
-
-```go
-func (a *AcceleratorApi) toProject(context vm_context.AccountVmContext, abiProject *definition.Project) *Project
-```
-
-toProject expands a storage\-layer Project into the wire\-form [Project](<#Project>), eagerly resolving phase entries and vote breakdowns. Skips phases whose entries fail to load \(logged at the storage layer\).
-
 <a name="BridgeApi"></a>
 ## type [BridgeApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L25-L28>)
 
@@ -349,8 +307,7 @@ BridgeApi is the "embedded.bridge" namespace — read access to cross\-chain bri
 
 ```go
 type BridgeApi struct {
-    chain chain.Chain
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -497,42 +454,6 @@ func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, e
 ```
 
 GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
-
-<a name="BridgeApi.getConfirmationsToFinality"></a>
-### func \(\*BridgeApi\) [getConfirmationsToFinality](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L273>)
-
-```go
-func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapTokenRequest, confirmationsToFinality uint32, momentum nom.Momentum) (uint64, error)
-```
-
-
-
-<a name="BridgeApi.getRedeemableIn"></a>
-### func \(\*BridgeApi\) [getRedeemableIn](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L263>)
-
-```go
-func (a *BridgeApi) getRedeemableIn(unwrapTokenRequest definition.UnwrapTokenRequest, tokenPair definition.TokenPair, momentum nom.Momentum) uint64
-```
-
-
-
-<a name="BridgeApi.getToken"></a>
-### func \(\*BridgeApi\) [getToken](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L245>)
-
-```go
-func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error)
-```
-
-
-
-<a name="BridgeApi.toRequest"></a>
-### func \(\*BridgeApi\) [toRequest](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/bridge.go#L162>)
-
-```go
-func (a *BridgeApi) toRequest(context vm_context.AccountVmContext, abiRequest *definition.WrapTokenRequest) *definition.WrapTokenRequest
-```
-
-
 
 <a name="ConsensusCache"></a>
 ## type [ConsensusCache](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L19-L21>)
@@ -749,10 +670,7 @@ HtlcApi is the "embedded.htlc" namespace — read access to hash\-time\-locked c
 
 ```go
 type HtlcApi struct {
-    chain chain.Chain
-    z     zenon.Zenon
-    cs    consensus.Consensus
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -790,8 +708,7 @@ LiquidityApi is the "embedded.liquidity" namespace — read access to liquidity\
 
 ```go
 type LiquidityApi struct {
-    chain chain.Chain
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -944,9 +861,7 @@ PillarApi is the "embedded.pillar" namespace — read access to the pillar regis
 
 ```go
 type PillarApi struct {
-    log            log15.Logger
-    chain          chain.Chain
-    consensusCache ConsensusCache
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1218,10 +1133,7 @@ PlasmaApi is the "embedded.plasma" namespace — read access to plasma fusion en
 
 ```go
 type PlasmaApi struct {
-    chain chain.Chain
-    z     zenon.Zenon
-    cs    consensus.Consensus
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1464,15 +1376,6 @@ type RewardHistoryList struct {
 }
 ```
 
-<a name="getFrontierRewardByPage"></a>
-### func [getFrontierRewardByPage](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/shared.go#L97>)
-
-```go
-func getFrontierRewardByPage(chain chain.Chain, contract types.Address, address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error)
-```
-
-getFrontierRewardByPage walks the reward\-deposit history backwards from the latest epoch, returning up to pageSize entries per page. Empty epochs \(no reward deposit for address\) are skipped silently. Shared by every reward\-bearing namespace.
-
 <a name="SentinelApi"></a>
 ## type [SentinelApi](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L17-L20>)
 
@@ -1480,8 +1383,7 @@ SentinelApi is the "embedded.sentinel" namespace — read access to the sentinel
 
 ```go
 type SentinelApi struct {
-    chain chain.Chain
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1538,15 +1440,6 @@ func (api *SentinelApi) GetUncollectedReward(address types.Address) (*definition
 ```
 
 GetUncollectedReward loads the UncollectedReward record from storage.
-
-<a name="SentinelApi.toSentinelInfo"></a>
-### func \(\*SentinelApi\) [toSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L45>)
-
-```go
-func (api *SentinelApi) toSentinelInfo(sentinel *definition.SentinelInfo) *SentinelInfo
-```
-
-
 
 <a name="SentinelInfo"></a>
 ## type [SentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/sentinel.go#L23-L29>)
@@ -1618,10 +1511,7 @@ SporkApi is the "embedded.spork" namespace — read access to the spork registry
 
 ```go
 type SporkApi struct {
-    chain chain.Chain
-    z     zenon.Zenon
-    cs    consensus.Consensus
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1662,10 +1552,7 @@ StakeApi is the "embedded.stake" namespace — read access to ZNN staking entrie
 
 ```go
 type StakeApi struct {
-    chain chain.Chain
-    z     zenon.Zenon
-    cs    consensus.Consensus
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1826,9 +1713,7 @@ SwapApi is the "embedded.swap" namespace — read access to the pillar→coinbas
 
 ```go
 type SwapApi struct {
-    chain     chain.Chain
-    consensus consensus.Consensus
-    log       log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -2003,10 +1888,7 @@ TokenAPI is the "embedded.token" namespace — read access to the token\-info re
 
 ```go
 type TokenAPI struct {
-    chain chain.Chain
-    z     zenon.Zenon
-    cs    consensus.Consensus
-    log   log15.Logger
+    // contains filtered or unexported fields
 }
 ```
 
@@ -2143,61 +2025,5 @@ type WrapTokenRequestList struct {
     List  []*WrapTokenRequest `json:"list"`
 }
 ```
-
-<a name="consensusCache"></a>
-## type [consensusCache](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L26-L37>)
-
-consensusCache is the production [ConsensusCache](<#ConsensusCache>) — refreshes the memoised weights / epoch\-stats every 5 minutes \(or on every Get call when testing=true so unit tests see fresh data immediately\).
-
-```go
-type consensusCache struct {
-    testing   bool
-    log       common.Logger
-    chain     chain.Chain
-    consensus consensus.Consensus
-
-    updating     bool
-    changes      sync.Mutex
-    nextTime     *time.Time
-    weights      map[string]*big.Int
-    currentStats *api.EpochStats
-}
-```
-
-<a name="consensusCache.Get"></a>
-### func \(\*consensusCache\) [Get](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L43>)
-
-```go
-func (cache *consensusCache) Get() (weights map[string]*big.Int, currentStats *api.EpochStats)
-```
-
-Get returns the cached pillar weights and current\-epoch stats. Triggers an asynchronous refresh when the cache is stale; in testing mode the refresh runs synchronously so tests see fresh data without timing dependencies.
-
-<a name="consensusCache.releaseUpdate"></a>
-### func \(\*consensusCache\) [releaseUpdate](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L73>)
-
-```go
-func (cache *consensusCache) releaseUpdate()
-```
-
-releaseUpdate clears the in\-flight flag once the refresh goroutine finishes \(success or failure\).
-
-<a name="consensusCache.shouldUpdate"></a>
-### func \(\*consensusCache\) [shouldUpdate](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L64>)
-
-```go
-func (cache *consensusCache) shouldUpdate() bool
-```
-
-shouldUpdate reports whether the cache is stale and not already being refreshed by another caller.
-
-<a name="consensusCache.update"></a>
-### func \(\*consensusCache\) [update](<https://github.com/zenon-network/go-zenon/blob/master/rpc/api/embedded/consensus_cache.go#L83>)
-
-```go
-func (cache *consensusCache) update()
-```
-
-update refreshes the memoised pillar weights and current\-epoch stats from the consensus reader at the chain head. Errors are logged but not surfaced — Get keeps returning the previous values until the next successful refresh.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

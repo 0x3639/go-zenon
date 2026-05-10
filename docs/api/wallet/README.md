@@ -22,7 +22,7 @@ Encryption: BIP\-39 entropy is sealed with AES\-256\-GCM under a key derived fro
 
 - KeyFile — on\-disk encrypted wallet record. Discovered and tracked by [Manager](<#Manager>) from \[Config.WalletDir\].
 - KeyStore — in\-memory decrypted wallet \(entropy, mnemonic, seed, base address\). Produced by [KeyFile.Decrypt](<#KeyFile.Decrypt>) or \[keyStoreFromEntropy\]. Always \[KeyStore.Zero\]ed when no longer needed.
-- KeyPair — Ed25519 keypair plus the derived [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>). Returned by every derivation entry point and by [KeyStore.FindAddress](<#KeyStore.FindAddress>).
+- KeyPair — Ed25519 keypair plus the derived \[types.Address\]. Returned by every derivation entry point and by [KeyStore.FindAddress](<#KeyStore.FindAddress>).
 - Derivation path — \`m/44'/73404'/i'\`, fully hardened. Ed25519 has no public\-derivation form, so non\-hardened segments return [ErrNoPublicDerivation](<#ErrKeyFileInvalidVersion>).
 - Manager — orchestrates the whole thing: scans the wallet dir, unlocks/locks keyfiles, hands out \[KeyStore\]s on demand.
 
@@ -51,7 +51,7 @@ sig := kp.Sign(message)
 
 ### Related Packages
 
-- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — the [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>) keypairs derive to.
+- [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — the \[types.Address\] keypairs derive to.
 - [github.com/zenon\\\-network/go\\\-zenon/common/crypto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/>) — supplies the hash and Ed25519 primitives layered atop the standard library here.
 - [github.com/zenon\\\-network/go\\\-zenon/pillar](<https://pkg.go.dev/github.com/zenon-network/go-zenon/pillar/>) — consumes a [KeyPair](<#KeyPair>) as its coinbase.
 - [github.com/zenon\\\-network/go\\\-zenon/rpc/api](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/api/>) — uses [Manager](<#Manager>) to unlock and sign on behalf of users.
@@ -62,9 +62,6 @@ sig := kp.Sign(message)
 - [Variables](<#variables>)
 - [func GetEntropyCSPRNG\(n int\) \[\]byte](<#GetEntropyCSPRNG>)
 - [func VerifySignature\(pubkey ed25519.PublicKey, message, sig \[\]byte\) \(bool, error\)](<#VerifySignature>)
-- [func aesGCMDecrypt\(key, cipherText, nonce \[\]byte\) \(\[\]byte, error\)](<#aesGCMDecrypt>)
-- [func aesGCMEncrypt\(key, inText \[\]byte\) \(outText, nonce \[\]byte, err error\)](<#aesGCMEncrypt>)
-- [func isValidPath\(path string\) bool](<#isValidPath>)
 - [type Config](<#Config>)
 - [type KeyFile](<#KeyFile>)
   - [func ReadKeyFile\(path string\) \(\*KeyFile, error\)](<#ReadKeyFile>)
@@ -76,7 +73,6 @@ sig := kp.Sign(message)
   - [func \(kp \*KeyPair\) Sign\(message \[\]byte\) \[\]byte](<#KeyPair.Sign>)
   - [func \(kp \*KeyPair\) Signer\(data \[\]byte\) \(signedData \[\]byte, address \*types.Address, pubkey \[\]byte, err error\)](<#KeyPair.Signer>)
 - [type KeyStore](<#KeyStore>)
-  - [func keyStoreFromEntropy\(entropy \[\]byte\) \(\*KeyStore, error\)](<#keyStoreFromEntropy>)
   - [func \(ks \*KeyStore\) DeriveForFullPath\(ipath string\) \(path string, key \*KeyPair, err error\)](<#KeyStore.DeriveForFullPath>)
   - [func \(ks \*KeyStore\) DeriveForIndexPath\(index uint32\) \(path string, key \*KeyPair, err error\)](<#KeyStore.DeriveForIndexPath>)
   - [func \(ks \*KeyStore\) Encrypt\(password string\) \(\*KeyFile, error\)](<#KeyStore.Encrypt>)
@@ -94,15 +90,6 @@ sig := kp.Sign(message)
   - [func \(m \*Manager\) Start\(\) error](<#Manager.Start>)
   - [func \(m \*Manager\) Stop\(\)](<#Manager.Stop>)
   - [func \(m \*Manager\) Unlock\(path, password string\) error](<#Manager.Unlock>)
-- [type argon2Params](<#argon2Params>)
-- [type cryptoParams](<#cryptoParams>)
-- [type key](<#key>)
-  - [func newMasterKey\(seed \[\]byte\) \(\*key, error\)](<#newMasterKey>)
-  - [func \(k \*key\) derive\(i uint32\) \(\*key, error\)](<#key.derive>)
-  - [func \(k key\) toKeyPair\(\) \(\*KeyPair, error\)](<#key.toKeyPair>)
-- [type passwordHash](<#passwordHash>)
-  - [func \(h \*passwordHash\) Set\(password string\) error](<#passwordHash.Set>)
-  - [func \(h \*passwordHash\) SetFromJSON\(password string, params argon2Params\) error](<#passwordHash.SetFromJSON>)
 
 
 ## Constants
@@ -119,23 +106,6 @@ const (
     // segment of a Zenon path is hardened; non-hardened (public)
     // derivation is not defined for Ed25519.
     FirstHardenedIndex = uint32(0x80000000)
-    // seedModifier is the HMAC key used to derive the master key from a
-    // BIP-39 seed (the canonical SLIP-0010 ed25519 modifier).
-    seedModifier = "ed25519 seed"
-)
-```
-
-<a name="cryptoStoreVersion"></a>On\-disk format constants. Bumping cryptoStoreVersion or changing aesMode / argonName makes existing key files incompatible — readers validate these fields on every open.
-
-```go
-const (
-    // cryptoStoreVersion is the schema version stamped on every key file.
-    cryptoStoreVersion = 1
-    // aesMode is the AES-GCM variant used for entropy encryption.
-    aesMode = "aes-256-gcm"
-    // argonName is the password-derivation function name written into
-    // every key file.
-    argonName = "argon2.IDKey"
 )
 ```
 
@@ -144,22 +114,6 @@ const (
 ```go
 const (
     DefaultMaxIndex = 128
-)
-```
-
-<a name="gcmAdditionData"></a>gcmAdditionData is the AES\-GCM additional\-data tag bound into every keyfile's authenticated ciphertext. Acts as a domain separator so a keyfile produced by this package cannot be misinterpreted under a different scheme.
-
-```go
-const (
-    gcmAdditionData = "zenon"
-)
-```
-
-<a name="maxSearchIndex"></a>maxSearchIndex caps how many derivation indexes [KeyStore.FindAddress](<#KeyStore.FindAddress>) will scan before giving up.
-
-```go
-const (
-    maxSearchIndex = 128
 )
 ```
 
@@ -205,14 +159,6 @@ var (
 )
 ```
 
-<a name="pathRegex"></a>pathRegex validates that a derivation path is a \`/\`\-separated sequence of hardened segments rooted at \`m\`.
-
-```go
-var (
-    pathRegex = regexp.MustCompile("^m(\\/[0-9]+')+$")
-)
-```
-
 <a name="GetEntropyCSPRNG"></a>
 ## func [GetEntropyCSPRNG](<https://github.com/zenon-network/go-zenon/blob/master/wallet/crypto.go#L65>)
 
@@ -229,34 +175,7 @@ GetEntropyCSPRNG returns n cryptographically\-secure random bytes from crypto/ra
 func VerifySignature(pubkey ed25519.PublicKey, message, sig []byte) (bool, error)
 ```
 
-VerifySignature checks an Ed25519 signature. Returns an error if pubkey is not the expected length; otherwise returns the bool result of [ed25519.Verify](<https://pkg.go.dev/crypto/ed25519/#Verify>) with a nil error.
-
-<a name="aesGCMDecrypt"></a>
-## func [aesGCMDecrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/crypto.go#L43>)
-
-```go
-func aesGCMDecrypt(key, cipherText, nonce []byte) ([]byte, error)
-```
-
-aesGCMDecrypt opens cipherText sealed by \[aesGCMEncrypt\]. Returns the AES\-GCM open error on tag mismatch — callers map that to a higher\-level error such as [ErrWrongPassword](<#ErrKeyFileInvalidVersion>).
-
-<a name="aesGCMEncrypt"></a>
-## func [aesGCMEncrypt](<https://github.com/zenon-network/go-zenon/blob/master/wallet/crypto.go#L24>)
-
-```go
-func aesGCMEncrypt(key, inText []byte) (outText, nonce []byte, err error)
-```
-
-aesGCMEncrypt encrypts inText under key with a fresh 12\-byte random nonce and the \[gcmAdditionData\] tag. Returns the sealed ciphertext, the nonce, and any error from cipher construction.
-
-<a name="isValidPath"></a>
-## func [isValidPath](<https://github.com/zenon-network/go-zenon/blob/master/wallet/derivation.go#L143>)
-
-```go
-func isValidPath(path string) bool
-```
-
-isValidPath reports whether path matches \[pathRegex\] and every segment fits in a uint32 once the trailing \`'\` is stripped.
+VerifySignature checks an Ed25519 signature. Returns an error if pubkey is not the expected length; otherwise returns the bool result of \[ed25519.Verify\] with a nil error.
 
 <a name="Config"></a>
 ## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/wallet/manager.go#L19-L22>)
@@ -316,7 +235,7 @@ Write persists kf to its \[KeyFile.Path\] with restrictive \(owner\-only\-read\-
 <a name="KeyPair"></a>
 ## type [KeyPair](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keypair.go#L13-L17>)
 
-KeyPair bundles an Ed25519 keypair with its derived [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>). Returned by every derivation entry point \([DeriveForPath](<#DeriveForPath>), [KeyStore.DeriveForIndexPath](<#KeyStore.DeriveForIndexPath>)\) and consumed by the pillar producer and the RPC signer.
+KeyPair bundles an Ed25519 keypair with its derived \[types.Address\]. Returned by every derivation entry point \([DeriveForPath](<#DeriveForPath>), [KeyStore.DeriveForIndexPath](<#KeyStore.DeriveForIndexPath>)\) and consumed by the pillar producer and the RPC signer.
 
 ```go
 type KeyPair struct {
@@ -365,7 +284,7 @@ Signer is the multi\-return shape consumed by the pillar / RPC signing path: it 
 <a name="KeyStore"></a>
 ## type [KeyStore](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L28-L34>)
 
-KeyStore is the in\-memory, decrypted view of a wallet: the BIP\-39 entropy, the derived seed, the human\-readable mnemonic, and the [types.Address](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#Address>) of the index\-0 account \(the wallet's "base address", used as the wallet's identity in logs and RPC\).
+KeyStore is the in\-memory, decrypted view of a wallet: the BIP\-39 entropy, the derived seed, the human\-readable mnemonic, and the \[types.Address\] of the index\-0 account \(the wallet's "base address", used as the wallet's identity in logs and RPC\).
 
 A [KeyStore](<#KeyStore>) is produced either fresh from entropy via \[keyStoreFromEntropy\] or by decrypting a [KeyFile](<#KeyFile>) with the user's password. [KeyStore.Zero](<#KeyStore.Zero>) should be called when the keystore is no longer needed; the [Manager](<#Manager>) does this for every decrypted keystore at shutdown.
 
@@ -378,15 +297,6 @@ type KeyStore struct {
     BaseAddress types.Address
 }
 ```
-
-<a name="keyStoreFromEntropy"></a>
-### func [keyStoreFromEntropy](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L38>)
-
-```go
-func keyStoreFromEntropy(entropy []byte) (*KeyStore, error)
-```
-
-keyStoreFromEntropy builds a fresh [KeyStore](<#KeyStore>) from the supplied entropy: derives the BIP\-39 mnemonic and seed, and computes the index\-0 address.
 
 <a name="KeyStore.DeriveForFullPath"></a>
 ### func \(\*KeyStore\) [DeriveForFullPath](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keystore.go#L73>)
@@ -442,11 +352,7 @@ Concurrency: the manager is not internally synchronized; callers that share an i
 
 ```go
 type Manager struct {
-    config *Config
-    log    common.Logger
-
-    encrypted map[string]*KeyFile  // map from path to
-    decrypted map[string]*KeyStore // map from path to
+    // contains filtered or unexported fields
 }
 ```
 
@@ -548,102 +454,5 @@ func (m *Manager) Unlock(path, password string) error
 ```
 
 Unlock decrypts the keyfile at path with password and registers both the keyfile \(if not already known\) and the resulting keystore on the manager. After this call [Manager.GetKeyStore](<#Manager.GetKeyStore>) succeeds for path.
-
-<a name="argon2Params"></a>
-## type [argon2Params](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keyfile.go#L54-L56>)
-
-argon2Params holds the per\-keyfile Argon2id salt. Cost parameters are hard\-coded in \[passwordHash.Set\] so every keyfile uses the same memory/iteration tuning.
-
-```go
-type argon2Params struct {
-    Salt hexutil.Bytes `json:"salt"`
-}
-```
-
-<a name="cryptoParams"></a>
-## type [cryptoParams](<https://github.com/zenon-network/go-zenon/blob/master/wallet/keyfile.go#L41-L49>)
-
-cryptoParams carries the cipher and KDF parameters for a [KeyFile](<#KeyFile>): the cipher name, the KDF identifier, the AES\-GCM ciphertext and nonce, and the Argon2 parameters used to derive the key.
-
-```go
-type cryptoParams struct {
-    // Constants
-    CipherName string `json:"cipherName"`
-    KDF        string `json:"kdf"`
-    // Data
-    CipherData   hexutil.Bytes `json:"cipherData"`
-    AesNonce     hexutil.Bytes `json:"nonce"`
-    Argon2Params argon2Params  `json:"argon2Params"`
-}
-```
-
-<a name="key"></a>
-## type [key](<https://github.com/zenon-network/go-zenon/blob/master/wallet/derivation.go#L42-L45>)
-
-key is an intermediate derivation node holding the 32\-byte private key and the 32\-byte chain code. Each derivation step produces a new key.
-
-```go
-type key struct {
-    Key       []byte
-    ChainCode []byte
-}
-```
-
-<a name="newMasterKey"></a>
-### func [newMasterKey](<https://github.com/zenon-network/go-zenon/blob/master/wallet/derivation.go#L102>)
-
-```go
-func newMasterKey(seed []byte) (*key, error)
-```
-
-newMasterKey runs HMAC\-SHA512 over the seed using \[seedModifier\] as the key and splits the result into the master private key and chain code.
-
-<a name="key.derive"></a>
-### func \(\*key\) [derive](<https://github.com/zenon-network/go-zenon/blob/master/wallet/derivation.go#L119>)
-
-```go
-func (k *key) derive(i uint32) (*key, error)
-```
-
-derive performs one hardened SLIP\-0010 derivation step. Returns [ErrNoPublicDerivation](<#ErrKeyFileInvalidVersion>) for any non\-hardened index \(Ed25519 has no public\-derivation form\).
-
-<a name="key.toKeyPair"></a>
-### func \(key\) [toKeyPair](<https://github.com/zenon-network/go-zenon/blob/master/wallet/derivation.go#L49>)
-
-```go
-func (k key) toKeyPair() (*KeyPair, error)
-```
-
-toKeyPair turns the raw 32\-byte private\-key seed into a fully\-formed [KeyPair](<#KeyPair>) \(Ed25519 keypair \+ derived address\).
-
-<a name="passwordHash"></a>
-## type [passwordHash](<https://github.com/zenon-network/go-zenon/blob/master/wallet/password.go#L10-L13>)
-
-passwordHash holds the 32\-byte Argon2id\-derived key used to AES\-GCM\-encrypt the wallet entropy, plus the per\-keyfile salt used to derive it.
-
-```go
-type passwordHash struct {
-    password [32]byte
-    salt     hexutil.Bytes
-}
-```
-
-<a name="passwordHash.Set"></a>
-### func \(\*passwordHash\) [Set](<https://github.com/zenon-network/go-zenon/blob/master/wallet/password.go#L18>)
-
-```go
-func (h *passwordHash) Set(password string) error
-```
-
-Set derives a fresh keyfile\-encryption key from password using a new 16\-byte random salt. Argon2id parameters: time=1, memory=64 MiB, parallelism=4, output=32 bytes.
-
-<a name="passwordHash.SetFromJSON"></a>
-### func \(\*passwordHash\) [SetFromJSON](<https://github.com/zenon-network/go-zenon/blob/master/wallet/password.go#L29>)
-
-```go
-func (h *passwordHash) SetFromJSON(password string, params argon2Params) error
-```
-
-SetFromJSON re\-derives the keyfile\-encryption key from password using the salt persisted in params \(the inverse of \[passwordHash.Set\]\). Argon2id parameters match \[passwordHash.Set\].
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

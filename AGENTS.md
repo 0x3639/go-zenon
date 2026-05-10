@@ -91,14 +91,14 @@ Use these terms exactly in godoc comments — no synonyms.
 | Block schema | `chain/nom/account_block.go`, `chain/nom/momentum.go` |
 | Top-level wiring | `zenon/zenon.go` |
 | Insert serialization | `chain/chain.go` (`AcquireInsert`) |
-| Account-block validation | `verifier/account_block_verifier.go` |
-| Momentum validation | `verifier/momentum_verifier.go` |
+| Account-block validation | `verifier/account_block.go` |
+| Momentum validation | `verifier/momentum.go` |
 | Pillar election | `consensus/election.go` |
 | Embedded-contract dispatch | `vm/embedded/embedded.go` (read `getOrigin`, `getAccelerator`, `getBridgeAndLiquidity`, `getHtlc`) |
 | ABI encode/decode | `vm/abi/abi.go` |
 | Plasma rules | `vm/embedded/implementation/plasma.go` |
 | Genesis | `chain/genesis/genesis.go` |
-| RPC endpoints | `rpc/api/ledger.go`, `rpc/api/network.go`, `rpc/api/utility.go` |
+| RPC endpoints | `rpc/api/ledger.go`, `rpc/api/stats.go`, `rpc/api/utils.go` |
 | Subscriptions | `rpc/api/subscribe/` |
 | P2P entry | `p2p/server.go` |
 | Wallet | `wallet/keystore.go`, `wallet/keyfile.go` |

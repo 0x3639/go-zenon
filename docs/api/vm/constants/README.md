@@ -15,7 +15,7 @@ constants is a leaf package consumed by everything in the VM and embedded\-contr
 - consensus.go — the [Consensus](<#Consensus>) tuning struct and the live [ConsensusConfig](<#ConsensusConfig>).
 - plasma.go — plasma cost constants \([AccountBlockBasePlasma](<#AccountBlockBasePlasma>), [PoWDifficultyPerPlasma](<#AccountBlockBasePlasma>), etc.\) and the [PlasmaTable](<#PlasmaTable>) struct contract methods receive in \[embedded.Method.GetPlasma\].
 - embedded.go — per\-contract tunables: pillar / sentinel / stake amounts, accelerator parameters, token / spork / swap / liquidity / bridge constants, and the network reward schedules \([NetworkZnnRewardConfig](<#MomentumsPerHour>), [NetworkQsrRewardConfig](<#MomentumsPerHour>)\) plus the helpers that index into them.
-- errors.go — every [errors.New](<https://pkg.go.dev/github.com/pkg/errors/#New>) sentinel returned by the VM and the embedded contracts, grouped by contract.
+- errors.go — every [errors.New](<https://pkg.go.dev/errors/#New>) sentinel returned by the VM and the embedded contracts, grouped by contract.
 
 ### Related Packages
 
@@ -488,7 +488,7 @@ var (
 )
 ```
 
-<a name="MaxFussedAmountForAccountBig"></a>MaxFussedAmountForAccountBig is the [big.Int](<https://pkg.go.dev/math/big/#Int>) form of [MaxFussedAmountForAccount](<#AccountBlockBasePlasma>) for callers \(e.g., [github.com/zenon\\\-network/go\\\-zenon/vm.AvailablePlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#AvailablePlasma>)\) that compare against arbitrary\-precision integers.
+<a name="MaxFussedAmountForAccountBig"></a>MaxFussedAmountForAccountBig is the \[big.Int\] form of [MaxFussedAmountForAccount](<#AccountBlockBasePlasma>) for callers \(e.g., [github.com/zenon\\\-network/go\\\-zenon/vm.AvailablePlasma](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/#AvailablePlasma>)\) that compare against arbitrary\-precision integers.
 
 ```go
 var (

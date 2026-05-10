@@ -24,59 +24,9 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [func IterateLiquidityStakeEntries\(context db.DB, f func\(entry \*LiquidityStakeEntry\) error\) error](<#IterateLiquidityStakeEntries>)
 - [func IterateSentinelEntries\(context db.DB, f func\(\*SentinelInfo\) error\) error](<#IterateSentinelEntries>)
 - [func IterateStakeEntries\(context db.DB, f func\(\*StakeInfo\) error\) error](<#IterateStakeEntries>)
-- [func getDelegationInfoKey\(addr types.Address\) \[\]byte](<#getDelegationInfoKey>)
-- [func getFusedAmountKey\(beneficiary types.Address\) \[\]byte](<#getFusedAmountKey>)
-- [func getFusionInfoKey\(addr types.Address, hash types.Hash\) \[\]byte](<#getFusionInfoKey>)
-- [func getHtlcInfoKey\(hash types.Hash\) \[\]byte](<#getHtlcInfoKey>)
-- [func getHtlcProxyUnlockInfoKey\(address types.Address\) \[\]byte](<#getHtlcProxyUnlockInfoKey>)
-- [func getLegacyPillarEntryKey\(keyIdHash types.Hash\) \[\]byte](<#getLegacyPillarEntryKey>)
-- [func getLiquidityStakeEntryKey\(id types.Hash, address types.Address\) \[\]byte](<#getLiquidityStakeEntryKey>)
-- [func getPillarEpochHistoryEntryKey\(epoch uint64, name string\) \[\]byte](<#getPillarEpochHistoryEntryKey>)
-- [func getPillarEpochHistoryPrefixKey\(epoch uint64\) \[\]byte](<#getPillarEpochHistoryPrefixKey>)
-- [func getQsrDepositKey\(address \*types.Address\) \[\]byte](<#getQsrDepositKey>)
-- [func getRequestPairKey\(id types.Hash\) \[\]byte](<#getRequestPairKey>)
-- [func getRewardDepositHistoryEntryKey\(epoch uint64, address \*types.Address\) \[\]byte](<#getRewardDepositHistoryEntryKey>)
-- [func getRewardDepositHistoryPrefixKey\(address \*types.Address\) \[\]byte](<#getRewardDepositHistoryPrefixKey>)
-- [func getRewardDepositKey\(address \*types.Address\) \[\]byte](<#getRewardDepositKey>)
-- [func getStakeInfoKey\(id types.Hash, address types.Address\) \[\]byte](<#getStakeInfoKey>)
-- [func getSwapAssetsKey\(keyIdHash types.Hash\) \[\]byte](<#getSwapAssetsKey>)
-- [func getTokenInfoKey\(ts types.ZenonTokenStandard\) \[\]byte](<#getTokenInfoKey>)
-- [func getUnwrapTokenRequestKey\(transactionHash types.Hash, logIndex uint32\) \[\]byte](<#getUnwrapTokenRequestKey>)
-- [func getWrapTokenRequestKey\(creationMomentumHeight uint64, id types.Hash\) \[\]byte](<#getWrapTokenRequestKey>)
-- [func isDelegationInfoKey\(key \[\]byte\) bool](<#isDelegationInfoKey>)
-- [func isFusedAmountKey\(key \[\]byte\) bool](<#isFusedAmountKey>)
-- [func isFusionInfoKey\(key \[\]byte\) bool](<#isFusionInfoKey>)
-- [func isHtlcInfoKey\(key \[\]byte\) bool](<#isHtlcInfoKey>)
-- [func isHtlcProxyUnlockInfoKey\(key \[\]byte\) bool](<#isHtlcProxyUnlockInfoKey>)
-- [func isLegacyPillarEntryKey\(key \[\]byte\) bool](<#isLegacyPillarEntryKey>)
-- [func isLiquidityStakeEntryKey\(key \[\]byte\) bool](<#isLiquidityStakeEntryKey>)
-- [func isPillarEpochHistoryEntryKey\(key \[\]byte\) bool](<#isPillarEpochHistoryEntryKey>)
-- [func isProducingPillarKey\(key \[\]byte\) bool](<#isProducingPillarKey>)
-- [func isQsrDepositKey\(key \[\]byte\) bool](<#isQsrDepositKey>)
-- [func isRewardDepositHistoryEntryKey\(key \[\]byte\) bool](<#isRewardDepositHistoryEntryKey>)
-- [func isRewardDepositKey\(key \[\]byte\) bool](<#isRewardDepositKey>)
-- [func isStakeInfoKey\(key \[\]byte\) bool](<#isStakeInfoKey>)
-- [func isTokenInfoKey\(key \[\]byte\) bool](<#isTokenInfoKey>)
-- [func timeChallengeKey\(methodName string\) \[\]byte](<#timeChallengeKey>)
-- [func unmarshalDelegationInfo\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalDelegationInfo>)
-- [func unmarshalFusedAmountKey\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalFusedAmountKey>)
-- [func unmarshalFusionInfoKey\(key \[\]byte\) \(\*types.Hash, \*types.Address, error\)](<#unmarshalFusionInfoKey>)
-- [func unmarshalHtlcInfoKey\(key \[\]byte\) \(\*types.Hash, error\)](<#unmarshalHtlcInfoKey>)
-- [func unmarshalHtlcProxyUnlockInfoKey\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalHtlcProxyUnlockInfoKey>)
-- [func unmarshalLegacyPillarEntryKey\(key \[\]byte\) \(\*types.Hash, error\)](<#unmarshalLegacyPillarEntryKey>)
-- [func unmarshalLiquidityStakeEntryKey\(key \[\]byte\) \(\*types.Hash, \*types.Address, error\)](<#unmarshalLiquidityStakeEntryKey>)
-- [func unmarshalPillarEpochHistoryEntryKey\(key \[\]byte\) \(uint64, string, error\)](<#unmarshalPillarEpochHistoryEntryKey>)
-- [func unmarshalProducingPillarKey\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalProducingPillarKey>)
-- [func unmarshalQsrDepositKey\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalQsrDepositKey>)
-- [func unmarshalRewardDepositHistoryEntryKey\(key \[\]byte\) \(uint64, \*types.Address, error\)](<#unmarshalRewardDepositHistoryEntryKey>)
-- [func unmarshalRewardDepositKey\(key \[\]byte\) \(\*types.Address, error\)](<#unmarshalRewardDepositKey>)
-- [func unmarshalStakeInfoKey\(key \[\]byte\) \(\*types.Hash, \*types.Address, error\)](<#unmarshalStakeInfoKey>)
-- [func unmarshalTokenInfoKey\(key \[\]byte\) \(\*types.ZenonTokenStandard, error\)](<#unmarshalTokenInfoKey>)
-- [func unmarshalVotableHashKey\(key \[\]byte\) \(\*types.Hash, error\)](<#unmarshalVotableHashKey>)
 - [type AcceleratorParam](<#AcceleratorParam>)
 - [type BridgeInfoVariable](<#BridgeInfoVariable>)
   - [func GetBridgeInfoVariable\(context db.DB\) \(\*BridgeInfoVariable, error\)](<#GetBridgeInfoVariable>)
-  - [func parseBridgeInfoVariable\(data \[\]byte\) \(\*BridgeInfoVariable, error\)](<#parseBridgeInfoVariable>)
   - [func \(b \*BridgeInfoVariable\) Save\(context db.DB\) error](<#BridgeInfoVariable.Save>)
 - [type BurnParam](<#BurnParam>)
 - [type ChangeECDSAPubKeyParam](<#ChangeECDSAPubKeyParam>)
@@ -84,24 +34,20 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type DelegationInfo](<#DelegationInfo>)
   - [func GetDelegationInfo\(context db.DB, address types.Address\) \(\*DelegationInfo, error\)](<#GetDelegationInfo>)
   - [func GetDelegationsList\(context db.DB\) \(\[\]\*DelegationInfo, error\)](<#GetDelegationsList>)
-  - [func parseDelegationInfo\(key, data \[\]byte\) \(\*DelegationInfo, error\)](<#parseDelegationInfo>)
   - [func \(delegation \*DelegationInfo\) Delete\(context db.DB\) error](<#DelegationInfo.Delete>)
   - [func \(delegation \*DelegationInfo\) Save\(context db.DB\) error](<#DelegationInfo.Save>)
 - [type FundParam](<#FundParam>)
 - [type FusedAmount](<#FusedAmount>)
   - [func GetFusedAmount\(context db.DB, beneficiary types.Address\) \(\*FusedAmount, error\)](<#GetFusedAmount>)
-  - [func parseFusedAmount\(key, data \[\]byte\) \(\*FusedAmount, error\)](<#parseFusedAmount>)
   - [func \(entry \*FusedAmount\) Delete\(context db.DB\) error](<#FusedAmount.Delete>)
   - [func \(entry \*FusedAmount\) Save\(context db.DB\) error](<#FusedAmount.Save>)
 - [type FusionInfo](<#FusionInfo>)
   - [func GetFusionInfo\(context db.DB, owner types.Address, id types.Hash\) \(\*FusionInfo, error\)](<#GetFusionInfo>)
   - [func GetFusionInfoListByOwner\(context db.DB, owner types.Address\) \(\[\]\*FusionInfo, \*big.Int, error\)](<#GetFusionInfoListByOwner>)
-  - [func parseFusionInfo\(key, data \[\]byte\) \(\*FusionInfo, error\)](<#parseFusionInfo>)
   - [func \(entry \*FusionInfo\) Delete\(context db.DB\) error](<#FusionInfo.Delete>)
   - [func \(entry \*FusionInfo\) Save\(context db.DB\) error](<#FusionInfo.Save>)
 - [type HtlcInfo](<#HtlcInfo>)
   - [func GetHtlcInfo\(context db.DB, id types.Hash\) \(\*HtlcInfo, error\)](<#GetHtlcInfo>)
-  - [func parseHtlcInfo\(key, data \[\]byte\) \(\*HtlcInfo, error\)](<#parseHtlcInfo>)
   - [func \(h \*HtlcInfo\) Delete\(context db.DB\) error](<#HtlcInfo.Delete>)
   - [func \(h \*HtlcInfo\) MarshalJSON\(\) \(\[\]byte, error\)](<#HtlcInfo.MarshalJSON>)
   - [func \(h \*HtlcInfo\) Save\(context db.DB\) error](<#HtlcInfo.Save>)
@@ -111,7 +57,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type HtlcInfoMarshal](<#HtlcInfoMarshal>)
 - [type HtlcProxyUnlockInfo](<#HtlcProxyUnlockInfo>)
   - [func GetHtlcProxyUnlockInfo\(context db.DB, address types.Address\) \(\*HtlcProxyUnlockInfo, error\)](<#GetHtlcProxyUnlockInfo>)
-  - [func parseHtlcProxyUnlockInfo\(key, data \[\]byte\) \(\*HtlcProxyUnlockInfo, error\)](<#parseHtlcProxyUnlockInfo>)
   - [func \(entry \*HtlcProxyUnlockInfo\) Delete\(context db.DB\) error](<#HtlcProxyUnlockInfo.Delete>)
   - [func \(entry \*HtlcProxyUnlockInfo\) Save\(context db.DB\) error](<#HtlcProxyUnlockInfo.Save>)
 - [type IssueParam](<#IssueParam>)
@@ -120,18 +65,15 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
   - [func \(epoch \*LastEpochUpdate\) Save\(context db.DB\) error](<#LastEpochUpdate.Save>)
 - [type LastUpdateVariable](<#LastUpdateVariable>)
   - [func GetLastUpdate\(context db.DB\) \(\*LastUpdateVariable, error\)](<#GetLastUpdate>)
-  - [func parseLastUpdate\(data \[\]byte\) \(\*LastUpdateVariable, error\)](<#parseLastUpdate>)
   - [func \(upd \*LastUpdateVariable\) Save\(context db.DB\) error](<#LastUpdateVariable.Save>)
 - [type LegacyPillarEntry](<#LegacyPillarEntry>)
   - [func GetLegacyPillarEntry\(context db.DB, keyIdHash types.Hash\) \(\*LegacyPillarEntry, error\)](<#GetLegacyPillarEntry>)
   - [func GetLegacyPillarList\(context db.DB\) \(\[\]\*LegacyPillarEntry, error\)](<#GetLegacyPillarList>)
-  - [func parseLegacyPillarEntry\(key, data \[\]byte\) \(\*LegacyPillarEntry, error\)](<#parseLegacyPillarEntry>)
   - [func \(legacy \*LegacyPillarEntry\) Delete\(context db.DB\) error](<#LegacyPillarEntry.Delete>)
   - [func \(legacy \*LegacyPillarEntry\) Save\(context db.DB\) error](<#LegacyPillarEntry.Save>)
 - [type LegacyRegisterParam](<#LegacyRegisterParam>)
 - [type LiquidityInfo](<#LiquidityInfo>)
   - [func GetLiquidityInfo\(context db.DB\) \(\*LiquidityInfo, error\)](<#GetLiquidityInfo>)
-  - [func parseLiquidityInfo\(data \[\]byte\) \(\*LiquidityInfo, error\)](<#parseLiquidityInfo>)
   - [func \(l \*LiquidityInfo\) MarshalJSON\(\) \(\[\]byte, error\)](<#LiquidityInfo.MarshalJSON>)
   - [func \(l \*LiquidityInfo\) ToLiquidityInfoMarshal\(\) LiquidityInfoMarshal](<#LiquidityInfo.ToLiquidityInfoMarshal>)
   - [func \(l \*LiquidityInfo\) UnmarshalJSON\(data \[\]byte\) error](<#LiquidityInfo.UnmarshalJSON>)
@@ -147,7 +89,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
   - [func GetAllLiquidityStakeEntries\(context db.DB\) \[\]\*LiquidityStakeEntry](<#GetAllLiquidityStakeEntries>)
   - [func GetLiquidityStakeEntry\(context db.DB, id types.Hash, address types.Address\) \(\*LiquidityStakeEntry, error\)](<#GetLiquidityStakeEntry>)
   - [func GetLiquidityStakeListByAddress\(context db.DB, address types.Address\) \(\[\]\*LiquidityStakeEntry, \*big.Int, \*big.Int, error\)](<#GetLiquidityStakeListByAddress>)
-  - [func parseLiquidityStakeEntry\(key \[\]byte, data \[\]byte\) \(\*LiquidityStakeEntry, error\)](<#parseLiquidityStakeEntry>)
   - [func \(stake \*LiquidityStakeEntry\) Delete\(context db.DB\) error](<#LiquidityStakeEntry.Delete>)
   - [func \(stake \*LiquidityStakeEntry\) MarshalJSON\(\) \(\[\]byte, error\)](<#LiquidityStakeEntry.MarshalJSON>)
   - [func \(stake \*LiquidityStakeEntry\) Save\(context db.DB\) error](<#LiquidityStakeEntry.Save>)
@@ -158,7 +99,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type NetworkInfo](<#NetworkInfo>)
   - [func GetNetworkInfoVariable\(context db.DB, networkClass uint32, chainId uint32\) \(\*NetworkInfo, error\)](<#GetNetworkInfoVariable>)
   - [func GetNetworkList\(context db.DB\) \(\[\]\*NetworkInfo, error\)](<#GetNetworkList>)
-  - [func parseNetworkInfoVariable\(data \[\]byte\) \(\*NetworkInfo, error\)](<#parseNetworkInfoVariable>)
 - [type NetworkInfoParam](<#NetworkInfoParam>)
 - [type NetworkInfoVariable](<#NetworkInfoVariable>)
   - [func EncodeNetworkInfo\(networkInfo \*NetworkInfo\) \(\*NetworkInfoVariable, error\)](<#EncodeNetworkInfo>)
@@ -167,7 +107,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
   - [func \(nI \*NetworkInfoVariable\) Save\(context db.DB\) error](<#NetworkInfoVariable.Save>)
 - [type OrchestratorInfo](<#OrchestratorInfo>)
   - [func GetOrchestratorInfoVariable\(context db.DB\) \(\*OrchestratorInfo, error\)](<#GetOrchestratorInfoVariable>)
-  - [func parseOrchestratorInfoVariable\(data \[\]byte\) \(\*OrchestratorInfo, error\)](<#parseOrchestratorInfoVariable>)
   - [func \(oI \*OrchestratorInfo\) Delete\(context db.DB\) error](<#OrchestratorInfo.Delete>)
   - [func \(oI \*OrchestratorInfo\) Key\(\) \[\]byte](<#OrchestratorInfo.Key>)
   - [func \(oI \*OrchestratorInfo\) Save\(context db.DB\) error](<#OrchestratorInfo.Save>)
@@ -175,7 +114,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type ParamRetrieveAssets](<#ParamRetrieveAssets>)
 - [type Phase](<#Phase>)
   - [func GetPhaseEntry\(context db.DB, id types.Hash\) \(\*Phase, error\)](<#GetPhaseEntry>)
-  - [func parsePhase\(data \[\]byte\) \*Phase](<#parsePhase>)
   - [func \(phase \*Phase\) Data\(\) \[\]byte](<#Phase.Data>)
   - [func \(phase \*Phase\) Delete\(context db.DB\)](<#Phase.Delete>)
   - [func \(phase \*Phase\) Key\(\) \[\]byte](<#Phase.Key>)
@@ -186,7 +124,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type PhaseMarshal](<#PhaseMarshal>)
 - [type PillarEpochHistory](<#PillarEpochHistory>)
   - [func GetPillarEpochHistoryList\(context db.DB, epoch uint64\) \(\[\]\*PillarEpochHistory, error\)](<#GetPillarEpochHistoryList>)
-  - [func parsePillarEpochHistoryEntry\(key, data \[\]byte\) \(\*PillarEpochHistory, error\)](<#parsePillarEpochHistoryEntry>)
   - [func \(g \*PillarEpochHistory\) MarshalJSON\(\) \(\[\]byte, error\)](<#PillarEpochHistory.MarshalJSON>)
   - [func \(peh \*PillarEpochHistory\) Save\(context db.DB\) error](<#PillarEpochHistory.Save>)
   - [func \(g \*PillarEpochHistory\) ToPillarEpochHistoryMarshal\(\) \*PillarEpochHistoryMarshal](<#PillarEpochHistory.ToPillarEpochHistoryMarshal>)
@@ -195,25 +132,21 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type PillarInfo](<#PillarInfo>)
   - [func GetPillarInfo\(context db.DB, name string\) \(\*PillarInfo, error\)](<#GetPillarInfo>)
   - [func GetPillarsList\(context db.DB, onlyActive bool, pillarType uint8\) \(\[\]\*PillarInfo, error\)](<#GetPillarsList>)
-  - [func parsePillarInfo\(data \[\]byte\) \(\*PillarInfo, error\)](<#parsePillarInfo>)
   - [func \(pillar \*PillarInfo\) IsActive\(\) bool](<#PillarInfo.IsActive>)
   - [func \(pillar \*PillarInfo\) Save\(context db.DB\) error](<#PillarInfo.Save>)
 - [type PillarVote](<#PillarVote>)
   - [func GetAllPillarVotes\(context db.DB, id types.Hash\) \[\]\*PillarVote](<#GetAllPillarVotes>)
   - [func GetPillarVote\(context db.DB, id types.Hash, name string\) \(\*PillarVote, error\)](<#GetPillarVote>)
-  - [func parsePillarVote\(data \[\]byte\) \(\*PillarVote, error\)](<#parsePillarVote>)
   - [func \(vote \*PillarVote\) Data\(\) \[\]byte](<#PillarVote.Data>)
   - [func \(vote \*PillarVote\) Delete\(context db.DB\)](<#PillarVote.Delete>)
   - [func \(vote \*PillarVote\) Key\(\) \[\]byte](<#PillarVote.Key>)
   - [func \(vote \*PillarVote\) Save\(context db.DB\)](<#PillarVote.Save>)
 - [type ProducingPillar](<#ProducingPillar>)
   - [func GetProducingPillarName\(context db.DB, address types.Address\) \(\*ProducingPillar, error\)](<#GetProducingPillarName>)
-  - [func parseProducingPillar\(key \[\]byte, data \[\]byte\) \(\*ProducingPillar, error\)](<#parseProducingPillar>)
   - [func \(ppName \*ProducingPillar\) Save\(context db.DB\) error](<#ProducingPillar.Save>)
 - [type Project](<#Project>)
   - [func GetProjectEntry\(context db.DB, id types.Hash\) \(\*Project, error\)](<#GetProjectEntry>)
   - [func GetProjectList\(context db.DB\) \(\[\]\*Project, error\)](<#GetProjectList>)
-  - [func parseProject\(data \[\]byte\) \*Project](<#parseProject>)
   - [func \(project \*Project\) Data\(\) \[\]byte](<#Project.Data>)
   - [func \(project \*Project\) Delete\(context db.DB\)](<#Project.Delete>)
   - [func \(project \*Project\) GetCurrentPhase\(context db.DB\) \(\*Phase, error\)](<#Project.GetCurrentPhase>)
@@ -221,22 +154,17 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
   - [func \(project \*Project\) Save\(context db.DB\)](<#Project.Save>)
 - [type QsrDeposit](<#QsrDeposit>)
   - [func GetQsrDeposit\(context db.DB, address \*types.Address\) \(\*QsrDeposit, error\)](<#GetQsrDeposit>)
-  - [func newQsrDeposit\(address \*types.Address\) \*QsrDeposit](<#newQsrDeposit>)
-  - [func parseQsrDeposit\(key \[\]byte, data \[\]byte\) \(\*QsrDeposit, error\)](<#parseQsrDeposit>)
   - [func \(deposit \*QsrDeposit\) Delete\(context db.DB\) error](<#QsrDeposit.Delete>)
   - [func \(deposit \*QsrDeposit\) Save\(context db.DB\) error](<#QsrDeposit.Save>)
 - [type RedeemParam](<#RedeemParam>)
 - [type RegisterParam](<#RegisterParam>)
 - [type RequestPair](<#RequestPair>)
   - [func GetRequestPairById\(context db.DB, Id types.Hash\) \(\*RequestPair, error\)](<#GetRequestPairById>)
-  - [func parseRequestPair\(data, key \[\]byte\) \(\*RequestPair, error\)](<#parseRequestPair>)
   - [func \(pair \*RequestPair\) Key\(\) \[\]byte](<#RequestPair.Key>)
   - [func \(pair \*RequestPair\) Save\(context db.DB\) error](<#RequestPair.Save>)
 - [type RevokeUnwrapParam](<#RevokeUnwrapParam>)
 - [type RewardDeposit](<#RewardDeposit>)
   - [func GetRewardDeposit\(context db.DB, address \*types.Address\) \(\*RewardDeposit, error\)](<#GetRewardDeposit>)
-  - [func newRewardDeposit\(address \*types.Address\) \*RewardDeposit](<#newRewardDeposit>)
-  - [func parseRewardDeposit\(key \[\]byte, data \[\]byte\) \(\*RewardDeposit, error\)](<#parseRewardDeposit>)
   - [func \(deposit \*RewardDeposit\) Delete\(context db.DB\) error](<#RewardDeposit.Delete>)
   - [func \(deposit \*RewardDeposit\) MarshalJSON\(\) \(\[\]byte, error\)](<#RewardDeposit.MarshalJSON>)
   - [func \(deposit \*RewardDeposit\) Save\(context db.DB\) error](<#RewardDeposit.Save>)
@@ -244,17 +172,14 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
   - [func \(deposit \*RewardDeposit\) UnmarshalJSON\(data \[\]byte\) error](<#RewardDeposit.UnmarshalJSON>)
 - [type RewardDepositHistory](<#RewardDepositHistory>)
   - [func GetRewardDepositHistory\(context db.DB, epoch uint64, address \*types.Address\) \(\*RewardDepositHistory, error\)](<#GetRewardDepositHistory>)
-  - [func parseRewardDepositHistoryEntry\(key, data \[\]byte\) \(\*RewardDepositHistory, error\)](<#parseRewardDepositHistoryEntry>)
   - [func \(rdh \*RewardDepositHistory\) Save\(context db.DB\) error](<#RewardDepositHistory.Save>)
 - [type RewardDepositMarshal](<#RewardDepositMarshal>)
 - [type SecurityInfoVariable](<#SecurityInfoVariable>)
   - [func GetSecurityInfoVariable\(context db.DB\) \(\*SecurityInfoVariable, error\)](<#GetSecurityInfoVariable>)
-  - [func parseSecurityInfoVariable\(data \[\]byte\) \(\*SecurityInfoVariable, error\)](<#parseSecurityInfoVariable>)
   - [func \(s \*SecurityInfoVariable\) Save\(context db.DB\) error](<#SecurityInfoVariable.Save>)
 - [type SentinelInfo](<#SentinelInfo>)
   - [func GetAllSentinelInfo\(context db.DB\) \[\]\*SentinelInfo](<#GetAllSentinelInfo>)
   - [func GetSentinelInfoByOwner\(context db.DB, address types.Address\) \*SentinelInfo](<#GetSentinelInfoByOwner>)
-  - [func parseSentinelInfo\(data \[\]byte\) \*SentinelInfo](<#parseSentinelInfo>)
   - [func \(sentinel \*SentinelInfo\) Data\(\) \[\]byte](<#SentinelInfo.Data>)
   - [func \(sentinel \*SentinelInfo\) Delete\(context db.DB\)](<#SentinelInfo.Delete>)
   - [func \(sentinel \*SentinelInfo\) Save\(context db.DB\)](<#SentinelInfo.Save>)
@@ -266,7 +191,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type Spork](<#Spork>)
   - [func GetAllSporks\(context db.DB\) \[\]\*Spork](<#GetAllSporks>)
   - [func GetSporkInfoById\(context db.DB, id types.Hash\) \*Spork](<#GetSporkInfoById>)
-  - [func parseSporkInfo\(data \[\]byte\) \*Spork](<#parseSporkInfo>)
   - [func \(spork \*Spork\) Data\(\) \[\]byte](<#Spork.Data>)
   - [func \(spork \*Spork\) Key\(\) \[\]byte](<#Spork.Key>)
   - [func \(spork \*Spork\) Save\(context db.DB\)](<#Spork.Save>)
@@ -277,24 +201,20 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type StakeInfo](<#StakeInfo>)
   - [func GetStakeInfo\(context db.DB, id types.Hash, address types.Address\) \(\*StakeInfo, error\)](<#GetStakeInfo>)
   - [func GetStakeListByAddress\(context db.DB, address types.Address\) \(\[\]\*StakeInfo, \*big.Int, \*big.Int, error\)](<#GetStakeListByAddress>)
-  - [func parseStakeInfo\(key \[\]byte, data \[\]byte\) \(\*StakeInfo, error\)](<#parseStakeInfo>)
   - [func \(stake \*StakeInfo\) Delete\(context db.DB\) error](<#StakeInfo.Delete>)
   - [func \(stake \*StakeInfo\) Save\(context db.DB\) error](<#StakeInfo.Save>)
 - [type SwapAssets](<#SwapAssets>)
   - [func GetSwapAssets\(context db.DB\) \(\[\]\*SwapAssets, error\)](<#GetSwapAssets>)
   - [func GetSwapAssetsByKeyIdHash\(context db.DB, keyIdHash types.Hash\) \(\*SwapAssets, error\)](<#GetSwapAssetsByKeyIdHash>)
-  - [func parseSwapAssets\(data, key \[\]byte\) \(\*SwapAssets, error\)](<#parseSwapAssets>)
   - [func \(assets \*SwapAssets\) Save\(context db.DB\) error](<#SwapAssets.Save>)
 - [type TimeChallengeInfo](<#TimeChallengeInfo>)
   - [func GetTimeChallengeInfoVariable\(context db.DB, methodName string\) \(\*TimeChallengeInfo, error\)](<#GetTimeChallengeInfoVariable>)
-  - [func parseTimeChallengeInfoVariable\(data \[\]byte\) \(\*TimeChallengeInfo, error\)](<#parseTimeChallengeInfoVariable>)
   - [func \(t \*TimeChallengeInfo\) Delete\(context db.DB\) error](<#TimeChallengeInfo.Delete>)
   - [func \(t \*TimeChallengeInfo\) Key\(\) \[\]byte](<#TimeChallengeInfo.Key>)
   - [func \(t \*TimeChallengeInfo\) Save\(context db.DB\) error](<#TimeChallengeInfo.Save>)
 - [type TokenInfo](<#TokenInfo>)
   - [func GetTokenInfo\(context db.DB, ts types.ZenonTokenStandard\) \(\*TokenInfo, error\)](<#GetTokenInfo>)
   - [func GetTokenInfoList\(context db.DB\) \(\[\]\*TokenInfo, error\)](<#GetTokenInfoList>)
-  - [func parseTokenInfo\(key, data \[\]byte\) \(\*TokenInfo, error\)](<#parseTokenInfo>)
   - [func \(token \*TokenInfo\) Save\(context db.DB\) error](<#TokenInfo.Save>)
 - [type TokenPair](<#TokenPair>)
   - [func GetTokenPairVariable\(context db.DB, networkClass uint32, chainId uint32, zts types.ZenonTokenStandard\) \(\*TokenPair, error\)](<#GetTokenPairVariable>)
@@ -315,7 +235,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type UnwrapTokenRequest](<#UnwrapTokenRequest>)
   - [func GetUnwrapTokenRequestByTxHashAndLog\(context db.DB, txHash types.Hash, logIndex uint32\) \(\*UnwrapTokenRequest, error\)](<#GetUnwrapTokenRequestByTxHashAndLog>)
   - [func GetUnwrapTokenRequests\(context db.DB\) \(\[\]\*UnwrapTokenRequest, error\)](<#GetUnwrapTokenRequests>)
-  - [func parseUnwrapTokenRequest\(data, key \[\]byte\) \(\*UnwrapTokenRequest, error\)](<#parseUnwrapTokenRequest>)
   - [func \(unwrapRequest \*UnwrapTokenRequest\) Delete\(context db.DB\) error](<#UnwrapTokenRequest.Delete>)
   - [func \(unwrapRequest \*UnwrapTokenRequest\) Key\(\) \[\]byte](<#UnwrapTokenRequest.Key>)
   - [func \(unwrapRequest \*UnwrapTokenRequest\) MarshalJSON\(\) \(\[\]byte, error\)](<#UnwrapTokenRequest.MarshalJSON>)
@@ -327,7 +246,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type UpdateWrapRequestParam](<#UpdateWrapRequestParam>)
 - [type VotableHash](<#VotableHash>)
   - [func GetVotableHash\(context db.DB, id types.Hash\) \(\*VotableHash, error\)](<#GetVotableHash>)
-  - [func parseVotableHash\(data \[\]byte, key \[\]byte\) \(\*VotableHash, error\)](<#parseVotableHash>)
   - [func \(votable \*VotableHash\) Data\(\) \[\]byte](<#VotableHash.Data>)
   - [func \(votable \*VotableHash\) Delete\(context db.DB\)](<#VotableHash.Delete>)
   - [func \(votable \*VotableHash\) Key\(\) \[\]byte](<#VotableHash.Key>)
@@ -338,7 +256,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type WrapTokenRequest](<#WrapTokenRequest>)
   - [func GetWrapTokenRequestById\(context db.DB, Id types.Hash\) \(\*WrapTokenRequest, error\)](<#GetWrapTokenRequestById>)
   - [func GetWrapTokenRequests\(context db.DB\) \(\[\]\*WrapTokenRequest, error\)](<#GetWrapTokenRequests>)
-  - [func parseWrapTokenRequest\(data, key \[\]byte\) \(\*WrapTokenRequest, error\)](<#parseWrapTokenRequest>)
   - [func \(wrapRequest \*WrapTokenRequest\) Key\(\) \[\]byte](<#WrapTokenRequest.Key>)
   - [func \(wrapRequest \*WrapTokenRequest\) MarshalJSON\(\) \(\[\]byte, error\)](<#WrapTokenRequest.MarshalJSON>)
   - [func \(wrapRequest \*WrapTokenRequest\) Save\(context db.DB\) error](<#WrapTokenRequest.Save>)
@@ -347,7 +264,6 @@ Per\-package documentation is being filled in incrementally. See docs/STYLE.md f
 - [type WrapTokenRequestMarshal](<#WrapTokenRequestMarshal>)
 - [type ZtsFeesInfo](<#ZtsFeesInfo>)
   - [func GetZtsFeesInfoVariable\(context db.DB, tokenStandard types.ZenonTokenStandard\) \(\*ZtsFeesInfo, error\)](<#GetZtsFeesInfoVariable>)
-  - [func parseZtsFeesInfoVariable\(key \[\]byte, data \[\]byte\) \(\*ZtsFeesInfo, error\)](<#parseZtsFeesInfoVariable>)
   - [func \(zfi \*ZtsFeesInfo\) Delete\(context db.DB\) error](<#ZtsFeesInfo.Delete>)
   - [func \(zfi \*ZtsFeesInfo\) Key\(\) \(\[\]byte, error\)](<#ZtsFeesInfo.Key>)
   - [func \(zfi \*ZtsFeesInfo\) MarshalJSON\(\) \(\[\]byte, error\)](<#ZtsFeesInfo.MarshalJSON>)
@@ -379,72 +295,6 @@ const (
     // paid.
     CompletedStatus
 
-    jsonAccelerator = `
-	[
-		{"type":"function","name":"Update", "inputs":[]},
-		{"type":"function","name":"Donate", "inputs":[]},
-		
-		{"type":"function","name":"CreateProject", "inputs":[
-			{"name":"name","type":"string"},
-			{"name":"description","type":"string"},
-			{"name":"url","type":"string"},
-			{"name":"znnFundsNeeded","type":"uint256"},
-			{"name":"qsrFundsNeeded","type":"uint256"}
-		]},
-		{"type":"function","name":"AddPhase", "inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"description","type":"string"},
-			{"name":"url","type":"string"},
-			{"name":"znnFundsNeeded","type":"uint256"},
-			{"name":"qsrFundsNeeded","type":"uint256"}
-		]},
-		{"type":"function","name":"UpdatePhase", "inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"description","type":"string"},
-			{"name":"url","type":"string"},
-			{"name":"znnFundsNeeded","type":"uint256"},
-			{"name":"qsrFundsNeeded","type":"uint256"}
-		]},
-		{"type":"function","name":"VoteByName","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"vote","type":"uint8"}
-		]},
-		{"type":"function","name":"VoteByProdAddress","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"vote","type":"uint8"}
-		]},
-
-		{"type":"variable","name":"project","inputs":[
-			{"name":"id", "type":"hash"},
-			{"name":"owner","type":"address"},
-			{"name":"name","type":"string"},
-			{"name":"description","type":"string"},
-			{"name":"url","type":"string"},
-			{"name":"znnFundsNeeded","type":"uint256"},
-			{"name":"qsrFundsNeeded","type":"uint256"},
-			{"name":"creationTimestamp","type":"int64"},
-			{"name":"lastUpdateTimestamp","type":"int64"},
-			{"name":"status","type":"uint8"},
-			{"name":"phaseIds","type":"hash[]"}
-		]},
-
-		{"type":"variable","name":"phase","inputs":[
-			{"name":"id", "type":"hash"},
-			{"name":"projectId", "type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"description","type":"string"},
-			{"name":"url","type":"string"},
-			{"name":"znnFundsNeeded","type":"uint256"},
-			{"name":"qsrFundsNeeded","type":"uint256"},
-			{"name":"creationTimestamp","type":"int64"},
-			{"name":"acceptedTimestamp","type":"int64"},
-			{"name":"status","type":"uint8"}
-		]}
-	]`
-
     // CreateProjectMethodName names the project-creation method
     // (caller pays [constants.ProjectCreationAmount] ZNN).
     CreateProjectMethodName = "CreateProject"
@@ -455,217 +305,21 @@ const (
 
     ProjectVariableName = "project"
     PhaseVariableName   = "phase"
-
-    _   byte = iota
-    projectKeyPrefix
-    phaseKeyPrefix
 )
 ```
 
-<a name="jsonBridge"></a>jsonBridge is the canonical Solidity\-shaped ABI for the Bridge contract. The bridge spans many flows:
+<a name="WrapTokenMethodName"></a>jsonBridge is the canonical Solidity\-shaped ABI for the Bridge contract. The bridge spans many flows:
 
-- Wrap \(outbound\): user wrap requests turn ZTS tokens into redeemable claims on a remote network. [WrapTokenMethodName](<#jsonBridge>) / [UpdateWrapRequestMethodName](<#jsonBridge>).
-- Unwrap \(inbound\): TSS\-signed unwrap claims credit ZTS tokens to the destination address; users claim them via redeem after the configured delay. [UnwrapTokenMethodName](<#jsonBridge>) / [RedeemUnwrapMethodName](<#jsonBridge>) / [RevokeUnwrapRequestMethodName](<#jsonBridge>).
-- Network configuration: [SetNetworkMethodName](<#jsonBridge>), [RemoveNetworkMethodName](<#jsonBridge>), [SetTokenPairMethod](<#jsonBridge>), [RemoveTokenPairMethodName](<#jsonBridge>), plus metadata setters.
-- Halt / unhalt and emergency: incident\-response hooks \([HaltMethodName](<#jsonBridge>), [UnhaltMethodName](<#jsonBridge>), [EmergencyMethodName](<#VoteYes>)\).
-- Governance: administrator rotation \([ChangeAdministratorMethodName](<#VoteYes>), [ProposeAdministratorMethodName](<#VoteYes>)\), guardian nomination \([NominateGuardiansMethodName](<#VoteYes>)\), TSS key rotation \([ChangeTssECDSAPubKeyMethodName](<#jsonBridge>)\), allow\-keygen toggle \([SetAllowKeygenMethodName](<#jsonBridge>)\), orchestrator info, and metadata.
+- Wrap \(outbound\): user wrap requests turn ZTS tokens into redeemable claims on a remote network. [WrapTokenMethodName](<#WrapTokenMethodName>) / [UpdateWrapRequestMethodName](<#WrapTokenMethodName>).
+- Unwrap \(inbound\): TSS\-signed unwrap claims credit ZTS tokens to the destination address; users claim them via redeem after the configured delay. [UnwrapTokenMethodName](<#WrapTokenMethodName>) / [RedeemUnwrapMethodName](<#WrapTokenMethodName>) / [RevokeUnwrapRequestMethodName](<#WrapTokenMethodName>).
+- Network configuration: [SetNetworkMethodName](<#WrapTokenMethodName>), [RemoveNetworkMethodName](<#WrapTokenMethodName>), [SetTokenPairMethod](<#WrapTokenMethodName>), [RemoveTokenPairMethodName](<#WrapTokenMethodName>), plus metadata setters.
+- Halt / unhalt and emergency: incident\-response hooks \([HaltMethodName](<#WrapTokenMethodName>), [UnhaltMethodName](<#WrapTokenMethodName>), [EmergencyMethodName](<#VoteYes>)\).
+- Governance: administrator rotation \([ChangeAdministratorMethodName](<#VoteYes>), [ProposeAdministratorMethodName](<#VoteYes>)\), guardian nomination \([NominateGuardiansMethodName](<#VoteYes>)\), TSS key rotation \([ChangeTssECDSAPubKeyMethodName](<#WrapTokenMethodName>)\), allow\-keygen toggle \([SetAllowKeygenMethodName](<#WrapTokenMethodName>)\), orchestrator info, and metadata.
 
 Storage records: bridgeInfo \(singleton\), networkInfo \(per remote network\), tokenPair \(per network × token\), wrapRequest / unwrapRequest \(per outbound / inbound\), securityInfo \(guardians / delays\), orchestratorInfo, redeemHistory.
 
 ```go
 const (
-    jsonBridge = `
-	[
-		{"type":"function","name":"WrapToken", "inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"toAddress","type":"string"}
-		]},
-
-		{"type":"function","name":"UpdateWrapRequest", "inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"signature","type":"string"}
-		]},
-
-		{"type":"function","name":"SetNetwork", "inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"name","type":"string"},
-			{"name":"contractAddress","type":"string"},
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"function","name":"RemoveNetwork", "inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"}
-		]},
-
-		{"type":"function","name":"SetTokenPair","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"tokenAddress","type":"string"},
-			{"name":"bridgeable","type":"bool"},
-			{"name":"redeemable","type":"bool"},
-			{"name":"owned","type":"bool"},
-			{"name":"minAmount","type":"uint256"},
-			{"name":"feePercentage","type":"uint32"},
-			{"name":"redeemDelay","type":"uint32"},
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"function","name":"SetNetworkMetadata","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"function","name":"RemoveTokenPair","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"tokenAddress","type":"string"}
-		]},
-
-		{"type":"function","name":"Halt","inputs":[
-			{"name":"signature","type":"string"}
-		]},
-
-		{"type":"function","name":"Unhalt","inputs":[]},
-		{"type":"function","name":"Emergency","inputs":[]},
-		
-		{"type":"function","name":"ChangeTssECDSAPubKey","inputs":[
-			{"name":"pubKey","type":"string"},
-			{"name":"oldPubKeySignature","type":"string"},
-			{"name":"newPubKeySignature","type":"string"}
-		]},
-
-		{"type":"function","name":"ChangeAdministrator","inputs":[
-			{"name":"administrator","type":"address"}
-		]},
-		
-		{"type":"function","name":"ProposeAdministrator","inputs":[
-			{"name":"address","type":"address"}
-		]},
-
-		{"type":"function","name":"SetAllowKeyGen","inputs":[
-			{"name":"allowKeyGen","type":"bool"}
-		]},
-
-		{"type":"function","name":"SetRedeemDelay","inputs":[
-			{"name":"redeemDelay","type":"uint64"}
-		]},
-
-		{"type":"function","name":"SetBridgeMetadata","inputs":[
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"function","name":"UnwrapToken","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId","type":"uint32"},
-			{"name":"transactionHash","type":"hash"},
-			{"name":"logIndex","type":"uint32"},
-			{"name":"toAddress","type":"address"},
-			{"name":"tokenAddress","type":"string"},
-			{"name":"amount","type":"uint256"},
-			{"name":"signature","type":"string"}
-		]},
-
-		{"type":"function","name":"RevokeUnwrapRequest","inputs":[
-			{"name":"transactionHash","type":"hash"},
-			{"name":"logIndex","type":"uint32"}
-		]},
-
-		{"type":"function","name":"Redeem","inputs":[
-			{"name":"transactionHash","type":"hash"},
-			{"name":"logIndex","type":"uint32"}
-		]},
-
-		{"type":"function","name":"NominateGuardians","inputs":[
-			{"name":"guardians","type":"address[]"}
-		]},
-
-		{"type":"function","name":"SetOrchestratorInfo","inputs":[
-			{"name":"windowSize","type":"uint64"},
-			{"name":"keyGenThreshold","type":"uint32"},
-			{"name":"confirmationsToFinality","type":"uint32"},
-			{"name":"estimatedMomentumTime","type":"uint32"}
-		]},
-
-		{"type":"variable","name":"wrapRequest","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId", "type":"uint32"},
-			{"name":"toAddress","type":"string"},
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"tokenAddress","type":"string"},
-			{"name":"amount","type":"uint256"},
-			{"name":"fee","type":"uint256"},
-			{"name":"signature","type":"string"},
-			{"name":"creationMomentumHeight","type":"uint64"}
-		]},
-
-		{"type":"variable","name":"requestPair","inputs":[
-			{"name":"creationMomentumHeight","type":"uint64"}
-		]},
-
-		{"type":"variable","name":"unwrapRequest","inputs":[
-			{"name":"registrationMomentumHeight","type":"uint64"},
-			{"name":"networkClass","type":"uint32"},
-			{"name":"chainId", "type":"uint32"},
-			{"name":"toAddress","type":"address"},
-			{"name":"tokenAddress","type":"string"},
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"amount","type":"uint256"},
-			{"name":"signature","type":"string"},
-			{"name":"redeemed","type":"uint8"},
-			{"name":"revoked","type":"uint8"}
-		]},
-
-		{"type":"variable","name":"bridgeInfo","inputs":[
-			{"name":"administrator","type":"address"},
-			{"name":"compressedTssECDSAPubKey","type":"string"},
-			{"name":"decompressedTssECDSAPubKey","type":"string"},
-			{"name":"allowKeyGen","type":"bool"},
-			{"name":"halted","type":"bool"},
-			{"name":"unhaltedAt","type":"uint64"},
-			{"name":"unhaltDurationInMomentums","type":"uint64"},
-			{"name":"tssNonce","type":"uint64"},
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"variable","name":"orchestratorInfo","inputs":[
-			{"name":"windowSize","type":"uint64"},
-			{"name":"keyGenThreshold","type":"uint32"},
-			{"name":"confirmationsToFinality","type":"uint32"},
-			{"name":"estimatedMomentumTime","type":"uint32"},
-			{"name":"allowKeyGenHeight","type":"uint64"}
-		]},
-
-		{"type":"variable","name":"networkInfo","inputs":[
-			{"name":"networkClass","type":"uint32"},
-			{"name":"id","type":"uint32"},
-			{"name":"name","type":"string"},
-			{"name":"contractAddress","type":"string"},
-			{"name":"metadata","type":"string"},
-			{"name":"tokenPairs","type":"bytes[]"}
-		]},
-
-		{"type":"variable","name":"tokenPair","inputs":[
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"tokenAddress","type":"string"},
-			{"name":"bridgeable","type":"bool"},
-			{"name":"redeemable","type":"bool"},
-			{"name":"owned","type":"bool"},
-			{"name":"minAmount","type":"uint256"},
-			{"name":"feePercentage","type":"uint32"},
-			{"name":"redeemDelay","type":"uint32"},
-			{"name":"metadata","type":"string"}
-		]},
-
-		{"type":"variable","name":"feeTokenPair","inputs":[
-			{"name":"accumulatedFee","type":"uint256"}
-		]}
-	]`
 
     // WrapTokenMethodName initiates a wrap (outbound) request.
     WrapTokenMethodName = "WrapToken"
@@ -713,16 +367,6 @@ const (
     // SetBridgeMetadataMethodName updates the bridge-level
     // metadata blob.
     SetBridgeMetadataMethodName = "SetBridgeMetadata"
-
-    requestPairVariableName   = "requestPair"
-    wrapRequestVariableName   = "wrapRequest"
-    unwrapRequestVariableName = "unwrapRequest"
-    bridgeInfoVariableName    = "bridgeInfo"
-
-    orchestratorInfoVariableName = "orchestratorInfo"
-    networkInfoVariableName      = "networkInfo"
-    feeTokenPairVariableName     = "feeTokenPair"
-    tokenPairVariableName        = "tokenPair"
 )
 ```
 
@@ -741,59 +385,6 @@ const (
     // VoteNotValid is the catch-all for malformed votes.
     VoteNotValid
 
-    jsonCommon = `
-	[	
-		{"type":"variable","name":"lastUpdate","inputs":[{"name":"height","type":"uint64"}]},
-		{"type":"variable","name":"lastEpochUpdate","inputs":[{"name":"lastEpoch", "type": "int64"}]},
-		{"type":"variable","name":"rewardDeposit","inputs":[
-			{"name":"znn","type":"uint256"},
-			{"name":"qsr","type":"uint256"}
-		]},
-		{"type":"variable","name":"rewardDepositHistory","inputs":[
-			{"name":"znn","type":"uint256"},
-			{"name":"qsr","type":"uint256"}
-		]},
-		{"type":"variable","name":"qsrDeposit","inputs":[
-			{"name":"qsr","type":"uint256"}
-		]},
-		{"type":"variable","name":"pillarVote","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"vote","type":"uint8"}
-		]},
-		{"type":"variable","name":"votableHash","inputs":[
-			{"name":"exists","type":"bool"}
-		]},
-
-
-		{"type":"function","name":"Update", "inputs":[]},
-		{"type":"function","name":"CollectReward","inputs":[]},
-		{"type":"function","name":"DepositQsr", "inputs":[]},
-		{"type":"function","name":"WithdrawQsr", "inputs":[]},
-		{"type":"function","name":"Donate", "inputs":[]},
-
-		{"type":"function","name":"VoteByName","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"name","type":"string"},
-			{"name":"vote","type":"uint8"}
-		]},
-		{"type":"function","name":"VoteByProdAddress","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"vote","type":"uint8"}
-		]},
-		{"type":"variable","name":"timeChallengeInfo","inputs":[
-			{"name":"methodName","type":"string"},
-			{"name":"paramsHash","type":"hash"},
-			{"name":"challengeStartHeight","type":"uint64"}
-		]},
-		{"type":"variable","name":"securityInfo","inputs":[
-			{"name":"guardians","type":"address[]"},
-			{"name":"guardiansVotes","type":"address[]"},
-			{"name":"administratorDelay","type":"uint64"},
-			{"name":"softDelay","type":"uint64"}
-		]}
-	]`
-
     RewardDepositVariableName        = "rewardDeposit"
     RewardDepositHistoryVariableName = "rewardDepositHistory"
     LastUpdateVariableName           = "lastUpdate"
@@ -801,8 +392,6 @@ const (
     LastEpochUpdateVariableName      = "lastEpochUpdate"
     PillarVoteVariableName           = "pillarVote"
     VotableHashVariableName          = "votableHash"
-    timeChallengeInfoVariableName    = "timeChallengeInfo"
-    securityInfoVariableName         = "securityInfo"
 
     UpdateMethodName               = "Update"
     CollectRewardMethodName        = "CollectReward"
@@ -818,45 +407,10 @@ const (
 )
 ```
 
-<a name="jsonHtlc"></a>jsonHtlc is the canonical Solidity\-shaped ABI for the HTLC \(Hashed Time\-Lock Contract\) contract: Create / Reclaim / Unlock for the per\-entry lifecycle, and DenyProxyUnlock / AllowProxyUnlock for the per\-account proxy\-unlock toggle. Stored records: htlcInfo \(one per HTLC\) and htlcProxyUnlockInfo \(one per address\).
+<a name="CreateHtlcMethodName"></a>jsonHtlc is the canonical Solidity\-shaped ABI for the HTLC \(Hashed Time\-Lock Contract\) contract: Create / Reclaim / Unlock for the per\-entry lifecycle, and DenyProxyUnlock / AllowProxyUnlock for the per\-account proxy\-unlock toggle. Stored records: htlcInfo \(one per HTLC\) and htlcProxyUnlockInfo \(one per address\).
 
 ```go
 const (
-    jsonHtlc = `
-	[
-		{"type":"function","name":"Create", "inputs":[
-			{"name":"hashLocked","type":"address"},
-			{"name":"expirationTime","type":"int64"},
-			{"name":"hashType","type":"uint8"},
-			{"name":"keyMaxSize","type":"uint8"},
-			{"name":"hashLock","type":"bytes"}
-		]},
-		{"type":"function","name":"Reclaim","inputs":[
-			{"name":"id","type":"hash"}
-		]},
-		{"type":"function","name":"Unlock","inputs":[
-			{"name":"id","type":"hash"},
-			{"name":"preimage","type":"bytes"}
-		]},
-
-		{"type":"variable","name":"htlcInfo","inputs":[
-			{"name":"timeLocked","type":"address"},
-			{"name":"hashLocked","type":"address"},
-			{"name":"tokenStandard","type":"tokenStandard"},
-			{"name":"amount","type":"uint256"},
-			{"name":"expirationTime", "type":"int64"},
-			{"name":"hashType","type":"uint8"},
-			{"name":"keyMaxSize","type":"uint8"},
-			{"name":"hashLock","type":"bytes"}
-		]},
-
-		{"type":"function","name":"DenyProxyUnlock","inputs":[]},
-		{"type":"function","name":"AllowProxyUnlock","inputs":[]},
-
-		{"type":"variable","name":"htlcProxyUnlockInfo","inputs":[
-			{"name":"allowed","type":"bool"}
-		]}
-	]`
 
     // CreateHtlcMethodName names the HTLC-creation method:
     // caller locks tokens behind a hash + expiration time.
@@ -876,9 +430,6 @@ const (
     // AllowHtlcProxyUnlockMethodName names the per-account
     // proxy-unlock-allow toggle.
     AllowHtlcProxyUnlockMethodName = "AllowProxyUnlock"
-
-    variableNameHtlcInfo            = "htlcInfo"
-    variableNameHtlcProxyUnlockInfo = "htlcProxyUnlockInfo"
 )
 ```
 
@@ -893,83 +444,12 @@ const (
 )
 ```
 
-<a name="jsonLiquidity"></a>jsonLiquidity is the canonical Solidity\-shaped ABI for the Liquidity contract: liquidity\-program funding \(Fund, BurnZnn\), administered configuration \(SetTokenTuple, SetAdditionalReward, SetIsHalted\), governance \(ChangeAdministrator, ProposeAdministrator, NominateGuardians, Emergency\), staking \(LiquidityStake, CancelLiquidityStake, UnlockLiquidityStakeEntries\), and the periodic Update / Donate / CollectReward methods.
+<a name="FundMethodName"></a>jsonLiquidity is the canonical Solidity\-shaped ABI for the Liquidity contract: liquidity\-program funding \(Fund, BurnZnn\), administered configuration \(SetTokenTuple, SetAdditionalReward, SetIsHalted\), governance \(ChangeAdministrator, ProposeAdministrator, NominateGuardians, Emergency\), staking \(LiquidityStake, CancelLiquidityStake, UnlockLiquidityStakeEntries\), and the periodic Update / Donate / CollectReward methods.
 
 Storage records: liquidityInfo \(singleton\), tokenTuple \(per\-token configuration\), liquidityStakeEntry \(per\-stake\), securityInfo \(guardian / delay configuration\).
 
 ```go
 const (
-    jsonLiquidity = `
-	[
-		{"type":"function","name":"Update", "inputs":[]},
-		{"type":"function","name":"Donate", "inputs":[]},
-		{"type":"function","name":"Fund", "inputs":[
-			{"name":"znnReward","type":"uint256"},
-			{"name":"qsrReward","type":"uint256"}
-		]},
-		{"type":"function","name":"BurnZnn", "inputs":[
-			{"name":"burnAmount","type":"uint256"}
-		]},
-		{"type":"function","name":"SetTokenTuple", "inputs":[
-			{"name":"tokenStandards","type":"string[]"},
-			{"name":"znnPercentages","type":"uint32[]"},
-			{"name":"qsrPercentages","type":"uint32[]"},
-			{"name":"minAmounts","type":"uint256[]"}
-		]},
-		{"type":"variable","name":"liquidityInfo","inputs":[
-			{"name":"administrator","type":"address"},
-			{"name":"isHalted","type":"bool"},
-			{"name":"znnReward","type":"uint256"},
-			{"name":"qsrReward","type":"uint256"},
-			{"name":"tokenTuples","type":"bytes[]"}
-		]},
-		{"type":"variable","name":"tokenTuple","inputs":[
-			{"name":"tokenStandard","type":"string"},
-			{"name":"znnPercentage","type":"uint32"},
-			{"name":"qsrPercentage","type":"uint32"},
-			{"name":"minAmount","type":"uint256"}
-		]},
-		{"type":"variable", "name":"liquidityStakeEntry", "inputs":[
-			{"name":"amount", "type":"uint256"},
-			{"name":"tokenStandard", "type":"tokenStandard"},
-			{"name":"weightedAmount", "type":"uint256"},
-			{"name":"startTime", "type":"int64"},
-			{"name":"revokeTime", "type":"int64"},
-			{"name":"expirationTime", "type":"int64"}
-		]},
-		{"type":"function","name":"NominateGuardians","inputs":[
-			{"name":"guardians","type":"address[]"}
-		]},
-		{"type":"function","name":"ProposeAdministrator","inputs":[
-			{"name":"address","type":"address"}
-		]},
-		{"type":"function","name":"Emergency","inputs":[]},
-
-		{"type":"variable","name":"securityInfo","inputs":[
-			{"name":"guardians","type":"address[]"},
-			{"name":"guardiansVotes","type":"address[]"},
-			{"name":"administratorDelay","type":"uint64"},
-			{"name":"softDelay","type":"uint64"}
-		]},
-		{"type":"function","name":"SetIsHalted","inputs":[
-			{"name":"isHalted","type":"bool"}
-		]},
-		{"type":"function","name":"LiquidityStake","inputs":[
-			{"name":"durationInSec", "type":"int64"}
-		]},
-		{"type":"function","name":"CancelLiquidityStake","inputs":[
-			{"name":"id","type":"hash"}
-		]},
-		{"type":"function","name":"UnlockLiquidityStakeEntries","inputs":[]},
-		{"type":"function","name":"SetAdditionalReward","inputs":[
-			{"name":"znnReward", "type":"uint256"},
-			{"name":"qsrReward", "type":"uint256"}
-		]},
-		{"type":"function","name":"CollectReward","inputs":[]},
-		{"type":"function","name":"ChangeAdministrator","inputs":[
-			{"name":"administrator","type":"address"}
-		]}
-	]`
 
     // FundMethodName credits the liquidity reward pool from a
     // caller-supplied transfer.
@@ -994,79 +474,13 @@ const (
     // SetIsHaltedMethodName toggles the halted flag (no further
     // staking when halted).
     SetIsHaltedMethodName = "SetIsHalted"
-
-    liquidityInfoVariableName       = "liquidityInfo"
-    tokenTupleVariableName          = "tokenTuple"
-    liquidityStakeEntryVariableName = "liquidityStakeEntry"
 )
 ```
 
-<a name="jsonPillars"></a>jsonPillars is the canonical Solidity\-shaped ABI for the Pillar contract: registration \(Register, RegisterLegacy\), updates \(UpdatePillar, Update\), revocation \(Revoke\), delegation \(Delegate, Undelegate\), QSR deposit/withdraw, reward collection, plus the storage record shapes \(pillarInfo, producingPillarName, LegacyPillarEntry, delegationInfo, pillarEpochHistory\).
+<a name="RegisterMethodName"></a>jsonPillars is the canonical Solidity\-shaped ABI for the Pillar contract: registration \(Register, RegisterLegacy\), updates \(UpdatePillar, Update\), revocation \(Revoke\), delegation \(Delegate, Undelegate\), QSR deposit/withdraw, reward collection, plus the storage record shapes \(pillarInfo, producingPillarName, LegacyPillarEntry, delegationInfo, pillarEpochHistory\).
 
 ```go
 const (
-    jsonPillars = `
-	[
-{"type":"function","name":"Update", "inputs":[]},
-		{"type":"function","name":"Register", "inputs":[
-			{"name":"name","type":"string"},
-			{"name":"producerAddress","type":"address"},
-			{"name":"rewardAddress","type":"address"},
-			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"}
-		]},
-		{"type":"function","name":"RegisterLegacy", "inputs":[
-			{"name":"name","type":"string"},
-			{"name":"producerAddress","type":"address"},
-			{"name":"rewardAddress","type":"address"},
-			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"}, 
-			{"name":"publicKey", "type":"string"}, 
-			{"name":"signature","type":"string"}
-		]},
-		{"type":"function","name":"UpdatePillar", "inputs":[
-			{"name":"name","type":"string"},
-			{"name":"producerAddress","type":"address"},
-			{"name":"rewardAddress","type":"address"},
-			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"}
-		]},
-		{"type":"function","name":"DepositQsr", "inputs":[]},
-		{"type":"function","name":"WithdrawQsr", "inputs":[]},
-		{"type":"function","name":"Revoke","inputs":[{"name":"name","type":"string"}]},
-		{"type":"function","name":"Delegate", "inputs":[{"name":"name","type":"string"}]},
-		{"type":"function","name":"Undelegate","inputs":[]},
-		{"type":"function","name":"CollectReward","inputs":[]},
-
-		{"type":"variable","name":"pillarInfo","inputs":[
-			{"name":"name","type":"string"},
-			{"name":"blockProducingAddress","type":"address"},
-			{"name":"rewardWithdrawAddress","type":"address"},
-			{"name":"stakeAddress","type":"address"},
-			{"name":"amount","type":"uint256"},
-			{"name":"registrationTime","type":"int64"},
-			{"name":"revokeTime","type":"int64"},
-			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"},
-			{"name":"pillarType","type":"uint8"}
-		]},
-		{"type":"variable","name":"producingPillarName","inputs":[
-			{"name":"name","type":"string"}
-		]},
-		{"type":"variable","name":"LegacyPillarEntry","inputs":[
-			{"name":"pillarCount", "type":"uint8"}
-		]},
-		{"type":"variable","name":"delegationInfo","inputs":[
-			{"name":"name","type":"string"}
-		]},
-		{"type":"variable","name":"pillarEpochHistory","inputs":[
-			{"name":"giveBlockRewardPercentage","type":"uint8"},
-			{"name":"giveDelegateRewardPercentage","type":"uint8"},
-			{"name":"producedBlockNum","type":"int32"},
-			{"name":"expectedBlockNum","type":"int32"},
-			{"name":"weight","type":"uint256"}
-		]}
-	]`
 
     // RegisterMethodName names the standard pillar-registration
     // method.
@@ -1084,68 +498,25 @@ const (
     DelegateMethodName = "Delegate"
     // UndelegateMethodName names the un-delegate method.
     UndelegateMethodName = "Undelegate"
-
-    pillarInfoVariableName          = "pillarInfo"
-    producingPillarNameVariableName = "producingPillarName"
-    legacyPillarEntryVariableName   = "LegacyPillarEntry"
-    delegationInfoVariableName      = "delegationInfo"
-    pillarEpochHistoryVariableName  = "pillarEpochHistory"
 )
 ```
 
-<a name="jsonPlasma"></a>jsonPlasma is the canonical Solidity\-shaped ABI for the Plasma contract: two methods \(Fuse, CancelFuse\) and two storage record shapes \(fusionInfo per\-fusion, fusedAmount per\-beneficiary summary\).
+<a name="FuseMethodName"></a>jsonPlasma is the canonical Solidity\-shaped ABI for the Plasma contract: two methods \(Fuse, CancelFuse\) and two storage record shapes \(fusionInfo per\-fusion, fusedAmount per\-beneficiary summary\).
 
 ```go
 const (
-    jsonPlasma = `
-	[
-		{"type":"function","name":"Fuse", "inputs":[
-			{"name":"address","type":"address"}
-		]},
-		{"type":"function","name":"CancelFuse","inputs":[
-			{"name":"id","type":"hash"}
-		]},
-
-		{"type":"variable","name":"fusionInfo","inputs":[
-			{"name":"amount","type":"uint256"},
-			{"name":"expirationHeight","type":"uint64"},
-			{"name":"beneficiary","type":"address"}
-		]},
-		{"type":"variable","name":"fusedAmount","inputs":[
-			{"name":"amount","type":"uint256"}
-		]}
-	]`
 
     // FuseMethodName names the QSR-fusing method.
     FuseMethodName = "Fuse"
     // CancelFuseMethodName names the un-fuse / withdraw method.
     CancelFuseMethodName = "CancelFuse"
-
-    variableNameFusionInfo  = "fusionInfo"
-    variableNameFusedAmount = "fusedAmount"
 )
 ```
 
-<a name="jsonSentinel"></a>jsonSentinel is the canonical Solidity\-shaped ABI for the Sentinel contract. The contract shares the common deposit / withdraw / collect\-reward methods \(defined in common.go\) and adds Register / Revoke / Update.
+<a name="RegisterSentinelMethodName"></a>jsonSentinel is the canonical Solidity\-shaped ABI for the Sentinel contract. The contract shares the common deposit / withdraw / collect\-reward methods \(defined in common.go\) and adds Register / Revoke / Update.
 
 ```go
 const (
-    jsonSentinel = `
-	[
-		{"type":"function","name":"DepositQsr","inputs":[]},
-		{"type":"function","name":"WithdrawQsr","inputs":[]},
-		{"type":"function","name":"Register","inputs":[]},
-		{"type":"function","name":"Revoke","inputs":[]},
-		{"type":"function","name":"Update", "inputs":[]},
-		{"type":"function","name":"CollectReward","inputs":[]},
-
-		{"type":"variable","name":"sentinelInfo","inputs":[
-			{"name":"owner","type":"address"},
-			{"name":"registrationTimestamp","type":"int64"},
-			{"name":"revokeTimestamp","type":"int64"},
-			{"name":"znnAmount","type":"uint256"},
-			{"name":"qsrAmount","type":"uint256"}]}
-	]`
 
     // RegisterSentinelMethodName names the sentinel-registration
     // method.
@@ -1153,134 +524,37 @@ const (
     // RevokeSentinelMethodName names the sentinel-revocation
     // method.
     RevokeSentinelMethodName = "Revoke"
-
-    sentinelInfoVariableName = "sentinelInfo"
 )
 ```
 
-<a name="_"></a>Storage prefix; index 0 is reserved by the storage decorator.
+<a name="SporkCreateMethodName"></a>jsonSpork is the canonical Solidity\-shaped ABI for the Spork contract: two methods \(CreateSpork, ActivateSpork\) and one storage record shape \(sporkInfo\).
 
 ```go
 const (
-    _   byte = iota
-    sentinelInfoPrefix
-)
-```
-
-<a name="jsonSpork"></a>jsonSpork is the canonical Solidity\-shaped ABI for the Spork contract: two methods \(CreateSpork, ActivateSpork\) and one storage record shape \(sporkInfo\).
-
-```go
-const (
-    jsonSpork = `
-	[
-		{"type":"function","name":"CreateSpork","inputs":[{"name":"name","type":"string"},{"name":"description","type":"string"}]},
-		{"type":"function","name":"ActivateSpork","inputs":[{"name":"id","type":"hash"}]},
-
-		{"type":"variable", "name":"sporkInfo", "inputs":[
-			{"name":"id", "type":"hash"},
-			{"name":"name", "type":"string"},
-			{"name":"description", "type":"string"},
-			{"name":"activated", "type": "bool"},
-			{"name":"enforcementHeight", "type": "uint64"}
-		]}
-	]`
 
     // SporkCreateMethodName names the spork-creation method.
     SporkCreateMethodName = "CreateSpork"
     // SporkActivateMethodName names the spork-activation method.
     SporkActivateMethodName = "ActivateSpork"
-
-    // sporkInfoVariableName is the storage variable name used to
-    // (de)encode [Spork] records.
-    sporkInfoVariableName = "sporkInfo"
 )
 ```
 
-<a name="_"></a>Single\-byte storage prefixes used by the Spork contract. Index 0 is intentionally skipped \(reserved by the storage decorator\).
+<a name="StakeMethodName"></a>jsonStake is the canonical Solidity\-shaped ABI for the Stake contract: Stake/Cancel/CollectReward/Update plus the per\-stake storage record \(stakeInfo\).
 
 ```go
 const (
-    _   byte = iota
-    // sporkInfoPrefix namespaces per-spork records keyed by id.
-    sporkInfoPrefix
-)
-```
-
-<a name="jsonStake"></a>jsonStake is the canonical Solidity\-shaped ABI for the Stake contract: Stake/Cancel/CollectReward/Update plus the per\-stake storage record \(stakeInfo\).
-
-```go
-const (
-    jsonStake = `
-	[
-		{"type":"function","name":"Stake","inputs":[{"name":"durationInSec", "type":"int64"}]},
-		{"type":"function","name":"Cancel","inputs":[{"name":"id","type":"hash"}]},
-		{"type":"function","name":"CollectReward","inputs":[]},
-		{"type":"function","name":"Update", "inputs":[]},
-
-		{"type":"variable", "name":"stakeInfo", "inputs":[
-			{"name":"amount", "type":"uint256"},
-			{"name":"weightedAmount", "type":"uint256"},
-			{"name":"startTime", "type":"int64"},
-			{"name":"revokeTime", "type":"int64"},
-			{"name":"expirationTime", "type":"int64"}
-		]}
-	]`
 
     // StakeMethodName names the lock-and-stake method.
     StakeMethodName = "Stake"
     // CancelStakeMethodName names the cancel-and-refund method.
     CancelStakeMethodName = "Cancel"
-
-    stakeInfoVariableName = "stakeInfo"
 )
 ```
 
-<a name="jsonSwap"></a>jsonSwap is the canonical Solidity\-shaped ABI for the Swap contract: one method \(RetrieveAssets\) and one storage record shape \(swapEntry\).
+<a name="IssueMethodName"></a>jsonToken is the canonical Solidity\-shaped ABI for the Token contract: four methods \(IssueToken, Mint, Burn, UpdateToken\) and the per\-token storage record \(tokenInfo\).
 
 ```go
 const (
-    jsonSwap = `
-	[
-		{"type":"function","name":"RetrieveAssets", "inputs":[{"name":"publicKey","type":"string"},{"name":"signature","type":"string"}]},
-		{"type":"variable","name":"swapEntry", "inputs":[
-			{"name":"znn","type":"uint256"}, 
-			{"name":"qsr","type":"uint256"}
-		]}
-	]`
-
-    // RetrieveAssetsMethodName names the legacy-claim retrieval
-    // method.
-    RetrieveAssetsMethodName = "RetrieveAssets"
-
-    // swapEntryVariableName is the storage variable name used to
-    // (de)encode [SwapAssets] records.
-    swapEntryVariableName = "swapEntry"
-)
-```
-
-<a name="jsonToken"></a>jsonToken is the canonical Solidity\-shaped ABI for the Token contract: four methods \(IssueToken, Mint, Burn, UpdateToken\) and the per\-token storage record \(tokenInfo\).
-
-```go
-const (
-    jsonToken = `
-	[
-		{"type":"function","name":"IssueToken","inputs":[{"name":"tokenName","type":"string"},{"name":"tokenSymbol","type":"string"},{"name":"tokenDomain","type":"string"},{"name":"totalSupply","type":"uint256"},{"name":"maxSupply","type":"uint256"},{"name":"decimals","type":"uint8"},{"name":"isMintable","type":"bool"},{"name":"isBurnable","type":"bool"},{"name":"isUtility","type":"bool"}]},
-		{"type":"function","name":"Mint","inputs":[{"name":"tokenStandard","type":"tokenStandard"},{"name":"amount","type":"uint256"},{"name":"receiveAddress","type":"address"}]},
-		{"type":"function","name":"Burn","inputs":[]},
-		{"type":"function","name":"UpdateToken","inputs":[{"name":"tokenStandard","type":"tokenStandard"},{"name":"owner","type":"address"},{"name":"isMintable","type":"bool"},{"name":"isBurnable","type":"bool"}]},
-
-		{"type":"variable","name":"tokenInfo","inputs":[
-			{"name":"owner","type":"address"},
-			{"name":"tokenName","type":"string"},
-			{"name":"tokenSymbol","type":"string"},
-			{"name":"tokenDomain","type":"string"},
-			{"name":"totalSupply","type":"uint256"},
-			{"name":"maxSupply","type":"uint256"},
-			{"name":"decimals","type":"uint8"},
-			{"name":"isMintable","type":"bool"},
-			{"name":"isBurnable","type":"bool"},
-			{"name":"isUtility","type":"bool"}]}
-	]`
 
     // IssueMethodName names the new-token issuance method.
     IssueMethodName = "IssueToken"
@@ -1291,14 +565,23 @@ const (
     BurnMethodName = "Burn"
     // UpdateTokenMethodName names the metadata-update method.
     UpdateTokenMethodName = "UpdateToken"
+)
+```
 
-    tokenInfoVariableName = "tokenInfo"
+<a name="RetrieveAssetsMethodName"></a>jsonSwap is the canonical Solidity\-shaped ABI for the Swap contract: one method \(RetrieveAssets\) and one storage record shape \(swapEntry\).
+
+```go
+const (
+
+    // RetrieveAssetsMethodName names the legacy-claim retrieval
+    // method.
+    RetrieveAssetsMethodName = "RetrieveAssets"
 )
 ```
 
 ## Variables
 
-<a name="ABIBridge"></a>ABIBridge is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Bridge contract. Per\-prefix key namespaces: 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo \(singleton\), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair \(per network × token\), 7=feeTokenPair \(per token fee accumulator\).
+<a name="ABIBridge"></a>ABIBridge is the parsed \[abi.ABIContract\] for the Bridge contract. Per\-prefix key namespaces: 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo \(singleton\), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair \(per network × token\), 7=feeTokenPair \(per token fee accumulator\).
 
 Network class discriminators distinguish remote\-network families: [NoMClass](<#ABIBridge>) for sister NoM networks, [EvmClass](<#ABIBridge>) for Ethereum\-compatible chains.
 
@@ -1308,13 +591,11 @@ The Uint256Ty / AddressTy / StringTy handles are go\-ethereum ABI types used to 
 var (
     ABIBridge = abi.JSONToABIContract(strings.NewReader(jsonBridge))
 
-    wrapTokenRequestKeyPrefix   = []byte{1}
-    unwrapTokenRequestKeyPrefix = []byte{2}
-    BridgeInfoKeyPrefix         = []byte{3}
-    OrchestratorInfoKeyPrefix   = []byte{4}
-    NetworkInfoKeyPrefix        = []byte{5}
-    RequestPairKeyPrefix        = []byte{6}
-    FeeTokenPairKeyPrefix       = []byte{7}
+    BridgeInfoKeyPrefix       = []byte{3}
+    OrchestratorInfoKeyPrefix = []byte{4}
+    NetworkInfoKeyPrefix      = []byte{5}
+    RequestPairKeyPrefix      = []byte{6}
+    FeeTokenPairKeyPrefix     = []byte{7}
 
     // NoMClass is the network-class discriminator for sister Network-of-Momentum networks.
     NoMClass = uint32(1)
@@ -1322,9 +603,9 @@ var (
     // Ethereum-compatible (EVM) remote networks.
     EvmClass = uint32(2)
 
-    Uint256Ty, _ = eabi.NewType("uint256", "uint256", nil)
-    AddressTy, _ = eabi.NewType("address", "address", nil)
-    StringTy, _  = eabi.NewType("string", "string", nil)
+    Uint256Ty = eabi.NewType("uint256", "uint256", nil)
+    AddressTy = eabi.NewType("address", "address", nil)
+    StringTy  = eabi.NewType("string", "string", nil)
 )
 ```
 
@@ -1335,14 +616,6 @@ var (
     // ABICommon is part of the package's public API.
     ABICommon = abi.JSONToABIContract(strings.NewReader(jsonCommon))
 
-    // common key prefixes are big enough so they don't clash with embedded-specific variables
-    rewardDepositKeyPrefix        = []byte{128}
-    lastUpdateKey                 = []byte{129}
-    qsrDepositKeyPrefix           = []byte{130}
-    lastEpochUpdateKey            = []byte{131}
-    rewardDepositHistoryKeyPrefix = []byte{132}
-    pillarVoteKeyPrefix           = []byte{133}
-    votableHashKeyPrefix          = []byte{134}
     // TimeChallengeKeyPrefix is part of the package's public API.
     TimeChallengeKeyPrefix = []byte{135}
     // SecurityInfoKeyPrefix is the leading byte for security-info
@@ -1352,18 +625,7 @@ var (
 )
 ```
 
-<a name="ABIHtlc"></a>ABIHtlc is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the HTLC contract. 1=htlcInfo \(per\-HTLC\), 2=htlcProxyUnlockInfo \(per\-address\).
-
-```go
-var (
-    ABIHtlc = abi.JSONToABIContract(strings.NewReader(jsonHtlc))
-
-    htlcInfoKeyPrefix            = []byte{1}
-    htlcProxyUnlockInfoKeyPrefix = []byte{2}
-)
-```
-
-<a name="ABILiquidity"></a>ABILiquidity is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Liquidity contract. 1=liquidityInfo \(singleton config\), 2=liquidityStakeEntry \(per\-stake records\).
+<a name="ABILiquidity"></a>ABILiquidity is the parsed \[abi.ABIContract\] for the Liquidity contract. 1=liquidityInfo \(singleton config\), 2=liquidityStakeEntry \(per\-stake records\).
 
 ```go
 var (
@@ -1374,7 +636,7 @@ var (
 )
 ```
 
-<a name="ABIPillars"></a>ABIPillars is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Pillar contract. The per\-prefix key namespaces follow: 1=pillarInfo, 2=producingPillarName \(reverse index by producer\), 3=LegacyPillarEntry, 4=delegationInfo, 5=pillarEpochHistory.
+<a name="ABIPillars"></a>ABIPillars is the parsed \[abi.ABIContract\] for the Pillar contract. The per\-prefix key namespaces follow: 1=pillarInfo, 2=producingPillarName \(reverse index by producer\), 3=LegacyPillarEntry, 4=delegationInfo, 5=pillarEpochHistory.
 
 Pillar\-type discriminators tag each pillar with how it was registered \([LegacyPillarType](<#ABIPillars>) consumed a legacy slot; [NormalPillarType](<#ABIPillars>) paid the QSR\-burn price\). [AnyPillarType](<#ABIPillars>) is the wildcard for queries.
 
@@ -1382,12 +644,6 @@ Pillar\-type discriminators tag each pillar with how it was registered \([Legacy
 var (
     // ABIPillars is abi definition of pillar contract.
     ABIPillars = abi.JSONToABIContract(strings.NewReader(jsonPillars))
-
-    pillarInfoKeyPrefix          = []byte{1}
-    producingPillarNameKeyPrefix = []byte{2}
-    legacyPillarEntryKeyPrefix   = []byte{3}
-    delegationInfoKeyPrefix      = []byte{4}
-    pillarEpochHistoryKeyPrefix  = []byte{5}
 
     // AnyPillarType is the wildcard used by queries that should
     // match either pillar kind.
@@ -1401,24 +657,9 @@ var (
 )
 ```
 
-<a name="ABIPlasma"></a>ABIPlasma is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the plasma contract.
+<a name="ABISpork"></a>ABISpork is the parsed \[abi.ABIContract\] for the Spork contract.
 
-```go
-var (
-    ABIPlasma = abi.JSONToABIContract(strings.NewReader(jsonPlasma))
-
-    // fusionInfoKeyPrefix namespaces per-fusion records keyed by
-    // (owner, id).
-    fusionInfoKeyPrefix = []byte{1}
-    // fusedAmountKeyPrefix namespaces per-beneficiary cumulative
-    // fused amounts.
-    fusedAmountKeyPrefix = []byte{2}
-)
-```
-
-<a name="ABISpork"></a>ABISpork is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Spork contract.
-
-CommunitySporkAddressStartHeight / CommunitySporkAddressEndHeight bracket the window in which the [types.CommunitySporkAddress](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#CommunitySporkAddress>) transitional spork\-controlling address is allowed to operate.
+CommunitySporkAddressStartHeight / CommunitySporkAddressEndHeight bracket the window in which the \[types.CommunitySporkAddress\] transitional spork\-controlling address is allowed to operate.
 
 ```go
 var (
@@ -1436,28 +677,6 @@ var (
 )
 ```
 
-<a name="ABIStake"></a>ABIStake is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the stake contract.
-
-```go
-var (
-    ABIStake = abi.JSONToABIContract(strings.NewReader(jsonStake))
-
-    // stakeInfoPrefix namespaces per-stake records.
-    stakeInfoPrefix = []byte{1}
-)
-```
-
-<a name="ABIToken"></a>ABIToken is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the token contract.
-
-```go
-var (
-    ABIToken = abi.JSONToABIContract(strings.NewReader(jsonToken))
-
-    // tokenInfoKeyPrefix namespaces per-token records.
-    tokenInfoKeyPrefix = []byte{1}
-)
-```
-
 <a name="ABIAccelerator"></a>
 
 ```go
@@ -1467,7 +686,23 @@ var (
 )
 ```
 
-<a name="ABISentinel"></a>ABISentinel is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the sentinel contract.
+<a name="ABIHtlc"></a>ABIHtlc is the parsed \[abi.ABIContract\] for the HTLC contract. 1=htlcInfo \(per\-HTLC\), 2=htlcProxyUnlockInfo \(per\-address\).
+
+```go
+var (
+    ABIHtlc = abi.JSONToABIContract(strings.NewReader(jsonHtlc))
+)
+```
+
+<a name="ABIPlasma"></a>ABIPlasma is the parsed \[abi.ABIContract\] for the plasma contract.
+
+```go
+var (
+    ABIPlasma = abi.JSONToABIContract(strings.NewReader(jsonPlasma))
+)
+```
+
+<a name="ABISentinel"></a>ABISentinel is the parsed \[abi.ABIContract\] for the sentinel contract.
 
 ```go
 var (
@@ -1475,11 +710,27 @@ var (
 )
 ```
 
-<a name="ABISwap"></a>ABISwap is the parsed [abi.ABIContract](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/#ABIContract>) for the Swap contract.
+<a name="ABIStake"></a>ABIStake is the parsed \[abi.ABIContract\] for the stake contract.
+
+```go
+var (
+    ABIStake = abi.JSONToABIContract(strings.NewReader(jsonStake))
+)
+```
+
+<a name="ABISwap"></a>ABISwap is the parsed \[abi.ABIContract\] for the Swap contract.
 
 ```go
 var (
     ABISwap = abi.JSONToABIContract(strings.NewReader(jsonSwap))
+)
+```
+
+<a name="ABIToken"></a>ABIToken is the parsed \[abi.ABIContract\] for the token contract.
+
+```go
+var (
+    ABIToken = abi.JSONToABIContract(strings.NewReader(jsonToken))
 )
 ```
 
@@ -1546,447 +797,6 @@ func IterateStakeEntries(context db.DB, f func(*StakeInfo) error) error
 
 IterateStakeEntries calls f for every stake record. f returning a non\-nil error stops iteration; data\-non\-existent entries are silently skipped.
 
-<a name="getDelegationInfoKey"></a>
-## func [getDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L353>)
-
-```go
-func getDelegationInfoKey(addr types.Address) []byte
-```
-
-
-
-<a name="getFusedAmountKey"></a>
-## func [getFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L210>)
-
-```go
-func getFusedAmountKey(beneficiary types.Address) []byte
-```
-
-getFusedAmountKey composes the storage key for a per\-beneficiary cumulative record.
-
-<a name="getFusionInfoKey"></a>
-## func [getFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L94>)
-
-```go
-func getFusionInfoKey(addr types.Address, hash types.Hash) []byte
-```
-
-getFusionInfoKey composes the storage key for one fusion record.
-
-<a name="getHtlcInfoKey"></a>
-## func [getHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L173>)
-
-```go
-func getHtlcInfoKey(hash types.Hash) []byte
-```
-
-
-
-<a name="getHtlcProxyUnlockInfoKey"></a>
-## func [getHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L299>)
-
-```go
-func getHtlcProxyUnlockInfoKey(address types.Address) []byte
-```
-
-
-
-<a name="getLegacyPillarEntryKey"></a>
-## func [getLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L446>)
-
-```go
-func getLegacyPillarEntryKey(keyIdHash types.Hash) []byte
-```
-
-
-
-<a name="getLiquidityStakeEntryKey"></a>
-## func [getLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L394>)
-
-```go
-func getLiquidityStakeEntryKey(id types.Hash, address types.Address) []byte
-```
-
-
-
-<a name="getPillarEpochHistoryEntryKey"></a>
-## func [getPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L551>)
-
-```go
-func getPillarEpochHistoryEntryKey(epoch uint64, name string) []byte
-```
-
-
-
-<a name="getPillarEpochHistoryPrefixKey"></a>
-## func [getPillarEpochHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L546>)
-
-```go
-func getPillarEpochHistoryPrefixKey(epoch uint64) []byte
-```
-
-
-
-<a name="getQsrDepositKey"></a>
-## func [getQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L329>)
-
-```go
-func getQsrDepositKey(address *types.Address) []byte
-```
-
-
-
-<a name="getRequestPairKey"></a>
-## func [getRequestPairKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L827>)
-
-```go
-func getRequestPairKey(id types.Hash) []byte
-```
-
-
-
-<a name="getRewardDepositHistoryEntryKey"></a>
-## func [getRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L438>)
-
-```go
-func getRewardDepositHistoryEntryKey(epoch uint64, address *types.Address) []byte
-```
-
-
-
-<a name="getRewardDepositHistoryPrefixKey"></a>
-## func [getRewardDepositHistoryPrefixKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L435>)
-
-```go
-func getRewardDepositHistoryPrefixKey(address *types.Address) []byte
-```
-
-
-
-<a name="getRewardDepositKey"></a>
-## func [getRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L203>)
-
-```go
-func getRewardDepositKey(address *types.Address) []byte
-```
-
-
-
-<a name="getStakeInfoKey"></a>
-## func [getStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L88>)
-
-```go
-func getStakeInfoKey(id types.Hash, address types.Address) []byte
-```
-
-getStakeInfoKey composes the storage key \(\`stakeInfoPrefix || address || id\`\).
-
-<a name="getSwapAssetsKey"></a>
-## func [getSwapAssetsKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L72>)
-
-```go
-func getSwapAssetsKey(keyIdHash types.Hash) []byte
-```
-
-getSwapAssetsKey returns the database key holding the swap entry for keyIdHash. Note: swap uses a flat key namespace \(no prefix byte\) because it is the only table in the contract's storage.
-
-<a name="getTokenInfoKey"></a>
-## func [getTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L138>)
-
-```go
-func getTokenInfoKey(ts types.ZenonTokenStandard) []byte
-```
-
-getTokenInfoKey composes the storage key for one token record.
-
-<a name="getUnwrapTokenRequestKey"></a>
-## func [getUnwrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1080>)
-
-```go
-func getUnwrapTokenRequestKey(transactionHash types.Hash, logIndex uint32) []byte
-```
-
-
-
-<a name="getWrapTokenRequestKey"></a>
-## func [getWrapTokenRequestKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L911>)
-
-```go
-func getWrapTokenRequestKey(creationMomentumHeight uint64, id types.Hash) []byte
-```
-
-
-
-<a name="isDelegationInfoKey"></a>
-## func [isDelegationInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L356>)
-
-```go
-func isDelegationInfoKey(key []byte) bool
-```
-
-
-
-<a name="isFusedAmountKey"></a>
-## func [isFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L216>)
-
-```go
-func isFusedAmountKey(key []byte) bool
-```
-
-isFusedAmountKey reports whether key belongs to the fusedAmount keyspace.
-
-<a name="isFusionInfoKey"></a>
-## func [isFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L100>)
-
-```go
-func isFusionInfoKey(key []byte) bool
-```
-
-isFusionInfoKey reports whether key belongs to the fusionInfo keyspace.
-
-<a name="isHtlcInfoKey"></a>
-## func [isHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L176>)
-
-```go
-func isHtlcInfoKey(key []byte) bool
-```
-
-
-
-<a name="isHtlcProxyUnlockInfoKey"></a>
-## func [isHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L302>)
-
-```go
-func isHtlcProxyUnlockInfoKey(key []byte) bool
-```
-
-
-
-<a name="isLegacyPillarEntryKey"></a>
-## func [isLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L449>)
-
-```go
-func isLegacyPillarEntryKey(key []byte) bool
-```
-
-
-
-<a name="isLiquidityStakeEntryKey"></a>
-## func [isLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L397>)
-
-```go
-func isLiquidityStakeEntryKey(key []byte) bool
-```
-
-
-
-<a name="isPillarEpochHistoryEntryKey"></a>
-## func [isPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L554>)
-
-```go
-func isPillarEpochHistoryEntryKey(key []byte) bool
-```
-
-
-
-<a name="isProducingPillarKey"></a>
-## func [isProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L286>)
-
-```go
-func isProducingPillarKey(key []byte) bool
-```
-
-
-
-<a name="isQsrDepositKey"></a>
-## func [isQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L332>)
-
-```go
-func isQsrDepositKey(key []byte) bool
-```
-
-
-
-<a name="isRewardDepositHistoryEntryKey"></a>
-## func [isRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L443>)
-
-```go
-func isRewardDepositHistoryEntryKey(key []byte) bool
-```
-
-
-
-<a name="isRewardDepositKey"></a>
-## func [isRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L206>)
-
-```go
-func isRewardDepositKey(key []byte) bool
-```
-
-
-
-<a name="isStakeInfoKey"></a>
-## func [isStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L94>)
-
-```go
-func isStakeInfoKey(key []byte) bool
-```
-
-isStakeInfoKey reports whether key belongs to the stakeInfo keyspace.
-
-<a name="isTokenInfoKey"></a>
-## func [isTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L144>)
-
-```go
-func isTokenInfoKey(key []byte) bool
-```
-
-isTokenInfoKey reports whether key belongs to the tokenInfo keyspace.
-
-<a name="timeChallengeKey"></a>
-## func [timeChallengeKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L696>)
-
-```go
-func timeChallengeKey(methodName string) []byte
-```
-
-
-
-<a name="unmarshalDelegationInfo"></a>
-## func [unmarshalDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L359>)
-
-```go
-func unmarshalDelegationInfo(key []byte) (*types.Address, error)
-```
-
-
-
-<a name="unmarshalFusedAmountKey"></a>
-## func [unmarshalFusedAmountKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L222>)
-
-```go
-func unmarshalFusedAmountKey(key []byte) (*types.Address, error)
-```
-
-unmarshalFusedAmountKey extracts beneficiary from a fusedAmount key.
-
-<a name="unmarshalFusionInfoKey"></a>
-## func [unmarshalFusionInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L106>)
-
-```go
-func unmarshalFusionInfoKey(key []byte) (*types.Hash, *types.Address, error)
-```
-
-unmarshalFusionInfoKey extracts \(id, owner\) from a fusionInfo key. Returns an error when key is not a fusionInfo key.
-
-<a name="unmarshalHtlcInfoKey"></a>
-## func [unmarshalHtlcInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L180>)
-
-```go
-func unmarshalHtlcInfoKey(key []byte) (*types.Hash, error)
-```
-
-
-
-<a name="unmarshalHtlcProxyUnlockInfoKey"></a>
-## func [unmarshalHtlcProxyUnlockInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L305>)
-
-```go
-func unmarshalHtlcProxyUnlockInfoKey(key []byte) (*types.Address, error)
-```
-
-
-
-<a name="unmarshalLegacyPillarEntryKey"></a>
-## func [unmarshalLegacyPillarEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L452>)
-
-```go
-func unmarshalLegacyPillarEntryKey(key []byte) (*types.Hash, error)
-```
-
-
-
-<a name="unmarshalLiquidityStakeEntryKey"></a>
-## func [unmarshalLiquidityStakeEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L400>)
-
-```go
-func unmarshalLiquidityStakeEntryKey(key []byte) (*types.Hash, *types.Address, error)
-```
-
-
-
-<a name="unmarshalPillarEpochHistoryEntryKey"></a>
-## func [unmarshalPillarEpochHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L557>)
-
-```go
-func unmarshalPillarEpochHistoryEntryKey(key []byte) (uint64, string, error)
-```
-
-
-
-<a name="unmarshalProducingPillarKey"></a>
-## func [unmarshalProducingPillarKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L289>)
-
-```go
-func unmarshalProducingPillarKey(key []byte) (*types.Address, error)
-```
-
-
-
-<a name="unmarshalQsrDepositKey"></a>
-## func [unmarshalQsrDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L335>)
-
-```go
-func unmarshalQsrDepositKey(key []byte) (*types.Address, error)
-```
-
-
-
-<a name="unmarshalRewardDepositHistoryEntryKey"></a>
-## func [unmarshalRewardDepositHistoryEntryKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L446>)
-
-```go
-func unmarshalRewardDepositHistoryEntryKey(key []byte) (uint64, *types.Address, error)
-```
-
-
-
-<a name="unmarshalRewardDepositKey"></a>
-## func [unmarshalRewardDepositKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L209>)
-
-```go
-func unmarshalRewardDepositKey(key []byte) (*types.Address, error)
-```
-
-
-
-<a name="unmarshalStakeInfoKey"></a>
-## func [unmarshalStakeInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L100>)
-
-```go
-func unmarshalStakeInfoKey(key []byte) (*types.Hash, *types.Address, error)
-```
-
-unmarshalStakeInfoKey extracts \(id, address\) from a stakeInfo key.
-
-<a name="unmarshalTokenInfoKey"></a>
-## func [unmarshalTokenInfoKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L150>)
-
-```go
-func unmarshalTokenInfoKey(key []byte) (*types.ZenonTokenStandard, error)
-```
-
-unmarshalTokenInfoKey extracts the [types.ZenonTokenStandard](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/#ZenonTokenStandard>) from a tokenInfo key.
-
-<a name="unmarshalVotableHashKey"></a>
-## func [unmarshalVotableHashKey](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L598>)
-
-```go
-func unmarshalVotableHashKey(key []byte) (*types.Hash, error)
-```
-
-
-
 <a name="AcceleratorParam"></a>
 ## type [AcceleratorParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L143-L150>)
 
@@ -2039,15 +849,6 @@ func GetBridgeInfoVariable(context db.DB) (*BridgeInfoVariable, error)
 ```
 
 GetBridgeInfoVariable loads the global [BridgeInfoVariable](<#BridgeInfoVariable>) from storage, returning the default initial config if no record exists.
-
-<a name="parseBridgeInfoVariable"></a>
-### func [parseBridgeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L389>)
-
-```go
-func parseBridgeInfoVariable(data []byte) (*BridgeInfoVariable, error)
-```
-
-
 
 <a name="BridgeInfoVariable.Save"></a>
 ### func \(\*BridgeInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L368>)
@@ -2127,15 +928,6 @@ func GetDelegationsList(context db.DB) ([]*DelegationInfo, error)
 
 GetDelegationsList loads the DelegationsList record from storage.
 
-<a name="parseDelegationInfo"></a>
-### func [parseDelegationInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L369>)
-
-```go
-func parseDelegationInfo(key, data []byte) (*DelegationInfo, error)
-```
-
-
-
 <a name="DelegationInfo.Delete"></a>
 ### func \(\*DelegationInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L349>)
 
@@ -2186,15 +978,6 @@ func GetFusedAmount(context db.DB, beneficiary types.Address) (*FusedAmount, err
 ```
 
 GetFusedAmount returns the cumulative fused amount for beneficiary, or zero when no fusions have ever named it \(the caller does not need to special\-case absence\).
-
-<a name="parseFusedAmount"></a>
-### func [parseFusedAmount](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L236>)
-
-```go
-func parseFusedAmount(key, data []byte) (*FusedAmount, error)
-```
-
-parseFusedAmount decodes a \(key, data\) pair into a [FusedAmount](<#FusedAmount>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="FusedAmount.Delete"></a>
 ### func \(\*FusedAmount\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L204>)
@@ -2247,15 +1030,6 @@ func GetFusionInfoListByOwner(context db.DB, owner types.Address) ([]*FusionInfo
 
 GetFusionInfoListByOwner returns every fusion record for owner plus the summed Amount across them.
 
-<a name="parseFusionInfo"></a>
-### func [parseFusionInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L127>)
-
-```go
-func parseFusionInfo(key, data []byte) (*FusionInfo, error)
-```
-
-parseFusionInfo decodes a \(key, data\) pair into a [FusionInfo](<#FusionInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
-
 <a name="FusionInfo.Delete"></a>
 ### func \(\*FusionInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/plasma.go#L89>)
 
@@ -2301,15 +1075,6 @@ func GetHtlcInfo(context db.DB, id types.Hash) (*HtlcInfo, error)
 ```
 
 GetHtlcInfo loads the HtlcInfo record from storage.
-
-<a name="parseHtlcInfo"></a>
-### func [parseHtlcInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L193>)
-
-```go
-func parseHtlcInfo(key, data []byte) (*HtlcInfo, error)
-```
-
-
 
 <a name="HtlcInfo.Delete"></a>
 ### func \(\*HtlcInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L169>)
@@ -2405,15 +1170,6 @@ func GetHtlcProxyUnlockInfo(context db.DB, address types.Address) (*HtlcProxyUnl
 
 GetHtlcProxyUnlockInfo loads the HtlcProxyUnlockInfo record from storage.
 
-<a name="parseHtlcProxyUnlockInfo"></a>
-### func [parseHtlcProxyUnlockInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L316>)
-
-```go
-func parseHtlcProxyUnlockInfo(key, data []byte) (*HtlcProxyUnlockInfo, error)
-```
-
-
-
 <a name="HtlcProxyUnlockInfo.Delete"></a>
 ### func \(\*HtlcProxyUnlockInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/htlc.go#L294>)
 
@@ -2435,7 +1191,7 @@ Save persists the receiver under its keyed slot in storage.
 <a name="IssueParam"></a>
 ## type [IssueParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L61-L71>)
 
-IssueParam is the call\-shape struct for [IssueMethodName](<#jsonToken>).
+IssueParam is the call\-shape struct for [IssueMethodName](<#IssueMethodName>).
 
 ```go
 type IssueParam struct {
@@ -2500,15 +1256,6 @@ func GetLastUpdate(context db.DB) (*LastUpdateVariable, error)
 
 GetLastUpdate loads the LastUpdate record from storage.
 
-<a name="parseLastUpdate"></a>
-### func [parseLastUpdate](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L272>)
-
-```go
-func parseLastUpdate(data []byte) (*LastUpdateVariable, error)
-```
-
-
-
 <a name="LastUpdateVariable.Save"></a>
 ### func \(\*LastUpdateVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L258>)
 
@@ -2548,15 +1295,6 @@ func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error)
 
 GetLegacyPillarList loads the LegacyPillarList record from storage.
 
-<a name="parseLegacyPillarEntry"></a>
-### func [parseLegacyPillarEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L462>)
-
-```go
-func parseLegacyPillarEntry(key, data []byte) (*LegacyPillarEntry, error)
-```
-
-
-
 <a name="LegacyPillarEntry.Delete"></a>
 ### func \(\*LegacyPillarEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L442>)
 
@@ -2578,7 +1316,7 @@ Save persists the receiver under its keyed slot in storage.
 <a name="LegacyRegisterParam"></a>
 ## type [LegacyRegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L157-L161>)
 
-LegacyRegisterParam is the call\-shape for [LegacyRegisterMethodName](<#jsonPillars>) — adds the legacy\-chain public key and secp256k1 signature proving the legacy holder's authority.
+LegacyRegisterParam is the call\-shape for [LegacyRegisterMethodName](<#RegisterMethodName>) — adds the legacy\-chain public key and secp256k1 signature proving the legacy holder's authority.
 
 ```go
 type LegacyRegisterParam struct {
@@ -2611,15 +1349,6 @@ func GetLiquidityInfo(context db.DB) (*LiquidityInfo, error)
 ```
 
 GetLiquidityInfo loads the LiquidityInfo record from storage.
-
-<a name="parseLiquidityInfo"></a>
-### func [parseLiquidityInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L227>)
-
-```go
-func parseLiquidityInfo(data []byte) (*LiquidityInfo, error)
-```
-
-
 
 <a name="LiquidityInfo.MarshalJSON"></a>
 ### func \(\*LiquidityInfo\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L188>)
@@ -2777,15 +1506,6 @@ func GetLiquidityStakeListByAddress(context db.DB, address types.Address) ([]*Li
 
 GetLiquidityStakeListByAddress loads the LiquidityStakeListByAddress record from storage.
 
-<a name="parseLiquidityStakeEntry"></a>
-### func [parseLiquidityStakeEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L418>)
-
-```go
-func parseLiquidityStakeEntry(key []byte, data []byte) (*LiquidityStakeEntry, error)
-```
-
-
-
 <a name="LiquidityStakeEntry.Delete"></a>
 ### func \(\*LiquidityStakeEntry\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/liquidity.go#L390>)
 
@@ -2852,7 +1572,7 @@ type LiquidityStakeEntryMarshal struct {
 <a name="MintParam"></a>
 ## type [MintParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L75-L79>)
 
-MintParam is the call\-shape struct for [MintMethodName](<#jsonToken>): the target token, the amount, and the recipient address.
+MintParam is the call\-shape struct for [MintMethodName](<#IssueMethodName>): the target token, the amount, and the recipient address.
 
 ```go
 type MintParam struct {
@@ -2897,15 +1617,6 @@ func GetNetworkList(context db.DB) ([]*NetworkInfo, error)
 ```
 
 GetNetworkList iterates the [NetworkInfoKeyPrefix](<#ABIBridge>) range and returns every registered network. Skips entries that fail to decode.
-
-<a name="parseNetworkInfoVariable"></a>
-### func [parseNetworkInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L692>)
-
-```go
-func parseNetworkInfoVariable(data []byte) (*NetworkInfo, error)
-```
-
-
 
 <a name="NetworkInfoParam"></a>
 ## type [NetworkInfoParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1390-L1396>)
@@ -3003,15 +1714,6 @@ func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error)
 
 GetOrchestratorInfoVariable loads the OrchestratorInfoVariable record from storage.
 
-<a name="parseOrchestratorInfoVariable"></a>
-### func [parseOrchestratorInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1247>)
-
-```go
-func parseOrchestratorInfoVariable(data []byte) (*OrchestratorInfo, error)
-```
-
-
-
 <a name="OrchestratorInfo.Delete"></a>
 ### func \(\*OrchestratorInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1287>)
 
@@ -3057,7 +1759,7 @@ type OrchestratorInfoParam struct {
 <a name="ParamRetrieveAssets"></a>
 ## type [ParamRetrieveAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L43-L46>)
 
-ParamRetrieveAssets is the call\-shape struct for [RetrieveAssetsMethodName](<#jsonSwap>) — the legacy\-chain public key and the secp256k1 signature proving its possession.
+ParamRetrieveAssets is the call\-shape struct for [RetrieveAssetsMethodName](<#RetrieveAssetsMethodName>) — the legacy\-chain public key and the secp256k1 signature proving its possession.
 
 ```go
 type ParamRetrieveAssets struct {
@@ -3094,15 +1796,6 @@ func GetPhaseEntry(context db.DB, id types.Hash) (*Phase, error)
 ```
 
 GetPhaseEntry loads the PhaseEntry record from storage.
-
-<a name="parsePhase"></a>
-### func [parsePhase](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L302>)
-
-```go
-func parsePhase(data []byte) *Phase
-```
-
-
 
 <a name="Phase.Data"></a>
 ### func \(\*Phase\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L286>)
@@ -3213,15 +1906,6 @@ func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHisto
 
 GetPillarEpochHistoryList loads the PillarEpochHistoryList record from storage.
 
-<a name="parsePillarEpochHistoryEntry"></a>
-### func [parsePillarEpochHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L565>)
-
-```go
-func parsePillarEpochHistoryEntry(key, data []byte) (*PillarEpochHistory, error)
-```
-
-
-
 <a name="PillarEpochHistory.MarshalJSON"></a>
 ### func \(\*PillarEpochHistory\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L634>)
 
@@ -3313,15 +1997,6 @@ func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*Pillar
 
 GetPillarsList loads the PillarsList record from storage.
 
-<a name="parsePillarInfo"></a>
-### func [parsePillarInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L214>)
-
-```go
-func parsePillarInfo(data []byte) (*PillarInfo, error)
-```
-
-
-
 <a name="PillarInfo.IsActive"></a>
 ### func \(\*PillarInfo\) [IsActive](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L185>)
 
@@ -3370,15 +2045,6 @@ func GetPillarVote(context db.DB, id types.Hash, name string) (*PillarVote, erro
 ```
 
 GetPillarVote loads the PillarVote record from storage.
-
-<a name="parsePillarVote"></a>
-### func [parsePillarVote](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L527>)
-
-```go
-func parsePillarVote(data []byte) (*PillarVote, error)
-```
-
-
 
 <a name="PillarVote.Data"></a>
 ### func \(\*PillarVote\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L518>)
@@ -3437,15 +2103,6 @@ func GetProducingPillarName(context db.DB, address types.Address) (*ProducingPil
 
 GetProducingPillarName loads the ProducingPillarName record from storage.
 
-<a name="parseProducingPillar"></a>
-### func [parseProducingPillar](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L299>)
-
-```go
-func parseProducingPillar(key []byte, data []byte) (*ProducingPillar, error)
-```
-
-
-
 <a name="ProducingPillar.Save"></a>
 ### func \(\*ProducingPillar\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L271>)
 
@@ -3493,15 +2150,6 @@ func GetProjectList(context db.DB) ([]*Project, error)
 ```
 
 GetProjectList loads the ProjectList record from storage.
-
-<a name="parseProject"></a>
-### func [parseProject](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L195>)
-
-```go
-func parseProject(data []byte) *Project
-```
-
-
 
 <a name="Project.Data"></a>
 ### func \(\*Project\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/accelerator.go#L168>)
@@ -3569,24 +2217,6 @@ func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error)
 
 GetQsrDeposit returns deposited QSR for sentinel/pillar. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
 
-<a name="newQsrDeposit"></a>
-### func [newQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L323>)
-
-```go
-func newQsrDeposit(address *types.Address) *QsrDeposit
-```
-
-
-
-<a name="parseQsrDeposit"></a>
-### func [parseQsrDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L345>)
-
-```go
-func parseQsrDeposit(key []byte, data []byte) (*QsrDeposit, error)
-```
-
-
-
 <a name="QsrDeposit.Delete"></a>
 ### func \(\*QsrDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L319>)
 
@@ -3620,7 +2250,7 @@ type RedeemParam struct {
 <a name="RegisterParam"></a>
 ## type [RegisterParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/pillars.go#L146-L152>)
 
-RegisterParam is the call\-shape for [RegisterMethodName](<#jsonPillars>) — the pillar's display name, its producing\-key \(block authoring\) address, the reward\-withdrawal address, and the two split percentages \(block reward vs delegation reward\).
+RegisterParam is the call\-shape for [RegisterMethodName](<#RegisterMethodName>) — the pillar's display name, its producing\-key \(block authoring\) address, the reward\-withdrawal address, and the two split percentages \(block reward vs delegation reward\).
 
 ```go
 type RegisterParam struct {
@@ -3651,16 +2281,7 @@ type RequestPair struct {
 func GetRequestPairById(context db.DB, Id types.Hash) (*RequestPair, error)
 ```
 
-GetRequestPairById loads the RequestPairById record from storage. GetRequestPairById loads the RequestPair record for Id, or [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if no such request was ever recorded.
-
-<a name="parseRequestPair"></a>
-### func [parseRequestPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L830>)
-
-```go
-func parseRequestPair(data, key []byte) (*RequestPair, error)
-```
-
-
+GetRequestPairById loads the RequestPairById record from storage. GetRequestPairById loads the RequestPair record for Id, or \[constants.ErrDataNonExistent\] if no such request was ever recorded.
 
 <a name="RequestPair.Key"></a>
 ### func \(\*RequestPair\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L824>)
@@ -3713,24 +2334,6 @@ func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, er
 ```
 
 GetRewardDeposit returns uncollected ZNN & QSR reward. does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
-
-<a name="newRewardDeposit"></a>
-### func [newRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L195>)
-
-```go
-func newRewardDeposit(address *types.Address) *RewardDeposit
-```
-
-
-
-<a name="parseRewardDeposit"></a>
-### func [parseRewardDeposit](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L219>)
-
-```go
-func parseRewardDeposit(key []byte, data []byte) (*RewardDeposit, error)
-```
-
-
 
 <a name="RewardDeposit.Delete"></a>
 ### func \(\*RewardDeposit\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L191>)
@@ -3800,15 +2403,6 @@ func GetRewardDepositHistory(context db.DB, epoch uint64, address *types.Address
 
 GetRewardDepositHistory loads the RewardDepositHistory record from storage.
 
-<a name="parseRewardDepositHistoryEntry"></a>
-### func [parseRewardDepositHistoryEntry](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L457>)
-
-```go
-func parseRewardDepositHistoryEntry(key, data []byte) (*RewardDepositHistory, error)
-```
-
-
-
 <a name="RewardDepositHistory.Save"></a>
 ### func \(\*RewardDepositHistory\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L424>)
 
@@ -3858,15 +2452,6 @@ func GetSecurityInfoVariable(context db.DB) (*SecurityInfoVariable, error)
 
 GetSecurityInfoVariable loads the SecurityInfoVariable record from storage.
 
-<a name="parseSecurityInfoVariable"></a>
-### func [parseSecurityInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L752>)
-
-```go
-func parseSecurityInfoVariable(data []byte) (*SecurityInfoVariable, error)
-```
-
-
-
 <a name="SecurityInfoVariable.Save"></a>
 ### func \(\*SecurityInfoVariable\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L736>)
 
@@ -3908,15 +2493,6 @@ func GetSentinelInfoByOwner(context db.DB, address types.Address) *SentinelInfo
 ```
 
 GetSentinelInfoByOwner returns the sentinel registered to address, or nil if none is.
-
-<a name="parseSentinelInfo"></a>
-### func [parseSentinelInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L107>)
-
-```go
-func parseSentinelInfo(data []byte) *SentinelInfo
-```
-
-parseSentinelInfo decodes a sentinel record from data. Panics on malformed input.
 
 <a name="SentinelInfo.Data"></a>
 ### func \(\*SentinelInfo\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/sentinel.go#L89>)
@@ -4011,7 +2587,7 @@ type SetTokenPairParam struct {
 <a name="Spork"></a>
 ## type [Spork](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L71-L80>)
 
-Spork is the on\-chain representation of one protocol upgrade: id, human\-readable name and description, and the activation state. Once activated, EnforcementHeight is set to the activation momentum height plus [constants.SporkMinHeightDelay](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#SporkMinHeightDelay>).
+Spork is the on\-chain representation of one protocol upgrade: id, human\-readable name and description, and the activation state. Once activated, EnforcementHeight is set to the activation momentum height plus \[constants.SporkMinHeightDelay\].
 
 ```go
 type Spork struct {
@@ -4044,15 +2620,6 @@ func GetSporkInfoById(context db.DB, id types.Hash) *Spork
 
 GetSporkInfoById returns the spork record for id, or nil if no such spork is stored. Panics on storage I/O failure.
 
-<a name="parseSporkInfo"></a>
-### func [parseSporkInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L107>)
-
-```go
-func parseSporkInfo(data []byte) *Spork
-```
-
-parseSporkInfo decodes data \(an ABI\-encoded sporkInfo record\) into a [\\\*Spork](<#Spork>). Panics on malformed input.
-
 <a name="Spork.Data"></a>
 ### func \(\*Spork\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/spork.go#L90>)
 
@@ -4078,7 +2645,7 @@ Key returns the database key holding spork \(\`sporkInfoPrefix || id\`\).
 func (spork *Spork) Save(context db.DB)
 ```
 
-Save writes spork into context's storage under its keyspace. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) on write failure.
+Save writes spork into context's storage under its keyspace. Panics through \[common.DealWithErr\] on write failure.
 
 <a name="StakeByExpirationTime"></a>
 ## type [StakeByExpirationTime](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L203>)
@@ -4151,15 +2718,6 @@ func GetStakeListByAddress(context db.DB, address types.Address) ([]*StakeInfo, 
 
 GetStakeListByAddress returns all \*active\* stake entries for an address \(RevokeTime == 0\), the summed Amount, and the summed WeightedAmount. Used by the staking\-reward distribution.
 
-<a name="parseStakeInfo"></a>
-### func [parseStakeInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L121>)
-
-```go
-func parseStakeInfo(key []byte, data []byte) (*StakeInfo, error)
-```
-
-parseStakeInfo decodes a \(key, data\) pair into a [StakeInfo](<#StakeInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
-
 <a name="StakeInfo.Delete"></a>
 ### func \(\*StakeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/stake.go#L82>)
 
@@ -4207,16 +2765,7 @@ GetSwapAssets enumerates every swap entry in storage in iteration order.
 func GetSwapAssetsByKeyIdHash(context db.DB, keyIdHash types.Hash) (*SwapAssets, error)
 ```
 
-GetSwapAssetsByKeyIdHash returns the swap entry registered for keyIdHash, or [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if none is.
-
-<a name="parseSwapAssets"></a>
-### func [parseSwapAssets](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L79>)
-
-```go
-func parseSwapAssets(data, key []byte) (*SwapAssets, error)
-```
-
-parseSwapAssets decodes data into a [SwapAssets](<#SwapAssets>) and pins KeyIdHash from key. Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
+GetSwapAssetsByKeyIdHash returns the swap entry registered for keyIdHash, or \[constants.ErrDataNonExistent\] if none is.
 
 <a name="SwapAssets.Save"></a>
 ### func \(\*SwapAssets\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/swap.go#L58>)
@@ -4248,15 +2797,6 @@ func GetTimeChallengeInfoVariable(context db.DB, methodName string) (*TimeChalle
 ```
 
 GetTimeChallengeInfoVariable loads the TimeChallengeInfoVariable record from storage.
-
-<a name="parseTimeChallengeInfoVariable"></a>
-### func [parseTimeChallengeInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L684>)
-
-```go
-func parseTimeChallengeInfoVariable(data []byte) (*TimeChallengeInfo, error)
-```
-
-
 
 <a name="TimeChallengeInfo.Delete"></a>
 ### func \(\*TimeChallengeInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L719>)
@@ -4316,7 +2856,7 @@ type TokenInfo struct {
 func GetTokenInfo(context db.DB, ts types.ZenonTokenStandard) (*TokenInfo, error)
 ```
 
-GetTokenInfo returns the token record for ts, or [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) if no such token is registered.
+GetTokenInfo returns the token record for ts, or \[constants.ErrDataNonExistent\] if no such token is registered.
 
 <a name="GetTokenInfoList"></a>
 ### func [GetTokenInfoList](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L192>)
@@ -4326,15 +2866,6 @@ func GetTokenInfoList(context db.DB) ([]*TokenInfo, error)
 ```
 
 GetTokenInfoList enumerates every token record in iteration order.
-
-<a name="parseTokenInfo"></a>
-### func [parseTokenInfo](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L163>)
-
-```go
-func parseTokenInfo(key, data []byte) (*TokenInfo, error)
-```
-
-parseTokenInfo decodes a \(key, data\) pair into a [TokenInfo](<#TokenInfo>). Returns [constants.ErrDataNonExistent](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrDataNonExistent>) when data is empty.
 
 <a name="TokenInfo.Save"></a>
 ### func \(\*TokenInfo\) [Save](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L114>)
@@ -4348,7 +2879,7 @@ Save writes token into context's storage.
 <a name="TokenPair"></a>
 ## type [TokenPair](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L442-L452>)
 
-TokenPair is one \(network, token\) configuration: bridge / redeem flags, fee percentage \(basis points; denominator [constants.MaximumFee](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#MaximumFee>)\), per\-pair redeem delay in momentums, minimum amount, and a free\-form metadata blob. Owned indicates whether the bridge contract owns the token \(mintable on inbound\) or whether tokens are escrowed on outbound.
+TokenPair is one \(network, token\) configuration: bridge / redeem flags, fee percentage \(basis points; denominator \[constants.MaximumFee\]\), per\-pair redeem delay in momentums, minimum amount, and a free\-form metadata blob. Owned indicates whether the bridge contract owns the token \(mintable on inbound\) or whether tokens are escrowed on outbound.
 
 ```go
 type TokenPair struct {
@@ -4371,7 +2902,7 @@ type TokenPair struct {
 func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zts types.ZenonTokenStandard) (*TokenPair, error)
 ```
 
-GetTokenPairVariable returns the [TokenPair](<#TokenPair>) for zts on the \(networkClass, chainId\) network, or [leveldb.ErrNotFound](<https://pkg.go.dev/github.com/syndtr/goleveldb/leveldb/#ErrNotFound>) if no such pair is configured.
+GetTokenPairVariable returns the [TokenPair](<#TokenPair>) for zts on the \(networkClass, chainId\) network, or \[leveldb.ErrNotFound\] if no such pair is configured.
 
 <a name="TokenPair.MarshalJSON"></a>
 ### func \(\*TokenPair\) [MarshalJSON](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L490>)
@@ -4594,15 +3125,6 @@ func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error)
 
 GetUnwrapTokenRequests loads the UnwrapTokenRequests record from storage.
 
-<a name="parseUnwrapTokenRequest"></a>
-### func [parseUnwrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1086>)
-
-```go
-func parseUnwrapTokenRequest(data, key []byte) (*UnwrapTokenRequest, error)
-```
-
-
-
 <a name="UnwrapTokenRequest.Delete"></a>
 ### func \(\*UnwrapTokenRequest\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L1076>)
 
@@ -4683,7 +3205,7 @@ type UnwrapTokenRequestMarshal struct {
 <a name="UpdateTokenParam"></a>
 ## type [UpdateTokenParam](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/token.go#L83-L88>)
 
-UpdateTokenParam is the call\-shape struct for [UpdateTokenMethodName](<#jsonToken>): rotates owner and the burn/mint flags.
+UpdateTokenParam is the call\-shape struct for [UpdateTokenMethodName](<#IssueMethodName>): rotates owner and the burn/mint flags.
 
 ```go
 type UpdateTokenParam struct {
@@ -4726,15 +3248,6 @@ func GetVotableHash(context db.DB, id types.Hash) (*VotableHash, error)
 ```
 
 GetVotableHash loads the VotableHash record from storage.
-
-<a name="parseVotableHash"></a>
-### func [parseVotableHash](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L606>)
-
-```go
-func parseVotableHash(data []byte, key []byte) (*VotableHash, error)
-```
-
-
 
 <a name="VotableHash.Data"></a>
 ### func \(\*VotableHash\) [Data](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/common.go#L591>)
@@ -4847,15 +3360,6 @@ func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error)
 
 GetWrapTokenRequests loads the WrapTokenRequests record from storage.
 
-<a name="parseWrapTokenRequest"></a>
-### func [parseWrapTokenRequest](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L915>)
-
-```go
-func parseWrapTokenRequest(data, key []byte) (*WrapTokenRequest, error)
-```
-
-
-
 <a name="WrapTokenRequest.Key"></a>
 ### func \(\*WrapTokenRequest\) [Key](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L908>)
 
@@ -4942,15 +3446,6 @@ func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandar
 ```
 
 GetZtsFeesInfoVariable loads the [ZtsFeesInfo](<#ZtsFeesInfo>) for tokenStandard, returning a zero record \(no error\) when none exists.
-
-<a name="parseZtsFeesInfoVariable"></a>
-### func [parseZtsFeesInfoVariable](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L602>)
-
-```go
-func parseZtsFeesInfoVariable(key []byte, data []byte) (*ZtsFeesInfo, error)
-```
-
-
 
 <a name="ZtsFeesInfo.Delete"></a>
 ### func \(\*ZtsFeesInfo\) [Delete](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/definition/bridge.go#L595>)

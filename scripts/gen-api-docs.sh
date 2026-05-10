@@ -47,7 +47,6 @@ echo "Generating markdown docs under $OUT_DIR/ ..."
 # source tree under docs/api/.
 gomarkdoc \
   --output "$OUT_DIR/{{.Dir}}/README.md" \
-  --include-unexported \
   --repository.url "https://github.com/zenon-network/go-zenon" \
   --repository.default-branch master \
   ./...
@@ -77,11 +76,18 @@ gomarkdoc \
 # either extend this block or move to a per-directory output template.
 gomarkdoc \
   --output "$OUT_DIR/{{.Dir}}/README.md" \
-  --include-unexported \
   --tags "libznn" \
   --repository.url "https://github.com/zenon-network/go-zenon" \
   --repository.default-branch master \
   ./cmd/libznn/...
+
+# Strip trailing whitespace from generated markdown. gomarkdoc preserves
+# trailing spaces and tabs that bleed through from source comments and ABI
+# string literals, which trips `git diff --check`. Use sed -i.bak (+ delete)
+# for portability between BSD sed (macOS) and GNU sed (Linux CI).
+find "$OUT_DIR" -name '*.md' -print0 \
+  | xargs -0 sed -i.bak 's/[[:space:]]*$//'
+find "$OUT_DIR" -name '*.md.bak' -delete
 
 # Build a TSV lookup of `package path -> one-liner description` from the
 # package-map table in AGENTS.md. AGENTS.md is the single source of truth for

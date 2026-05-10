@@ -12,7 +12,7 @@ Package common holds the shared utilities used across the codebase: structured l
 
 common is the second\-deepest dependency after [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>). Subsystems consume it for:
 
-- Logging — every subsystem logs through one of the per\-module [log15.Logger](<https://pkg.go.dev/github.com/inconshreveable/log15/#Logger>) handles defined here \([ChainLogger](<#ChainLogger>), [ConsensusLogger](<#ChainLogger>), [VmLogger](<#ChainLogger>), …\) so production output can be filtered by module.
+- Logging — every subsystem logs through one of the per\-module \[log15.Logger\] handles defined here \([ChainLogger](<#ChainLogger>), [ConsensusLogger](<#ChainLogger>), [VmLogger](<#ChainLogger>), …\) so production output can be filtered by module.
 - Byte and big.Int helpers — [JoinBytes](<#JoinBytes>), [Uint64ToBytes](<#Uint64ToBytes>), [BigIntToBytes](<#BigIntToBytes>), etc. compose the canonical key and hash forms used by the chain and VM.
 - Time and ticks — [Clock](<#Clock>) is the swappable time source the consensus layer reads through, and [Ticker](<#Ticker>) maps wall time onto the integer tick numbers that pillar election operates on.
 - Tasks — [NewTask](<#NewTask>) wraps a goroutine in a stop\-able, joinable handle used by long\-running subsystem loops.
@@ -20,7 +20,7 @@ common is the second\-deepest dependency after [github.com/zenon\\\-network/go\\
 
 ### Key Concepts
 
-- Logger — alias of [log15.Logger](<https://pkg.go.dev/github.com/inconshreveable/log15/#Logger>); obtained via the per\-subsystem variables in this package, never via direct \`log15.New\` calls.
+- Logger — alias of \[log15.Logger\]; obtained via the per\-subsystem variables in this package, never via direct \`log15.New\` calls.
 - Clock — package\-level [ClockType](<#ClockType>) swapped to a fake during tests.
 - Ticker — start\-time \+ interval tick scheduler consumed by [github.com/zenon\\\-network/go\\\-zenon/consensus](<https://pkg.go.dev/github.com/zenon-network/go-zenon/consensus/>).
 - Task / TaskResolver — cooperative cancellation contract for long\-running goroutines.
@@ -94,15 +94,6 @@ tick := ticker.ToTick(now)
 - [func StringToBigInt\(str string\) \*big.Int](<#StringToBigInt>)
 - [func Uint32ToBytes\(x uint32\) \[\]byte](<#Uint32ToBytes>)
 - [func Uint64ToBytes\(height uint64\) \[\]byte](<#Uint64ToBytes>)
-- [func defaultLogger\(absFilePath string\) \*lumberjack.Logger](<#defaultLogger>)
-- [func errorExcludeLvlFilterHandler\(maxLvl log15.Lvl, h log15.Handler\) log15.Handler](<#errorExcludeLvlFilterHandler>)
-- [func expectError\(t T, received, expected, stack string\)](<#expectError>)
-- [func expectString\(t T, current, expected, stack string\)](<#expectString>)
-- [func init\(\)](<#init>)
-- [func runErrorLogHandler\(logDir string\) log15.Handler](<#runErrorLogHandler>)
-- [func runLogDir\(dataPath string\) string](<#runLogDir>)
-- [func runLogHandler\(logDir string\) log15.Handler](<#runLogHandler>)
-- [func trimEol\(a string\) string](<#trimEol>)
 - [type ClockType](<#ClockType>)
 - [type ErrorWCode](<#ErrorWCode>)
   - [func NewErrorWCode\(code int, errStr string\) ErrorWCode](<#NewErrorWCode>)
@@ -124,35 +115,9 @@ tick := ticker.ToTick(now)
 - [type TaskResolver](<#TaskResolver>)
 - [type Ticker](<#Ticker>)
   - [func NewTicker\(startTime time.Time, interval time.Duration\) Ticker](<#NewTicker>)
-- [type errorWCode](<#errorWCode>)
-  - [func \(err \*errorWCode\) AddDetail\(detail string\) ErrorWCode](<#errorWCode.AddDetail>)
-  - [func \(err \*errorWCode\) ErrorCode\(\) int](<#errorWCode.ErrorCode>)
-- [type realClock](<#realClock>)
-  - [func \(realClock\) Now\(\) time.Time](<#realClock.Now>)
-- [type task](<#task>)
-  - [func \(t \*task\) Finished\(\) chan struct\{\}](<#task.Finished>)
-  - [func \(t \*task\) ForceStop\(\)](<#task.ForceStop>)
-  - [func \(t \*task\) ShouldStop\(\) bool](<#task.ShouldStop>)
-  - [func \(t \*task\) Wait\(\)](<#task.Wait>)
-  - [func \(t \*task\) finish\(\)](<#task.finish>)
-- [type ticker](<#ticker>)
-  - [func \(t ticker\) TickMultiplier\(bigger Ticker\) \(uint64, error\)](<#ticker.TickMultiplier>)
-  - [func \(t ticker\) ToTick\(time time.Time\) uint64](<#ticker.ToTick>)
-  - [func \(t ticker\) ToTime\(tick uint64\) \(time.Time, time.Time\)](<#ticker.ToTime>)
 
 
 ## Variables
-
-<a name="includeFiles"></a>Stack\-frame filtering for [GetStack](<#GetStack>). The test\-helper machinery walks the call stack looking for the first frame in a \`\_test.go\` file so test failures point at the test, not at this helper.
-
-```go
-var (
-    includeFiles = []string{
-        "_test.go",
-    }
-    excludeFiles = []string{}
-)
-```
 
 <a name="ChainLogger"></a>Per\-subsystem loggers. Every package logs through one of these so log output can be filtered and routed by the \`module\` field. Use the per\-subsystem variables — do not call \`log15.New\` ad hoc.
 
@@ -176,7 +141,7 @@ var (
 )
 ```
 
-<a name="Big0"></a>Pre\-allocated [big.Int](<https://pkg.go.dev/math/big/#Int>) constants used throughout the codebase. These avoid allocating fresh big.Ints in hot paths — VM execution, plasma arithmetic, and the embedded contracts all reuse them. Values:
+<a name="Big0"></a>Pre\-allocated \[big.Int\] constants used throughout the codebase. These avoid allocating fresh big.Ints in hot paths — VM execution, plasma arithmetic, and the embedded contracts all reuse them. Values:
 
 - Big0..Big256: small constants.
 - BigP255 = 2^255, BigP255m1 = 2^255 \- 1.
@@ -251,7 +216,7 @@ Expect asserts that current and expected stringify to the same value. Generic fo
 func ExpectAmount(t T, current, expected *big.Int)
 ```
 
-ExpectAmount asserts that current equals expected by [big.Int.Cmp](<https://pkg.go.dev/math/big/#Int.Cmp>).
+ExpectAmount asserts that current equals expected by \[big.Int.Cmp\].
 
 <a name="ExpectBytes"></a>
 ## func [ExpectBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L186>)
@@ -404,7 +369,7 @@ RecoverStack is a deferred handler that logs the panic value with a captured sta
 func StringToBigInt(str string) *big.Int
 ```
 
-StringToBigInt parses a base\-10 [big.Int](<https://pkg.go.dev/math/big/#Int>) string. Returns 0 on parse failure or empty input — callers that need to distinguish parse failure from "0" should use [big.Int.SetString](<https://pkg.go.dev/math/big/#Int.SetString>) directly.
+StringToBigInt parses a base\-10 \[big.Int\] string. Returns 0 on parse failure or empty input — callers that need to distinguish parse failure from "0" should use \[big.Int.SetString\] directly.
 
 <a name="Uint32ToBytes"></a>
 ## func [Uint32ToBytes](<https://github.com/zenon-network/go-zenon/blob/master/common/bytes.go#L24>)
@@ -423,87 +388,6 @@ func Uint64ToBytes(height uint64) []byte
 ```
 
 Uint64ToBytes encodes height as 8 big\-endian bytes. The argument name is \`height\` because the overwhelming use case is encoding a chain height for a database key.
-
-<a name="defaultLogger"></a>
-## func [defaultLogger](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L90>)
-
-```go
-func defaultLogger(absFilePath string) *lumberjack.Logger
-```
-
-defaultLogger returns the lumberjack rotating\-file writer configured for node logs \(100 MiB rotation, 14\-day retention, no compression, UTC\).
-
-<a name="errorExcludeLvlFilterHandler"></a>
-## func [errorExcludeLvlFilterHandler](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L82>)
-
-```go
-func errorExcludeLvlFilterHandler(maxLvl log15.Lvl, h log15.Handler) log15.Handler
-```
-
-errorExcludeLvlFilterHandler returns a log15 filter that admits records at or below maxLvl — used to keep error records out of the main log \(they go to the dedicated error log instead\).
-
-<a name="expectError"></a>
-## func [expectError](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L122>)
-
-```go
-func expectError(t T, received, expected, stack string)
-```
-
-expectError formats a side\-by\-side expected/received diff with a stack pointer, then fails the test through t.Fatalf.
-
-<a name="expectString"></a>
-## func [expectString](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L130>)
-
-```go
-func expectString(t T, current, expected, stack string)
-```
-
-expectString fails the test if current and expected differ after newline trimming; intended for use under [Expecter](<#Expecter>).
-
-<a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/common/time.go#L30>)
-
-```go
-func init()
-```
-
-init seeds the package\-level [Clock](<#Clock>) with a \[realClock\]. Tests reassign Clock before exercising consensus or other time\-sensitive code paths.
-
-<a name="runErrorLogHandler"></a>
-## func [runErrorLogHandler](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L73>)
-
-```go
-func runErrorLogHandler(logDir string) log15.Handler
-```
-
-runErrorLogHandler returns the log15 handler that writes errors only.
-
-<a name="runLogDir"></a>
-## func [runLogDir](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L61>)
-
-```go
-func runLogDir(dataPath string) string
-```
-
-runLogDir returns the path to the log directory under dataPath.
-
-<a name="runLogHandler"></a>
-## func [runLogHandler](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L66>)
-
-```go
-func runLogHandler(logDir string) log15.Handler
-```
-
-runLogHandler returns the log15 handler that writes the main rotating log.
-
-<a name="trimEol"></a>
-## func [trimEol](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L110>)
-
-```go
-func trimEol(a string) string
-```
-
-trimEol strips leading and trailing newlines from a so multi\-line expected/received strings line up cleanly when diffed.
 
 <a name="ClockType"></a>
 ## type [ClockType](<https://github.com/zenon-network/go-zenon/blob/master/common/time.go#L14-L17>)
@@ -528,7 +412,7 @@ var (
 <a name="ErrorWCode"></a>
 ## type [ErrorWCode](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L31-L37>)
 
-ErrorWCode is the project's error\-with\-code interface for RPC handlers. Implementations satisfy [server.Error](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/#Error>) and additionally allow appending a free\-form detail string.
+ErrorWCode is the project's error\-with\-code interface for RPC handlers. Implementations satisfy \[server.Error\] and additionally allow appending a free\-form detail string.
 
 ```go
 type ErrorWCode interface {
@@ -547,7 +431,7 @@ type ErrorWCode interface {
 func NewErrorWCode(code int, errStr string) ErrorWCode
 ```
 
-NewErrorWCode returns a coded error suitable for return from RPC handlers. The integer code is surfaced to JSON\-RPC clients via the [server.Error](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/server/#Error>) interface.
+NewErrorWCode returns a coded error suitable for return from RPC handlers. The integer code is surfaced to JSON\-RPC clients via the \[server.Error\] interface.
 
 <a name="Expecter"></a>
 ## type [Expecter](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L242-L250>)
@@ -556,13 +440,7 @@ Expecter accumulates a test value \(string, JSON, or a deferred callback\) and p
 
 ```go
 type Expecter struct {
-    hideHash bool
-    subJson  interface{}
-
-    receivedF   func() (string, error)
-    received    string
-    receivedErr error
-    stack       string
+    // contains filtered or unexported fields
 }
 ```
 
@@ -645,8 +523,7 @@ LogSaver is a log15.Format that captures every formatted record into an in\-memo
 
 ```go
 type LogSaver struct {
-    format log15.Format
-    buffer *bytes.Buffer
+    // contains filtered or unexported fields
 }
 ```
 
@@ -662,7 +539,7 @@ Format formats r using the wrapped log15.Format after rewriting the record's tim
 <a name="Logger"></a>
 ## type [Logger](<https://github.com/zenon-network/go-zenon/blob/master/common/logs.go#L14-L16>)
 
-Logger is the project's logging facade. It is identical to [log15.Logger](<https://pkg.go.dev/github.com/inconshreveable/log15/#Logger>); the alias exists so consumers import a single canonical logging interface from \`common\` rather than reaching into log15 directly.
+Logger is the project's logging facade. It is identical to \[log15.Logger\]; the alias exists so consumers import a single canonical logging interface from \`common\` rather than reaching into log15 directly.
 
 ```go
 type Logger interface {
@@ -748,154 +625,5 @@ func NewTicker(startTime time.Time, interval time.Duration) Ticker
 ```
 
 NewTicker constructs a [Ticker](<#Ticker>) anchored at startTime with the given tick interval.
-
-<a name="errorWCode"></a>
-## type [errorWCode](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L40-L43>)
-
-errorWCode is the canonical [ErrorWCode](<#ErrorWCode>) implementation.
-
-```go
-type errorWCode struct {
-    error
-    code int
-}
-```
-
-<a name="errorWCode.AddDetail"></a>
-### func \(\*errorWCode\) [AddDetail](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L52>)
-
-```go
-func (err *errorWCode) AddDetail(detail string) ErrorWCode
-```
-
-AddDetail returns a new error sharing the same code with detail wrapped onto the message; the original error is reachable through unwrap.
-
-<a name="errorWCode.ErrorCode"></a>
-### func \(\*errorWCode\) [ErrorCode](<https://github.com/zenon-network/go-zenon/blob/master/common/errors.go#L46>)
-
-```go
-func (err *errorWCode) ErrorCode() int
-```
-
-ErrorCode returns the integer code carried by the error.
-
-<a name="realClock"></a>
-## type [realClock](<https://github.com/zenon-network/go-zenon/blob/master/common/time.go#L23>)
-
-realClock is the default [ClockType](<#ClockType>) backed by [time.Now](<https://pkg.go.dev/time/#Now>).
-
-TODO: implementing \`After\(d time.Duration\) \<\-chan time.Time\` would allow us to better emulate the real world in a testing environment.
-
-```go
-type realClock struct{}
-```
-
-<a name="realClock.Now"></a>
-### func \(realClock\) [Now](<https://github.com/zenon-network/go-zenon/blob/master/common/time.go#L26>)
-
-```go
-func (realClock) Now() time.Time
-```
-
-Now returns the current wall\-clock time.
-
-<a name="task"></a>
-## type [task](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L47-L51>)
-
-task is the [Task](<#Task>) / [TaskResolver](<#TaskResolver>) implementation backing [NewTask](<#NewTask>).
-
-```go
-type task struct {
-    forceClosed chan struct{}
-    closed      chan struct{}
-    changes     sync.Mutex
-}
-```
-
-<a name="task.Finished"></a>
-### func \(\*task\) [Finished](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L66>)
-
-```go
-func (t *task) Finished() chan struct{}
-```
-
-Finished returns the channel closed once the task's action returns.
-
-<a name="task.ForceStop"></a>
-### func \(\*task\) [ForceStop](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L73>)
-
-```go
-func (t *task) ForceStop()
-```
-
-ForceStop signals stop. Idempotent; subsequent calls are no\-ops.
-
-Concurrency: safe under t.changes — multiple callers may invoke ForceStop.
-
-<a name="task.ShouldStop"></a>
-### func \(\*task\) [ShouldStop](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L85>)
-
-```go
-func (t *task) ShouldStop() bool
-```
-
-ShouldStop reports whether \[task.ForceStop\] has been invoked. Used by the task's action to decide whether to exit early.
-
-<a name="task.Wait"></a>
-### func \(\*task\) [Wait](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L55>)
-
-```go
-func (t *task) Wait()
-```
-
-Wait blocks until the goroutine's action returns. Polls every 100ms so that a goroutine that exits via panic\-recovery still releases waiters.
-
-<a name="task.finish"></a>
-### func \(\*task\) [finish](<https://github.com/zenon-network/go-zenon/blob/master/common/task.go#L96>)
-
-```go
-func (t *task) finish()
-```
-
-finish closes the completion channel. Called once when the task's action returns.
-
-<a name="ticker"></a>
-## type [ticker](<https://github.com/zenon-network/go-zenon/blob/master/common/ticker.go#L28-L31>)
-
-ticker is the canonical [Ticker](<#Ticker>) implementation: a fixed start time and a constant interval.
-
-```go
-type ticker struct {
-    startTime time.Time
-    interval  time.Duration
-}
-```
-
-<a name="ticker.TickMultiplier"></a>
-### func \(ticker\) [TickMultiplier](<https://github.com/zenon-network/go-zenon/blob/master/common/ticker.go#L51>)
-
-```go
-func (t ticker) TickMultiplier(bigger Ticker) (uint64, error)
-```
-
-TickMultiplier reports how many of this ticker's ticks fit into one tick of \`bigger\`. Returns an error when the start times differ, when this ticker is coarser than \`bigger\`, or when the durations are incompatible.
-
-<a name="ticker.ToTick"></a>
-### func \(ticker\) [ToTick](<https://github.com/zenon-network/go-zenon/blob/master/common/ticker.go#L42>)
-
-```go
-func (t ticker) ToTick(time time.Time) uint64
-```
-
-ToTick returns the tick number containing the supplied time. The computation truncates toward zero relative to startTime.
-
-<a name="ticker.ToTime"></a>
-### func \(ticker\) [ToTime](<https://github.com/zenon-network/go-zenon/blob/master/common/ticker.go#L34>)
-
-```go
-func (t ticker) ToTime(tick uint64) (time.Time, time.Time)
-```
-
-ToTime returns the half\-open window for tick.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)

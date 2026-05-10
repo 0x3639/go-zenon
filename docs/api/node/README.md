@@ -14,11 +14,11 @@ node sits one layer above [github.com/zenon\\\-network/go\\\-zenon/zenon](<https
 
 ### Lifecycle
 
-[NewNode](<#NewNode>) performs setup\-only work: open the data dir, take the \`.lock\` file, start the wallet, build a [zenon.Config](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Config>) from the node config, instantiate the [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) facade, and assemble the [p2p.Server](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/#Server>) descriptor. [Node.Start](<#Node.Start>) then runs the actual boot sequence:
+[NewNode](<#NewNode>) performs setup\-only work: open the data dir, take the \`.lock\` file, start the wallet, build a \[zenon.Config\] from the node config, instantiate the \[zenon.Zenon\] facade, and assemble the \[p2p.Server\] descriptor. [Node.Start](<#Node.Start>) then runs the actual boot sequence:
 
 1. zenon Init \+ Start \(chain, consensus, pillar, etc.\)
 2. p2p server Start \(listen \+ dial\)
-3. publish RPC APIs \([api.GetPublicApis](<https://pkg.go.dev/github.com/zenon-network/go-zenon/rpc/#GetPublicApis>)\) and start the HTTP / WebSocket transports
+3. publish RPC APIs \(\[api.GetPublicApis\]\) and start the HTTP / WebSocket transports
 
 [Node.Stop](<#Node.Stop>) unwinds in reverse: p2p → wallet → zenon → RPC stack → release the data\-dir lock. [Node.Wait](<#Node.Wait>) blocks until Stop is called \(used by the CLI to keep the process alive\).
 
@@ -49,27 +49,10 @@ None. rpcstack.go is ported from go\-ethereum but does not carry the upstream LG
 - [func NewHTTPHandlerStack\(srv http.Handler, cors \[\]string, vhosts \[\]string\) http.Handler](<#NewHTTPHandlerStack>)
 - [func RegisterApisFromWhitelist\(apis \[\]rpc.API, modules \[\]string, srv \*rpc.Server, exposeAll bool\) error](<#RegisterApisFromWhitelist>)
 - [func ReplaceHomeVariable\(path string\) string](<#ReplaceHomeVariable>)
-- [func checkModuleAvailability\(modules \[\]string, apis \[\]rpc.API\) \(bad, available \[\]string\)](<#checkModuleAvailability>)
-- [func checkPath\(r \*http.Request, path string\) bool](<#checkPath>)
-- [func checkTimeouts\(timeouts \*rpc.HTTPTimeouts\)](<#checkTimeouts>)
-- [func convertFileLockError\(err error\) error](<#convertFileLockError>)
-- [func homeDir\(\) string](<#homeDir>)
-- [func isNonEmptyDir\(dir string\) bool](<#isNonEmptyDir>)
-- [func isWebsocket\(r \*http.Request\) bool](<#isWebsocket>)
-- [func newCorsHandler\(srv http.Handler, allowedOrigins \[\]string\) http.Handler](<#newCorsHandler>)
-- [func newGzipHandler\(next http.Handler\) http.Handler](<#newGzipHandler>)
-- [func newVHostHandler\(vhosts \[\]string, next http.Handler\) http.Handler](<#newVHostHandler>)
-- [func validatePrefix\(what, path string\) error](<#validatePrefix>)
-- [func windowsAppData\(\) string](<#windowsAppData>)
 - [type Config](<#Config>)
   - [func \(c \*Config\) HTTPEndpoint\(\) string](<#Config.HTTPEndpoint>)
   - [func \(c \*Config\) MakePathsAbsolute\(\) error](<#Config.MakePathsAbsolute>)
   - [func \(c \*Config\) WSEndpoint\(\) string](<#Config.WSEndpoint>)
-  - [func \(c \*Config\) makeGenesisConfig\(\) \(genesisConfig store.Genesis\)](<#Config.makeGenesisConfig>)
-  - [func \(c \*Config\) makeNetConfig\(\) \*p2p.Net](<#Config.makeNetConfig>)
-  - [func \(c \*Config\) makeWalletConfig\(\) \*wallet.Config](<#Config.makeWalletConfig>)
-  - [func \(c \*Config\) makeZenonConfig\(walletManager \*wallet.Manager\) \(\*zenon.Config, error\)](<#Config.makeZenonConfig>)
-  - [func \(c \*Config\) parseProducer\(walletManager \*wallet.Manager\) \(\*wallet.KeyPair, error\)](<#Config.parseProducer>)
 - [type NetConfig](<#NetConfig>)
 - [type Node](<#Node>)
   - [func NewNode\(conf \*Config\) \(\*Node, error\)](<#NewNode>)
@@ -79,40 +62,8 @@ None. rpcstack.go is ported from go\-ethereum but does not carry the upstream LG
   - [func \(node \*Node\) Wait\(\)](<#Node.Wait>)
   - [func \(node \*Node\) WalletManager\(\) \*wallet.Manager](<#Node.WalletManager>)
   - [func \(node \*Node\) Zenon\(\) zenon.Zenon](<#Node.Zenon>)
-  - [func \(node \*Node\) closeDataDir\(\)](<#Node.closeDataDir>)
-  - [func \(node \*Node\) openDataDir\(\) error](<#Node.openDataDir>)
-  - [func \(node \*Node\) startRPC\(\) error](<#Node.startRPC>)
-  - [func \(node \*Node\) startWallet\(\) error](<#Node.startWallet>)
-  - [func \(node \*Node\) startZenon\(\) error](<#Node.startZenon>)
-  - [func \(node \*Node\) stopRPC\(\)](<#Node.stopRPC>)
-  - [func \(node \*Node\) stopWallet\(\) error](<#Node.stopWallet>)
-  - [func \(node \*Node\) stopZenon\(\) error](<#Node.stopZenon>)
-  - [func \(node \*Node\) wsServerForPort\(port int\) \*httpServer](<#Node.wsServerForPort>)
 - [type ProducerConfig](<#ProducerConfig>)
 - [type RPCConfig](<#RPCConfig>)
-- [type gzipResponseWriter](<#gzipResponseWriter>)
-  - [func \(w \*gzipResponseWriter\) Write\(b \[\]byte\) \(int, error\)](<#gzipResponseWriter.Write>)
-  - [func \(w \*gzipResponseWriter\) WriteHeader\(status int\)](<#gzipResponseWriter.WriteHeader>)
-- [type httpConfig](<#httpConfig>)
-- [type httpServer](<#httpServer>)
-  - [func newHTTPServer\(timeouts rpc.HTTPTimeouts\) \*httpServer](<#newHTTPServer>)
-  - [func \(h \*httpServer\) ServeHTTP\(w http.ResponseWriter, r \*http.Request\)](<#httpServer.ServeHTTP>)
-  - [func \(h \*httpServer\) disableRPC\(\) bool](<#httpServer.disableRPC>)
-  - [func \(h \*httpServer\) disableWS\(\) bool](<#httpServer.disableWS>)
-  - [func \(h \*httpServer\) doStop\(\)](<#httpServer.doStop>)
-  - [func \(h \*httpServer\) enableRPC\(apis \[\]rpc.API, config httpConfig\) error](<#httpServer.enableRPC>)
-  - [func \(h \*httpServer\) enableWS\(apis \[\]rpc.API, config wsConfig\) error](<#httpServer.enableWS>)
-  - [func \(h \*httpServer\) listenAddr\(\) string](<#httpServer.listenAddr>)
-  - [func \(h \*httpServer\) rpcAllowed\(\) bool](<#httpServer.rpcAllowed>)
-  - [func \(h \*httpServer\) setListenAddr\(host string, port int\) error](<#httpServer.setListenAddr>)
-  - [func \(h \*httpServer\) start\(\) error](<#httpServer.start>)
-  - [func \(h \*httpServer\) stop\(\)](<#httpServer.stop>)
-  - [func \(h \*httpServer\) stopWS\(\)](<#httpServer.stopWS>)
-  - [func \(h \*httpServer\) wsAllowed\(\) bool](<#httpServer.wsAllowed>)
-- [type rpcHandler](<#rpcHandler>)
-- [type virtualHostHandler](<#virtualHostHandler>)
-  - [func \(h \*virtualHostHandler\) ServeHTTP\(w http.ResponseWriter, r \*http.Request\)](<#virtualHostHandler.ServeHTTP>)
-- [type wsConfig](<#wsConfig>)
 
 
 ## Constants
@@ -137,10 +88,6 @@ var (
     // ErrNodeStopped — Stop or one of its subsystem teardown
     // helpers was called against an already-stopped Node.
     ErrNodeStopped = errors.New("node not started")
-    // datadirInUseErrnos maps the platform-specific flock errnos
-    // (EAGAIN=11 on Linux, EAGAIN=35 on Darwin, ERROR_LOCK_VIOLATION=32
-    // on Windows) to the friendlier [ErrDataDirUsed].
-    datadirInUseErrnos = map[uint]bool{11: true, 32: true, 35: true}
 )
 ```
 
@@ -175,25 +122,6 @@ var DefaultNodeConfig = Config{
         Seeders:           p2p.DefaultSeeders,
     },
 }
-```
-
-<a name="gzPool"></a>
-
-```go
-var gzPool = sync.Pool{
-    New: func() interface{} {
-        w := gzip.NewWriter(io.Discard)
-        return w
-    },
-}
-```
-
-<a name="log"></a>
-
-```go
-var (
-    log = common.NodeLogger
-)
 ```
 
 <a name="DefaultDataDir"></a>
@@ -231,114 +159,6 @@ func ReplaceHomeVariable(path string) string
 ```
 
 ReplaceHomeVariable expands a leading \`\~\` in path to the user's home directory. Returns "" for empty input.
-
-<a name="checkModuleAvailability"></a>
-## func [checkModuleAvailability](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L498>)
-
-```go
-func checkModuleAvailability(modules []string, apis []rpc.API) (bad, available []string)
-```
-
-checkModuleAvailability checks that all names given in modules are actually available API services. It assumes that the MetadataApi module \("rpc"\) is always available; the registration of this "rpc" module happens in NewServer\(\) and is thus common to all endpoints.
-
-<a name="checkPath"></a>
-## func [checkPath](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L213>)
-
-```go
-func checkPath(r *http.Request, path string) bool
-```
-
-checkPath checks whether a given request URL matches a given path prefix.
-
-<a name="checkTimeouts"></a>
-## func [checkTimeouts](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L515>)
-
-```go
-func checkTimeouts(timeouts *rpc.HTTPTimeouts)
-```
-
-checkTimeouts ensures that timeout values are meaningful
-
-<a name="convertFileLockError"></a>
-## func [convertFileLockError](<https://github.com/zenon-network/go-zenon/blob/master/node/errors.go#L24>)
-
-```go
-func convertFileLockError(err error) error
-```
-
-convertFileLockError translates a flock errno into [ErrDataDirUsed](<#ErrDataDirUsed>) where applicable. Other errors pass through unchanged.
-
-<a name="homeDir"></a>
-## func [homeDir](<https://github.com/zenon-network/go-zenon/blob/master/node/defaults.go#L104>)
-
-```go
-func homeDir() string
-```
-
-homeDir returns the user's home directory: $HOME if set, otherwise the OS\-reported user record's HomeDir, otherwise an empty string.
-
-<a name="isNonEmptyDir"></a>
-## func [isNonEmptyDir](<https://github.com/zenon-network/go-zenon/blob/master/node/defaults.go#L92>)
-
-```go
-func isNonEmptyDir(dir string) bool
-```
-
-isNonEmptyDir reports whether dir exists and contains at least one entry — used by the Windows fallback path resolver.
-
-<a name="isWebsocket"></a>
-## func [isWebsocket](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L358>)
-
-```go
-func isWebsocket(r *http.Request) bool
-```
-
-isWebsocket checks the header of an http request for a websocket upgrade request.
-
-<a name="newCorsHandler"></a>
-## func [newCorsHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L371>)
-
-```go
-func newCorsHandler(srv http.Handler, allowedOrigins []string) http.Handler
-```
-
-
-
-<a name="newGzipHandler"></a>
-## func [newGzipHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L454>)
-
-```go
-func newGzipHandler(next http.Handler) http.Handler
-```
-
-
-
-<a name="newVHostHandler"></a>
-## func [newVHostHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L394>)
-
-```go
-func newVHostHandler(vhosts []string, next http.Handler) http.Handler
-```
-
-
-
-<a name="validatePrefix"></a>
-## func [validatePrefix](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L223>)
-
-```go
-func validatePrefix(what, path string) error
-```
-
-validatePrefix checks if 'path' is a valid configuration value for the RPC prefix option.
-
-<a name="windowsAppData"></a>
-## func [windowsAppData](<https://github.com/zenon-network/go-zenon/blob/master/node/defaults.go#L79>)
-
-```go
-func windowsAppData() string
-```
-
-windowsAppData returns %LOCALAPPDATA%. Panics if the variable is unset — Windows XP and below are unsupported.
 
 <a name="Config"></a>
 ## type [Config](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L66-L78>)
@@ -388,51 +208,6 @@ func (c *Config) WSEndpoint() string
 
 WSEndpoint formats the WebSocket\-RPC listen address as host:port, or "" when no WSHost is configured.
 
-<a name="Config.makeGenesisConfig"></a>
-### func \(\*Config\) [makeGenesisConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L140>)
-
-```go
-func (c *Config) makeGenesisConfig() (genesisConfig store.Genesis)
-```
-
-makeGenesisConfig loads the genesis state. Prefers GenesisFile when set; otherwise falls back to the embedded Alphanet genesis. Calls os.Exit\(1\) on failure since a node without genesis cannot proceed.
-
-<a name="Config.makeNetConfig"></a>
-### func \(\*Config\) [makeNetConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L226>)
-
-```go
-func (c *Config) makeNetConfig() *p2p.Net
-```
-
-makeNetConfig projects c.Net into a [p2p.Net](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/#Net>), resolving the per\-data\-dir node\-database and private\-key file paths.
-
-<a name="Config.makeWalletConfig"></a>
-### func \(\*Config\) [makeWalletConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L220>)
-
-```go
-func (c *Config) makeWalletConfig() *wallet.Config
-```
-
-makeWalletConfig projects c into a [wallet.Config](<https://pkg.go.dev/github.com/zenon-network/go-zenon/wallet/#Config>).
-
-<a name="Config.makeZenonConfig"></a>
-### func \(\*Config\) [makeZenonConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L121>)
-
-```go
-func (c *Config) makeZenonConfig(walletManager *wallet.Manager) (*zenon.Config, error)
-```
-
-makeZenonConfig translates the node config into a [zenon.Config](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Config>), resolving the producer keypair \(if any\) and the genesis source.
-
-<a name="Config.parseProducer"></a>
-### func \(\*Config\) [parseProducer](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L175>)
-
-```go
-func (c *Config) parseProducer(walletManager *wallet.Manager) (*wallet.KeyPair, error)
-```
-
-parseProducer resolves the producer keypair: unlocks the keystore, derives the keypair at Producer.Index, and verifies that the derived address matches Producer.Address. Returns nil keypair \(no error\) when no producer is configured — that's a non\-producing node.
-
 <a name="NetConfig"></a>
 ## type [NetConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L50-L60>)
 
@@ -455,25 +230,11 @@ type NetConfig struct {
 <a name="Node"></a>
 ## type [Node](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L27-L43>)
 
-Node is the long\-running process container. Owns the wallet, p2p server, RPC stack, and a [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) core; coordinates their start / stop order and holds the data\-dir lock.
+Node is the long\-running process container. Owns the wallet, p2p server, RPC stack, and a \[zenon.Zenon\] core; coordinates their start / stop order and holds the data\-dir lock.
 
 ```go
 type Node struct {
-    config *Config
-
-    walletManager *wallet.Manager
-    server        *p2p.Server
-
-    z   zenon.Zenon
-
-    rpcAPIs []rpc.API   // List of APIs currently provided by the node
-    http    *httpServer //
-    ws      *httpServer //
-
-    // Channel to wait for termination notifications
-    stop        chan struct{}
-    lock        sync.RWMutex
-    dataDirLock fileutil.Releaser // prevents concurrent use of instance directory
+    // contains filtered or unexported fields
 }
 ```
 
@@ -484,7 +245,7 @@ type Node struct {
 func NewNode(conf *Config) (*Node, error)
 ```
 
-NewNode performs setup\-only work: open \+ lock the data dir, start the wallet, build a [zenon.Config](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Config>) from conf, instantiate the [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) core, and assemble the [p2p.Server](<https://pkg.go.dev/github.com/zenon-network/go-zenon/p2p/#Server>) descriptor. The returned Node is not yet started; call [Node.Start](<#Node.Start>).
+NewNode performs setup\-only work: open \+ lock the data dir, start the wallet, build a \[zenon.Config\] from conf, instantiate the \[zenon.Zenon\] core, and assemble the \[p2p.Server\] descriptor. The returned Node is not yet started; call [Node.Start](<#Node.Start>).
 
 <a name="Node.Config"></a>
 ### func \(\*Node\) [Config](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L171>)
@@ -538,88 +299,7 @@ WalletManager returns the started wallet manager — used by the producer keypai
 func (node *Node) Zenon() zenon.Zenon
 ```
 
-Zenon returns the running [zenon.Zenon](<https://pkg.go.dev/github.com/zenon-network/go-zenon/zenon/#Zenon>) core.
-
-<a name="Node.closeDataDir"></a>
-### func \(\*Node\) [closeDataDir](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L253>)
-
-```go
-func (node *Node) closeDataDir()
-```
-
-closeDataDir releases the \`.lock\` flock acquired by openDataDir. Best\-effort: a release failure is logged but not surfaced.
-
-<a name="Node.openDataDir"></a>
-### func \(\*Node\) [openDataDir](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L228>)
-
-```go
-func (node *Node) openDataDir() error
-```
-
-openDataDir mkdir's DataPath and acquires the exclusive \`.lock\` flock that guarantees single\-process ownership of the chain database. Returns [ErrDataDirUsed](<#ErrDataDirUsed>) if another znnd holds the lock.
-
-<a name="Node.startRPC"></a>
-### func \(\*Node\) [startRPC](<https://github.com/zenon-network/go-zenon/blob/master/node/rpc.go#L7>)
-
-```go
-func (node *Node) startRPC() error
-```
-
-startRPC configures and launches the HTTP and WebSocket RPC transports. Called once during [Node.Start](<#Node.Start>); not safe to call after the node is running because it assumes the listener and handler atomic.Values are uninitialised.
-
-<a name="Node.startWallet"></a>
-### func \(\*Node\) [startWallet](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L184>)
-
-```go
-func (node *Node) startWallet() error
-```
-
-startWallet begins the wallet manager so producer keypairs can be unlocked while building the zenon config.
-
-<a name="Node.startZenon"></a>
-### func \(\*Node\) [startZenon](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L193>)
-
-```go
-func (node *Node) startZenon() error
-```
-
-startZenon runs zenon Init and Start in sequence, returning the first error encountered.
-
-<a name="Node.stopRPC"></a>
-### func \(\*Node\) [stopRPC](<https://github.com/zenon-network/go-zenon/blob/master/node/rpc.go#L59>)
-
-```go
-func (node *Node) stopRPC()
-```
-
-stopRPC shuts down both transports. Safe to call against already\-stopped servers.
-
-<a name="Node.stopWallet"></a>
-### func \(\*Node\) [stopWallet](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L208>)
-
-```go
-func (node *Node) stopWallet() error
-```
-
-stopWallet shuts down the wallet manager. Returns ErrNodeStopped if the manager was never started — callers should treat that as a no\-op rather than fatal.
-
-<a name="Node.stopZenon"></a>
-### func \(\*Node\) [stopZenon](<https://github.com/zenon-network/go-zenon/blob/master/node/node.go#L218>)
-
-```go
-func (node *Node) stopZenon() error
-```
-
-stopZenon shuts down the zenon core. Returns ErrNodeStopped if the core was never started.
-
-<a name="Node.wsServerForPort"></a>
-### func \(\*Node\) [wsServerForPort](<https://github.com/zenon-network/go-zenon/blob/master/node/rpc.go#L50>)
-
-```go
-func (node *Node) wsServerForPort(port int) *httpServer
-```
-
-wsServerForPort returns the \[httpServer\] that should host the WebSocket transport for the given port — the same server as HTTP when the ports collide \(or HTTP is disabled\), otherwise the dedicated ws instance.
+Zenon returns the running \[zenon.Zenon\] core.
 
 <a name="ProducerConfig"></a>
 ## type [ProducerConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/config.go#L22-L27>)
@@ -655,253 +335,6 @@ type RPCConfig struct {
     HTTPVirtualHosts []string
     HTTPCors         []string
     WSOrigins        []string
-}
-```
-
-<a name="gzipResponseWriter"></a>
-## type [gzipResponseWriter](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L439-L442>)
-
-
-
-```go
-type gzipResponseWriter struct {
-    io.Writer
-    http.ResponseWriter
-}
-```
-
-<a name="gzipResponseWriter.Write"></a>
-### func \(\*gzipResponseWriter\) [Write](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L450>)
-
-```go
-func (w *gzipResponseWriter) Write(b []byte) (int, error)
-```
-
-
-
-<a name="gzipResponseWriter.WriteHeader"></a>
-### func \(\*gzipResponseWriter\) [WriteHeader](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L445>)
-
-```go
-func (w *gzipResponseWriter) WriteHeader(status int)
-```
-
-WriteHeader implements http.ResponseWriter.
-
-<a name="httpConfig"></a>
-## type [httpConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L23-L28>)
-
-httpConfig is the JSON\-RPC/HTTP configuration.
-
-```go
-type httpConfig struct {
-    Modules            []string
-    CorsAllowedOrigins []string
-    Vhosts             []string
-    prefix             string // path prefix on which to mount http handler
-}
-```
-
-<a name="httpServer"></a>
-## type [httpServer](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L49-L73>)
-
-httpServer hosts both HTTP\-JSON\-RPC and WebSocket on a single TCP listener. Per\-transport handlers are stored as atomic.Values so enableRPC / disableRPC / enableWS / disableWS can run while the server is serving live requests.
-
-```go
-type httpServer struct {
-    log      common.Logger
-    timeouts rpc.HTTPTimeouts
-    mux      http.ServeMux // registered handlers go here
-
-    mu       sync.Mutex
-    server   *http.Server
-    listener net.Listener // non-nil when server is running
-
-    httpConfig  httpConfig
-    httpHandler atomic.Value // *rpcHandler
-
-    // WebSocket handler things.
-    wsConfig  wsConfig
-    wsHandler atomic.Value // *rpcHandler
-
-    // These are set by setListenAddr.
-    endpoint string
-    host     string
-    port     int
-
-    handlerNames map[string]string
-}
-```
-
-<a name="newHTTPServer"></a>
-### func [newHTTPServer](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L78>)
-
-```go
-func newHTTPServer(timeouts rpc.HTTPTimeouts) *httpServer
-```
-
-newHTTPServer constructs an idle httpServer with no handlers installed. Caller must call setListenAddr \+ enableRPC / enableWS \+ start to bring it online.
-
-<a name="httpServer.ServeHTTP"></a>
-### func \(\*httpServer\) [ServeHTTP](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L182>)
-
-```go
-func (h *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request)
-```
-
-
-
-<a name="httpServer.disableRPC"></a>
-### func \(\*httpServer\) [disableRPC](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L294>)
-
-```go
-func (h *httpServer) disableRPC() bool
-```
-
-disableRPC stops the HTTP RPC handler. This is internal, the caller must hold h.mu.
-
-<a name="httpServer.disableWS"></a>
-### func \(\*httpServer\) [disableWS](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L338>)
-
-```go
-func (h *httpServer) disableWS() bool
-```
-
-disableWS disables the WebSocket handler. This is internal, the caller must hold h.mu.
-
-<a name="httpServer.doStop"></a>
-### func \(\*httpServer\) [doStop](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L246>)
-
-```go
-func (h *httpServer) doStop()
-```
-
-
-
-<a name="httpServer.enableRPC"></a>
-### func \(\*httpServer\) [enableRPC](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L272>)
-
-```go
-func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error
-```
-
-enableRPC turns on JSON\-RPC over HTTP on the server.
-
-<a name="httpServer.enableWS"></a>
-### func \(\*httpServer\) [enableWS](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L304>)
-
-```go
-func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error
-```
-
-enableWS turns on JSON\-RPC over WebSocket on the server.
-
-<a name="httpServer.listenAddr"></a>
-### func \(\*httpServer\) [listenAddr](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L106>)
-
-```go
-func (h *httpServer) listenAddr() string
-```
-
-listenAddr returns the listening address of the server.
-
-<a name="httpServer.rpcAllowed"></a>
-### func \(\*httpServer\) [rpcAllowed](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L348>)
-
-```go
-func (h *httpServer) rpcAllowed() bool
-```
-
-rpcAllowed returns true when JSON\-RPC over HTTP is enabled.
-
-<a name="httpServer.setListenAddr"></a>
-### func \(\*httpServer\) [setListenAddr](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L92>)
-
-```go
-func (h *httpServer) setListenAddr(host string, port int) error
-```
-
-setListenAddr configures the listening address of the server. The address can only be set while the server isn't running.
-
-<a name="httpServer.start"></a>
-### func \(\*httpServer\) [start](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L117>)
-
-```go
-func (h *httpServer) start() error
-```
-
-start starts the HTTP server if it is enabled and not already running.
-
-<a name="httpServer.stop"></a>
-### func \(\*httpServer\) [stop](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L240>)
-
-```go
-func (h *httpServer) stop()
-```
-
-stop shuts down the HTTP server.
-
-<a name="httpServer.stopWS"></a>
-### func \(\*httpServer\) [stopWS](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L326>)
-
-```go
-func (h *httpServer) stopWS()
-```
-
-stopWS disables JSON\-RPC over WebSocket and also stops the server if it only serves WebSocket.
-
-<a name="httpServer.wsAllowed"></a>
-### func \(\*httpServer\) [wsAllowed](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L353>)
-
-```go
-func (h *httpServer) wsAllowed() bool
-```
-
-wsAllowed returns true when JSON\-RPC over WebSocket is enabled.
-
-<a name="rpcHandler"></a>
-## type [rpcHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L40-L43>)
-
-rpcHandler is a \(handler, server\) pair stored atomically inside \[httpServer\] so the handler can be swapped \(or disabled\) without holding the server mutex during a request.
-
-```go
-type rpcHandler struct {
-    http.Handler
-    server *rpc.Server
-}
-```
-
-<a name="virtualHostHandler"></a>
-## type [virtualHostHandler](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L389-L392>)
-
-virtualHostHandler is a handler which validates the Host\-header of incoming requests. Using virtual hosts can help prevent DNS rebinding attacks, where a 'random' domain name points to the service ip address \(but without CORS headers\). By verifying the targeted virtual host, we can ensure that it's a destination that the node operator has defined.
-
-```go
-type virtualHostHandler struct {
-    vhosts map[string]struct{}
-    next   http.Handler
-}
-```
-
-<a name="virtualHostHandler.ServeHTTP"></a>
-### func \(\*virtualHostHandler\) [ServeHTTP](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L403>)
-
-```go
-func (h *virtualHostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
-```
-
-ServeHTTP serves JSON\-RPC requests over HTTP, implements http.Handler
-
-<a name="wsConfig"></a>
-## type [wsConfig](<https://github.com/zenon-network/go-zenon/blob/master/node/rpcstack.go#L31-L35>)
-
-wsConfig is the JSON\-RPC/Websocket configuration
-
-```go
-type wsConfig struct {
-    Origins []string
-    Modules []string
-    prefix  string // path prefix on which to mount ws handler
 }
 ```
 

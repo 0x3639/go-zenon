@@ -36,7 +36,7 @@ Convert to/from protobuf with the \`Proto\`/\`DeProto\*\` family for storage and
 
 ### Related Packages
 
-- [github.com/zenon\\\-network/go\\\-zenon/common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>) — provides the byte and time helpers \([common.JoinBytes](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#JoinBytes>), [common.Uint64ToBytes](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#Uint64ToBytes>)\) used to compose canonical key forms.
+- [github.com/zenon\\\-network/go\\\-zenon/common](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/>) — provides the byte and time helpers \(\[common.JoinBytes\], \[common.Uint64ToBytes\]\) used to compose canonical key forms.
 - [github.com/zenon\\\-network/go\\\-zenon/common/crypto](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/crypto/>) — supplies the SHA3\-256 hash primitive consumed by [NewHash](<#NewHash>) and [NewZenonTokenStandard](<#NewZenonTokenStandard>).
 - [github.com/zenon\\\-network/go\\\-zenon/chain/nom](<https://pkg.go.dev/github.com/zenon-network/go-zenon/chain/nom/>) — uses these types to define [chain/nom.AccountBlock](<https://pkg.go.dev/chain/nom/#AccountBlock>) and [chain/nom.Momentum](<https://pkg.go.dev/chain/nom/#Momentum>).
 - [github.com/zenon\\\-network/go\\\-zenon/vm/embedded](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/embedded/>) — dispatches on the [EmbeddedContracts](<#PillarContract>) addresses defined here.
@@ -46,11 +46,6 @@ Convert to/from protobuf with the \`Proto\`/\`DeProto\*\` family for storage and
 - [Constants](<#constants>)
 - [Variables](<#variables>)
 - [func IsEmbeddedAddress\(addr Address\) bool](<#IsEmbeddedAddress>)
-- [func file\_common\_types\_protobuf\_proto\_init\(\)](<#file_common_types_protobuf_proto_init>)
-- [func file\_common\_types\_protobuf\_proto\_rawDescGZIP\(\) \[\]byte](<#file_common_types_protobuf_proto_rawDescGZIP>)
-- [func formatBech32\(hrp string, payload \[\]byte\) \(string, error\)](<#formatBech32>)
-- [func init\(\)](<#init>)
-- [func parseBech32\(addrStr string\) \(string, \[\]byte, error\)](<#parseBech32>)
 - [type AccountHeader](<#AccountHeader>)
   - [func DeProtoAccountHeader\(pb \*AccountHeaderProto\) \*AccountHeader](<#DeProtoAccountHeader>)
   - [func DeserializeAccountHeader\(data \[\]byte\) \(\*AccountHeader, error\)](<#DeserializeAccountHeader>)
@@ -72,7 +67,6 @@ Convert to/from protobuf with the \`Proto\`/\`DeProto\*\` family for storage and
   - [func ParseAddress\(addrStr string\) \(Address, error\)](<#ParseAddress>)
   - [func ParseAddressPanic\(addrStr string\) Address](<#ParseAddressPanic>)
   - [func PubKeyToAddress\(pubKey \[\]byte\) Address](<#PubKeyToAddress>)
-  - [func parseEmbedded\(addrStr string\) Address](<#parseEmbedded>)
   - [func \(addr Address\) Bytes\(\) \[\]byte](<#Address.Bytes>)
   - [func \(addr Address\) IsZero\(\) bool](<#Address.IsZero>)
   - [func \(addr Address\) MarshalText\(\) \(\[\]byte, error\)](<#Address.MarshalText>)
@@ -183,17 +177,6 @@ const (
 )
 ```
 
-<a name="_"></a>
-
-```go
-const (
-    // Verify that this generated code is sufficiently up-to-date.
-    _   = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-    // Verify that runtime/protoimpl is sufficiently up-to-date.
-    _   = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
-)
-```
-
 <a name="ZTSPrefix"></a>Bech32 encoding parameters for [ZenonTokenStandard](<#ZenonTokenStandard>). ZTS identifiers are 10 bytes encoded with the [ZTSPrefix](<#ZTSPrefix>) human\-readable part.
 
 ```go
@@ -261,15 +244,6 @@ var (
     // until an embedded governance contract takes over. The address belongs
     // to the Mariposa01 pillar.
     CommunitySporkAddress = ParseAddressPanic("z1qqvwzz2xq7q5gwk6uhcddgrpxlfcyzc8rsu82s")
-)
-```
-
-<a name="file_common_types_protobuf_proto_rawDescOnce"></a>
-
-```go
-var (
-    file_common_types_protobuf_proto_rawDescOnce sync.Once
-    file_common_types_protobuf_proto_rawDescData = file_common_types_protobuf_proto_rawDesc
 )
 ```
 
@@ -341,69 +315,6 @@ var ZeroTokenStandard = ZenonTokenStandard{}
 var ZnnTokenStandard = ParseZTSPanic("zts1znnxxxxxxxxxxxxx9z4ulx")
 ```
 
-<a name="file_common_types_protobuf_proto_depIdxs"></a>
-
-```go
-var file_common_types_protobuf_proto_depIdxs = []int32{
-    1,
-    0,
-    2,
-    3,
-    3,
-    3,
-    3,
-    0,
-}
-```
-
-<a name="file_common_types_protobuf_proto_goTypes"></a>
-
-```go
-var file_common_types_protobuf_proto_goTypes = []interface{}{
-    (*AddressProto)(nil),
-    (*HashProto)(nil),
-    (*HashHeightProto)(nil),
-    (*AccountHeaderProto)(nil),
-}
-```
-
-<a name="file_common_types_protobuf_proto_msgTypes"></a>
-
-```go
-var file_common_types_protobuf_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-```
-
-<a name="file_common_types_protobuf_proto_rawDesc"></a>
-
-```go
-var file_common_types_protobuf_proto_rawDesc = []byte{
-    0x0a, 0x1b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x74, 0x79, 0x70, 0x65, 0x73, 0x2f, 0x70,
-    0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x05, 0x74,
-    0x79, 0x70, 0x65, 0x73, 0x22, 0x28, 0x0a, 0x0c, 0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x50,
-    0x72, 0x6f, 0x74, 0x6f, 0x12, 0x18, 0x0a, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x18,
-    0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x22, 0x1f,
-    0x0a, 0x09, 0x48, 0x61, 0x73, 0x68, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x12, 0x0a, 0x04, 0x68,
-    0x61, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x68, 0x61, 0x73, 0x68, 0x22,
-    0x4f, 0x0a, 0x0f, 0x48, 0x61, 0x73, 0x68, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x50, 0x72, 0x6f,
-    0x74, 0x6f, 0x12, 0x24, 0x0a, 0x04, 0x68, 0x61, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
-    0x32, 0x10, 0x2e, 0x74, 0x79, 0x70, 0x65, 0x73, 0x2e, 0x48, 0x61, 0x73, 0x68, 0x50, 0x72, 0x6f,
-    0x74, 0x6f, 0x52, 0x04, 0x68, 0x61, 0x73, 0x68, 0x12, 0x16, 0x0a, 0x06, 0x68, 0x65, 0x69, 0x67,
-    0x68, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x68, 0x65, 0x69, 0x67, 0x68, 0x74,
-    0x22, 0x7b, 0x0a, 0x12, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x48, 0x65, 0x61, 0x64, 0x65,
-    0x72, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x2d, 0x0a, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73,
-    0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x74, 0x79, 0x70, 0x65, 0x73, 0x2e,
-    0x41, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x52, 0x07, 0x61, 0x64,
-    0x64, 0x72, 0x65, 0x73, 0x73, 0x12, 0x36, 0x0a, 0x0a, 0x68, 0x61, 0x73, 0x68, 0x48, 0x65, 0x69,
-    0x67, 0x68, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x16, 0x2e, 0x74, 0x79, 0x70, 0x65,
-    0x73, 0x2e, 0x48, 0x61, 0x73, 0x68, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x50, 0x72, 0x6f, 0x74,
-    0x6f, 0x52, 0x0a, 0x68, 0x61, 0x73, 0x68, 0x48, 0x65, 0x69, 0x67, 0x68, 0x74, 0x42, 0x30, 0x5a,
-    0x2e, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x7a, 0x65, 0x6e, 0x6f,
-    0x6e, 0x2d, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x2f, 0x67, 0x6f, 0x2d, 0x7a, 0x65, 0x6e,
-    0x6f, 0x6e, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x74, 0x79, 0x70, 0x65, 0x73, 0x62,
-    0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
-}
-```
-
 <a name="IsEmbeddedAddress"></a>
 ## func [IsEmbeddedAddress](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L89>)
 
@@ -412,51 +323,6 @@ func IsEmbeddedAddress(addr Address) bool
 ```
 
 IsEmbeddedAddress reports whether addr is the address of an embedded contract \(i.e., its type byte is [ContractAddrByte](<#UserAddrByte>)\). The check is structural — it does not validate that the address is one of the recognized [EmbeddedContracts](<#PillarContract>).
-
-<a name="file_common_types_protobuf_proto_init"></a>
-## func [file\\\_common\\\_types\\\_protobuf\\\_proto\\\_init](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L287>)
-
-```go
-func file_common_types_protobuf_proto_init()
-```
-
-
-
-<a name="file_common_types_protobuf_proto_rawDescGZIP"></a>
-## func [file\\\_common\\\_types\\\_protobuf\\\_proto\\\_rawDescGZIP](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L261>)
-
-```go
-func file_common_types_protobuf_proto_rawDescGZIP() []byte
-```
-
-
-
-<a name="formatBech32"></a>
-## func [formatBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L248>)
-
-```go
-func formatBech32(hrp string, payload []byte) (string, error)
-```
-
-formatBech32 takes an address's bytes as input and returns a bech32 address. Used by [Address.String](<#Address.String>) and [ZenonTokenStandard.String](<#ZenonTokenStandard.String>).
-
-<a name="init"></a>
-## func [init](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L286>)
-
-```go
-func init()
-```
-
-
-
-<a name="parseBech32"></a>
-## func [parseBech32](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L234>)
-
-```go
-func parseBech32(addrStr string) (string, []byte, error)
-```
-
-parseBech32 takes a bech32 address as input and returns the HRP and data section of a bech32 address. Used by [ParseAddress](<#ParseAddress>) and [ParseZTS](<#ParseZTS>).
 
 <a name="AccountHeader"></a>
 ## type [AccountHeader](<https://github.com/zenon-network/go-zenon/blob/master/common/types/account_header.go#L13-L16>)
@@ -531,12 +397,9 @@ Serialize encodes abh as a protobuf byte slice.
 
 ```go
 type AccountHeaderProto struct {
-    state         protoimpl.MessageState
-    sizeCache     protoimpl.SizeCache
-    unknownFields protoimpl.UnknownFields
-
     Address    *AddressProto    `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
     HashHeight *HashHeightProto `protobuf:"bytes,2,opt,name=hashHeight,proto3" json:"hashHeight,omitempty"`
+    // contains filtered or unexported fields
 }
 ```
 
@@ -657,15 +520,6 @@ func PubKeyToAddress(pubKey []byte) Address
 
 PubKeyToAddress derives the user\-account address that owns an Ed25519 public key. The address is \`UserAddrByte || SHA3\-256\(pubKey\)\[:AddressCoreSize\]\`.
 
-<a name="parseEmbedded"></a>
-### func [parseEmbedded](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L173>)
-
-```go
-func parseEmbedded(addrStr string) Address
-```
-
-parseEmbedded parses an embedded\-contract address constant and panics if the string is malformed or not flagged as an embedded address. Used to initialize the [EmbeddedContracts](<#PillarContract>) table.
-
 <a name="Address.Bytes"></a>
 ### func \(Address\) [Bytes](<https://github.com/zenon-network/go-zenon/blob/master/common/types/address.go#L116>)
 
@@ -736,11 +590,8 @@ UnmarshalText parses the bech32 string form. Implements [encoding.TextUnmarshale
 
 ```go
 type AddressProto struct {
-    state         protoimpl.MessageState
-    sizeCache     protoimpl.SizeCache
-    unknownFields protoimpl.UnknownFields
-
     Address []byte `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+    // contains filtered or unexported fields
 }
 ```
 
@@ -988,7 +839,7 @@ Proto wraps b in a [HashHeightProto](<#HashHeightProto>) for protobuf serializat
 func (b *HashHeight) Serialize() []byte
 ```
 
-Serialize encodes b as a protobuf byte slice. Panics through [common.DealWithErr](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/#DealWithErr>) if marshalling fails — protobuf serialization on the fixed shape is expected to succeed.
+Serialize encodes b as a protobuf byte slice. Panics through \[common.DealWithErr\] if marshalling fails — protobuf serialization on the fixed shape is expected to succeed.
 
 <a name="HashHeightProto"></a>
 ## type [HashHeightProto](<https://github.com/zenon-network/go-zenon/blob/master/common/types/protobuf.pb.go#L117-L124>)
@@ -997,12 +848,9 @@ Serialize encodes b as a protobuf byte slice. Panics through [common.DealWithErr
 
 ```go
 type HashHeightProto struct {
-    state         protoimpl.MessageState
-    sizeCache     protoimpl.SizeCache
-    unknownFields protoimpl.UnknownFields
-
     Hash   *HashProto `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
     Height uint64     `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+    // contains filtered or unexported fields
 }
 ```
 
@@ -1076,11 +924,8 @@ func (x *HashHeightProto) String() string
 
 ```go
 type HashProto struct {
-    state         protoimpl.MessageState
-    sizeCache     protoimpl.SizeCache
-    unknownFields protoimpl.UnknownFields
-
     Hash []byte `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+    // contains filtered or unexported fields
 }
 ```
 

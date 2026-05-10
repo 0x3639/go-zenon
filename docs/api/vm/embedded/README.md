@@ -21,7 +21,7 @@ Four pre\-built dispatch tables are stacked in increasing activation order:
 - bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
 - htlcEmbedded — adds the HTLC contract.
 
-[GetEmbeddedMethod](<#GetEmbeddedMethod>) selects the table based on which sporks the caller's [vm\\\_context.AccountVmContext](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext>) reports as enforced.
+[GetEmbeddedMethod](<#GetEmbeddedMethod>) selects the table based on which sporks the caller's \[vm\_context.AccountVmContext\] reports as enforced.
 
 ### Sub\\\-packages
 
@@ -33,76 +33,14 @@ Four pre\-built dispatch tables are stacked in increasing activation order:
 
 - [github.com/zenon\\\-network/go\\\-zenon/vm](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/>) — primary consumer; calls [GetEmbeddedMethod](<#GetEmbeddedMethod>) from the per\-account\-block VM.
 - [github.com/zenon\\\-network/go\\\-zenon/vm/abi](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/abi/>) — supplies the ABI codec used for selector dispatch and storage encoding.
-- [github.com/zenon\\\-network/go\\\-zenon/vm/constants](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/>) — supplies the [constants.PlasmaTable](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#PlasmaTable>) consumed by \[Method.GetPlasma\].
+- [github.com/zenon\\\-network/go\\\-zenon/vm/constants](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/>) — supplies the \[constants.PlasmaTable\] consumed by \[Method.GetPlasma\].
 - [github.com/zenon\\\-network/go\\\-zenon/common/types](<https://pkg.go.dev/github.com/zenon-network/go-zenon/common/types/>) — defines the per\-contract address constants \(PillarContract, SentinelContract, …\) the dispatcher keys on.
 
 ## Index
 
-- [Variables](<#variables>)
-- [func getAccelerator\(\) map\[types.Address\]\*embeddedImplementation](<#getAccelerator>)
-- [func getBridgeAndLiquidity\(\) map\[types.Address\]\*embeddedImplementation](<#getBridgeAndLiquidity>)
-- [func getHtlc\(\) map\[types.Address\]\*embeddedImplementation](<#getHtlc>)
-- [func getOrigin\(\) map\[types.Address\]\*embeddedImplementation](<#getOrigin>)
 - [type Method](<#Method>)
   - [func GetEmbeddedMethod\(context vm\_context.AccountVmContext, address types.Address, abiSelector \[\]byte\) \(Method, error\)](<#GetEmbeddedMethod>)
-- [type embeddedImplementation](<#embeddedImplementation>)
 
-
-## Variables
-
-<a name="originEmbedded"></a>Pre\-built dispatch tables, one per spork tier. Tables are constructed once at package init and stacked: each tier inherits from the previous and layers on the contracts/methods the spork activates.
-
-- originEmbedded — the genesis\-time set: Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Accelerator Donate, and the initial Liquidity Update/Donate methods.
-- acceleratorEmbedded — adds the full Accelerator method set, lowers CollectReward plasma costs, and opens Liquidity Fund/BurnZnn.
-- bridgeAndLiquidityEmbedded — adds Bridge and the full Liquidity method set.
-- htlcEmbedded — adds the HTLC contract.
-
-The active tier at any momentum height is selected by [GetEmbeddedMethod](<#GetEmbeddedMethod>) based on which sporks the VM context reports active.
-
-```go
-var (
-    originEmbedded             = getOrigin()
-    acceleratorEmbedded        = getAccelerator()
-    htlcEmbedded               = getHtlc()
-    bridgeAndLiquidityEmbedded = getBridgeAndLiquidity()
-)
-```
-
-<a name="getAccelerator"></a>
-## func [getAccelerator](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L138>)
-
-```go
-func getAccelerator() map[types.Address]*embeddedImplementation
-```
-
-getAccelerator layers the Accelerator contract's full method set onto the origin tier, lowers CollectReward plasma costs for pillar/sentinel/stake contracts, and opens Liquidity Fund/BurnZnn. Used when the accelerator spork is active.
-
-<a name="getBridgeAndLiquidity"></a>
-## func [getBridgeAndLiquidity](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L90>)
-
-```go
-func getBridgeAndLiquidity() map[types.Address]*embeddedImplementation
-```
-
-getBridgeAndLiquidity layers the Bridge contract and the full Liquidity method set onto the accelerator tier. Used when the bridge\+liquidity spork is active.
-
-<a name="getHtlc"></a>
-## func [getHtlc](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L72>)
-
-```go
-func getHtlc() map[types.Address]*embeddedImplementation
-```
-
-getHtlc layers the HTLC contract onto the bridge\+liquidity tier. Used as the active table whenever [vm\\\_context.AccountVmContext.IsHtlcSporkEnforced](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/vm_context/#AccountVmContext.IsHtlcSporkEnforced>) reports true.
-
-<a name="getOrigin"></a>
-## func [getOrigin](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L166>)
-
-```go
-func getOrigin() map[types.Address]*embeddedImplementation
-```
-
-getOrigin returns the genesis\-time embedded\-contract dispatch table — the set of contracts and methods active before any spork is activated. It includes Plasma, Pillar, Token, Sentinel, Swap, Stake, Spork, Accelerator Donate, and Liquidity Update/Donate.
 
 <a name="Method"></a>
 ## type [Method](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L17-L34>)
@@ -141,20 +79,8 @@ GetEmbeddedMethod finds method instance of embedded contract by address and abiS
 
 Returns:
 
-- [constants.ErrNotContractAddress](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrNotContractAddress>) when address is not an embedded address \(bad type byte prefix\).
-- [constants.ErrContractDoesntExist](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrContractDoesntExist>) when the address doesn't link to a valid embedded contract.
-- [constants.ErrContractMethodNotFound](<https://pkg.go.dev/github.com/zenon-network/go-zenon/vm/constants/#ErrContractMethodNotFound>) when the method doesn't exist in the active dispatch table for this spork tier.
-
-<a name="embeddedImplementation"></a>
-## type [embeddedImplementation](<https://github.com/zenon-network/go-zenon/blob/master/vm/embedded/embedded.go#L40-L43>)
-
-embeddedImplementation pairs an ABI contract definition with the method\-dispatch table for one embedded contract address. The map is keyed by method name; the supervisor decodes the call's 4\-byte selector via the ABI and dispatches by name.
-
-```go
-type embeddedImplementation struct {
-    m   map[string]Method
-    abi abi.ABIContract
-}
-```
+- \[constants.ErrNotContractAddress\] when address is not an embedded address \(bad type byte prefix\).
+- \[constants.ErrContractDoesntExist\] when the address doesn't link to a valid embedded contract.
+- \[constants.ErrContractMethodNotFound\] when the method doesn't exist in the active dispatch table for this spork tier.
 
 Generated by [gomarkdoc](<https://github.com/princjef/gomarkdoc>)
