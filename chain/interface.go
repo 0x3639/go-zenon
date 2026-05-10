@@ -44,8 +44,9 @@ type Chain interface {
 // MomentumEventListener is the contract a subsystem implements to
 // observe momentum-chain mutations. The chain layer broadcasts
 // InsertMomentum after a momentum is committed and DeleteMomentum
-// after one is rolled back. Listeners run on the chain's broadcast
-// goroutine — heavy work should be deferred.
+// after one is rolled back. Listeners are invoked synchronously on
+// the goroutine that called [MomentumPool.AddMomentumTransaction] or
+// [MomentumPool.RollbackTo] — heavy work should be deferred.
 type MomentumEventListener interface {
 	// InsertMomentum is called once per committed momentum, after the
 	// underlying database mutation has succeeded.

@@ -12,7 +12,8 @@ import (
 //
 // Concurrency: register/unregister/broadcast all take changes; the
 // manager is safe for concurrent use. Listeners run synchronously on
-// the broadcaster's goroutine — heavy work should be deferred.
+// whichever goroutine drove the originating [momentumPool.AddMomentumTransaction]
+// or [momentumPool.RollbackTo] call — heavy work should be deferred.
 type momentumEventManager struct {
 	listeners []MomentumEventListener
 	changes   sync.Mutex

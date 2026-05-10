@@ -38,16 +38,20 @@
 //     substitute a mock.
 //   - GotAllActiveSporksImplemented — boot- and per-momentum check
 //     that aborts the node if any active spork is unrecognized.
-//   - MomentumEventListener — observers of insert/delete; run
-//     synchronously on the broadcaster's goroutine.
+//   - MomentumEventListener — observers of insert/delete; invoked
+//     synchronously on the goroutine that drove the underlying
+//     [Chain.AddMomentumTransaction] or [Chain.RollbackTo] call. There
+//     is no dedicated broadcast goroutine.
 //
 // # Concurrency
 //
 // Every public method on [Chain] is safe for concurrent use. The
 // account pool and momentum pool each have their own internal mutex on
 // top of the global insert lock so reads do not block on mutations.
-// Listener callbacks run with the source pool's mutex temporarily
-// released to keep listener re-entry safe.
+// Listener callbacks fire after the database mutation has been
+// committed; they share the calling goroutine, so listeners that need
+// to do heavy work should hand it off to a worker rather than blocking
+// the chain insert path.
 //
 // # Related Packages
 //
