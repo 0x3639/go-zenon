@@ -64,13 +64,16 @@ type NetConfig struct {
 // supplies sensible defaults; only the fields the operator
 // overrides need to be set.
 type Config struct {
-	DataPath    string // default ~/.zenon
+	DataPath    string // default DefaultDataDir() — ~/.znn on Unix, OS-specific elsewhere
 	WalletPath  string // default DataPath/wallet
 	GenesisFile string // GenesisFile is the absolute path to the genesis file
 
 	Name string
 
-	LogLevel string // "debug", "dbug" | "info" | "warn" | "error", "error" | "crit"
+	// LogLevel is parsed by log15.LvlFromString. Accepted values:
+	// "crit", "error" (alias "eror"), "warn", "info", "debug"
+	// (alias "dbug"). Unrecognized values fall back to "info".
+	LogLevel string
 
 	Producer *ProducerConfig
 	RPC      RPCConfig

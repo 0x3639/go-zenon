@@ -13,7 +13,7 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
-// mockStable is the placeholder [chain.StableChain] handed to the
+// mockStable is the placeholder [chain.Stable] handed to the
 // account pool during genesis assembly: it returns a fresh in-memory
 // database for every account so the pool can stage initial state
 // without a real chain backing it.
