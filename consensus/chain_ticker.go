@@ -69,10 +69,13 @@ func (ct *chainTicker) HasStarted(tick uint64) bool {
 	return true
 }
 
-// GetEndBlock returns the head of the tick group — the most recent
-// momentum strictly before tick's end time.
-//
-// Returns the head of the previous tick group.
+// GetEndBlock returns the most recent momentum strictly before tick's
+// end time. By construction this is the last momentum that belongs to
+// `tick` (or, when `tick` produced no momentum at all, the trailing
+// momentum from an earlier tick — the underlying lookup walks
+// backwards from end-time via [store.Momentum.GetMomentumBeforeTime]).
+// Returns an error if no momentum exists before that time at all
+// (e.g. a tick before genesis).
 func (ct *chainTicker) GetEndBlock(tick uint64) (*nom.Momentum, error) {
 	if tick > (1<<62)-1 {
 		panic("most probably an overflow error")

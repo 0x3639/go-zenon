@@ -8,9 +8,10 @@
 // elected pillar through a weighted shuffle of the registered pillar
 // set. consensus owns:
 //
-//   - The tick scheduler ([consensus.work]) running in a background
-//     goroutine that broadcasts a [ProducerEvent] at every elected
-//     pillar's start time.
+//   - The tick scheduler — an unexported `work` loop on the
+//     [consensus] type — runs in a background goroutine started by
+//     [Consensus.Start] and broadcasts a [ProducerEvent] at every
+//     elected pillar's start time.
 //   - The election manager ([electionManager], [electionAlgorithm])
 //     that resolves any tick to its producer slate. Results are cached
 //     keyed by the proof block's hash so reorgs invalidate them

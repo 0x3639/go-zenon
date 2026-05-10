@@ -51,10 +51,9 @@ func NewElectionAlgorithm(group *Context) *electionAlgorithm {
 
 // findSeed produces the deterministic random seed used by every
 // algorithm step for a given context. The seed depends solely on the
-// proof-block height so all honest nodes derive the same shuffle.
-//
-// Generates a deterministic seed based on the context. Formula
-// depends on seed, weights and momentumHeight.
+// proof-block height (context.hashH.Height) so all honest nodes derive
+// the same shuffle. Weights and other context fields are deliberately
+// not mixed in — that would let a producer influence its own draw.
 func (ea *electionAlgorithm) findSeed(context *AlgorithmConfig) int64 {
 	return int64(context.hashH.Height)
 }
@@ -125,7 +124,7 @@ func (ea *electionAlgorithm) filterRandom(groupA, groupB []*types.PillarDelegati
 	sort.Sort(types.SortPDByWeight(groupB))
 
 	seed := ea.findSeed(context)
-	// Number of active pillars is lower that the number of nodes in the consensus group.
+	// Number of active pillars is lower than the number of nodes in the consensus group.
 	// Fill up result as many times as needed so there are no empty spots.
 	if total != len(groupA) {
 		for len(result) < total {
@@ -146,7 +145,7 @@ func (ea *electionAlgorithm) filterRandom(groupA, groupB []*types.PillarDelegati
 		result = append(result, groupA[topIndex[index]])
 	}
 
-	// Insert unselected pillars in groupB for a second chx at becoming pillars.
+	// Insert unselected pillars in groupB for a second chance at becoming pillars.
 	for index := topTotal; index < total; index += 1 {
 		groupB = append(groupB, groupA[topIndex[index]])
 	}

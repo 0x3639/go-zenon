@@ -13,9 +13,13 @@ import (
 // Points is the per-pillar performance subsystem. It tracks two
 // granularities — period (one election cycle) and epoch (24h by
 // default) — and pre-computes both as new momentums arrive so RPC
-// callers see hot data.
+// callers can read pre-computed values rather than re-aggregating on
+// demand.
 type Points interface {
-	// MomentumEventListener is used to precompute points as momentums come, so API calls have hot data
+	// MomentumEventListener is embedded so the implementation receives
+	// per-momentum callbacks; the InsertMomentum hook advances the
+	// pre-compute frontier so subsequent RPC reads hit pre-computed
+	// values instead of triggering a synchronous aggregate.
 	chain.MomentumEventListener
 	// GetPeriodPoints returns the per-period reader.
 	GetPeriodPoints() PointsReader

@@ -8,9 +8,10 @@ import (
 // [EventListener]s that the consensus tick scheduler broadcasts
 // [ProducerEvent]s to.
 //
-// Concurrency: every public method takes changes; the manager is safe
-// for concurrent use. Listener callbacks run synchronously on the
-// scheduler's goroutine — heavy work should be deferred.
+// Concurrency: every public method acquires the `changes` mutex; the
+// manager is safe for concurrent use. Listener callbacks run
+// synchronously on the scheduler's goroutine — heavy work should be
+// deferred.
 type eventManager struct {
 	listeners []EventListener
 	changes   sync.Mutex
