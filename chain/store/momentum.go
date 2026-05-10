@@ -99,8 +99,9 @@ type Momentum interface {
 	GetTokenInfoByTs(ts types.ZenonTokenStandard) (*definition.TokenInfo, error)
 	// ComputePillarDelegations re-derives every pillar's aggregated
 	// delegation weight (and the per-backer breakdown) from the current
-	// stake and vote records. Used by the consensus layer when
-	// constructing election snapshots.
+	// pillar registrations + delegation records (NOT stake or vote
+	// records). Used by the consensus layer when constructing election
+	// snapshots.
 	ComputePillarDelegations() ([]*types.PillarDelegationDetail, error)
 
 	// GetAccountStore returns the [Account] view for address pinned at

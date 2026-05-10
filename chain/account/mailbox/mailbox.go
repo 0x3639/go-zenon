@@ -154,8 +154,14 @@ func (m *mailbox) GetUnreceivedAccountBlockHashes(atMost uint64) ([]types.Hash, 
 	return list, nil
 }
 
-// SequencerSize returns the running total of sends pushed onto the
-// sequencer queue since the mailbox was created.
+// SequencerSize returns the persistent monotonic counter of sends ever
+// pushed onto the sequencer queue. The counter is keyed by
+// [sequencerNumInsertedKey] and survives node restarts; it is never
+// decremented (consumption is tracked separately via the
+// [accountStore]'s sequencer cursor in chain/account/sequencer.go).
+// Therefore this is NOT the current pending depth — it grows
+// unboundedly with the number of receives this address has ever
+// queued.
 func (m *mailbox) SequencerSize() uint64 {
 	data, err := m.DB.Get(sequencerNumInsertedKey)
 	if err == leveldb.ErrNotFound {

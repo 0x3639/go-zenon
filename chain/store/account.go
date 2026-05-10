@@ -109,7 +109,11 @@ type AccountMailbox interface {
 	// of pending sends) and is called when a new send to this address is
 	// confirmed.
 	SequencerPushBack(types.AccountHeader)
-	// SequencerSize returns the number of pending sends in the queue.
+	// SequencerSize returns the persistent monotonic counter of sends
+	// ever pushed onto this mailbox's sequencer queue. NOT the current
+	// pending depth: the counter is never decremented when an entry is
+	// consumed; consumption is tracked separately via the [Account]
+	// sequencer cursor.
 	SequencerSize() uint64
 	// SequencerByHeight returns the queued send at position height (1-based),
 	// or nil if it is out of range.

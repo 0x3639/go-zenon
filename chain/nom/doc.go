@@ -72,8 +72,11 @@
 //   - For any [AccountBlock], the stored Hash equals
 //     [AccountBlock.ComputeHash].
 //   - For any [Momentum], the stored Hash equals [Momentum.ComputeHash].
-//   - Every send eventually has exactly one matching receive
-//     (cross-chain invariant; enforced by the verifier and chain).
+//   - Every non-genesis send eventually has exactly one matching
+//     receive (cross-chain invariant; enforced by the verifier and
+//     chain). [BlockTypeGenesisReceive] blocks have no matching send —
+//     they bootstrap the per-address chains at height 1 with the
+//     genesis-configured balances and have no FromBlockHash.
 //   - [MomentumContent] is sorted by canonical header bytes so producers
 //     building from the same account-block set agree on the same content
 //     hash.

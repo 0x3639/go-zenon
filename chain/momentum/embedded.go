@@ -68,9 +68,10 @@ func (ms *momentumStore) computeBackers(infos []*definition.DelegationInfo) (*ma
 
 // ComputePillarDelegations re-derives every pillar's aggregated
 // delegation weight (and the per-backer breakdown) from the current
-// stake and vote records. Sorted by descending weight per
-// [types.SortPDDByWeight] so consumers see the most influential pillars
-// first.
+// pillar registrations + delegation records (NOT stake or vote records
+// — those are separate embedded-contract storage namespaces). Sorted
+// by descending weight per [types.SortPDDByWeight] so consumers see
+// the most influential pillars first.
 //
 // Used by the consensus layer when constructing election snapshots.
 func (ms *momentumStore) ComputePillarDelegations() ([]*types.PillarDelegationDetail, error) {

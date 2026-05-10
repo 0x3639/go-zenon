@@ -157,7 +157,10 @@ func GotAllActiveSporksImplemented(store store.Momentum) (justNow *definition.Sp
 		return nil, nil, err
 	}
 
-	// Query previous momentum for DB, since this function can be called from verifier when inserting a new momentum
+	// Read defined sporks from the supplied store (which the caller may
+	// have pinned to a previous momentum because this function can be
+	// invoked from the verifier while inserting a new momentum, before
+	// the new frontier is committed).
 	sporks, err := store.GetAllDefinedSporks()
 	if err != nil {
 		return nil, nil, err
