@@ -4,9 +4,13 @@
 //
 // # Overview
 //
-// Verification runs in two phases per block kind so that the cheap,
-// stateless checks can fail fast before the verifier reaches into the
-// stores. The same split applies to both account blocks and momentums:
+// Verification runs in two passes per block kind so that consensus-rule
+// checks can run independently of the (Hash, Signature, Producer)
+// authentication triplet. Both passes resolve their store views upfront
+// through [accountVerifier.getContext] / [momentumVerifier.getContext];
+// the split is between *rule* checks and *transactional* (authentication
+// + descendant) checks, not between stateless and stateful work. The
+// same split applies to account blocks and momentums:
 //
 //   - Block-as-payload pass — version, type, amounts, previous-block
 //     linkage, momentum-acknowledged consistency, send/receive matching,
@@ -22,12 +26,17 @@
 //
 // # Key Concepts
 //
-//   - Stateless checks — those that depend only on the block payload
-//     (e.g., hash, signature, version). Cheap; run first.
-//   - Stateful checks — those that depend on the surrounding ledger
-//     state (e.g., previous-block linkage, send/receive matching, the
-//     embedded-contract sequencer). Resolved through stores returned by
-//     [chain.Chain.GetMomentumStore] / [chain.Chain.GetAccountStore].
+//   - Rule checks — payload-level validation (version, type, amounts,
+//     PoW) plus ledger-coupled checks (previous-block linkage,
+//     send/receive matching, the embedded-contract sequencer). Run by
+//     the first pass. Ledger lookups go through stores returned by
+//     [chain.Chain.GetMomentumStore] / [chain.Chain.GetAccountStore],
+//     resolved once by getContext.
+//   - Transactional checks — canonical hash recomputation, Ed25519
+//     signature verification, producer-address derivation, and
+//     descendant-block validation. Run by the second pass. Embedded
+//     contracts skip the signature/producer steps (their authority is
+//     the contract dispatch path, not a key).
 //   - Sequencer — the rule that embedded-contract receives must consume
 //     from the head of their address mailbox in order. User accounts are
 //     not subject to this — they may receive any pending send.
