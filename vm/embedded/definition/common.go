@@ -235,7 +235,7 @@ func parseRewardDeposit(key []byte, data []byte) (*RewardDeposit, error) {
 }
 
 // GetRewardDeposit returns uncollected ZNN & QSR reward.
-// does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
+// does not return constants.ErrDataNonExistent; returns a valid deposit with 0 amount instead.
 func GetRewardDeposit(context db.DB, address *types.Address) (*RewardDeposit, error) {
 	key := getRewardDepositKey(address)
 	if data, err := context.Get(key); err != nil {
@@ -361,7 +361,7 @@ func parseQsrDeposit(key []byte, data []byte) (*QsrDeposit, error) {
 }
 
 // GetQsrDeposit returns deposited QSR for sentinel/pillar.
-// does not return util.ErrDataNonExistent, returns valid deposit with 0 amount.
+// does not return constants.ErrDataNonExistent; returns a valid deposit with 0 amount instead.
 func GetQsrDeposit(context db.DB, address *types.Address) (*QsrDeposit, error) {
 	key := getQsrDepositKey(address)
 	if data, err := context.Get(key); err != nil {
@@ -534,7 +534,10 @@ func parsePillarVote(data []byte) (*PillarVote, error) {
 	}
 }
 
-// GetAllPillarVotes loads the AllPillarVotes record from storage.
+// GetAllPillarVotes iterates the entire pillar-vote prefix range and
+// returns every [PillarVote] whose Id matches id. Decode failures on
+// individual entries are skipped; iterator errors are panicked via
+// [common.DealWithErr].
 func GetAllPillarVotes(context db.DB, id types.Hash) []*PillarVote {
 	iterator := context.NewIterator(pillarVoteKeyPrefix)
 	defer iterator.Release()
@@ -638,7 +641,10 @@ type VoteBreakdown struct {
 	No    uint32     `json:"no"`
 }
 
-// GetVoteBreakdown loads the VoteBreakdown record from storage.
+// GetVoteBreakdown aggregates [GetAllPillarVotes] for id into a
+// [VoteBreakdown] with Total / Yes / No tallies. There is no
+// stored breakdown record — counts are recomputed from per-vote
+// entries on every call.
 func GetVoteBreakdown(context db.DB, id types.Hash) *VoteBreakdown {
 	votes := GetAllPillarVotes(context, id)
 	voteBreakdown := &VoteBreakdown{

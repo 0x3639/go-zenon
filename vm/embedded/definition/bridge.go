@@ -303,9 +303,11 @@ const (
 // ABIBridge is the parsed [abi.ABIContract] for the Bridge
 // contract. Per-prefix key namespaces:
 // 1=wrapTokenRequest, 2=unwrapTokenRequest, 3=bridgeInfo
-// (singleton), 4=orchestratorInfo, 5=networkInfo, 6=tokenPair
-// (per network × token), 7=feeTokenPair (per token fee
-// accumulator).
+// (singleton), 4=orchestratorInfo, 5=networkInfo,
+// 6=requestPair (id → creation-height secondary index for wrap
+// requests), 7=feeTokenPair (per-token fee accumulator). TokenPair
+// records are not stored under their own prefix — they live as
+// byte-encoded entries inside [NetworkInfoVariable.TokenPairs].
 //
 // Network class discriminators distinguish remote-network families:
 // [NoMClass] for sister NoM networks, [EvmClass] for
@@ -362,7 +364,6 @@ type BridgeInfoVariable struct {
 	Metadata string `json:"metadata"`
 }
 
-// Save persists the receiver under its keyed slot in storage.
 // Save serialises b under [BridgeInfoKeyPrefix] in the bridge
 // contract's storage.
 func (b *BridgeInfoVariable) Save(context db.DB) error {
@@ -404,7 +405,6 @@ func parseBridgeInfoVariable(data []byte) (*BridgeInfoVariable, error) {
 			TssNonce:                   0,
 			Metadata:                   "{}",
 		}, nil
-		// GetBridgeInfoVariable loads the BridgeInfoVariable record from storage.
 	}
 }
 
@@ -461,9 +461,8 @@ type TokenPairMarshall struct {
 	Owned         bool                     `json:"owned"`
 	MinAmount     string                   `json:"minAmount"`
 	FeePercentage uint32                   `json:"feePercentage"`
-	// ToMarshalJson projects the receiver to its JSON wire form.
-	RedeemDelay uint32 `json:"redeemDelay"`
-	Metadata    string `json:"metadata"`
+	RedeemDelay   uint32                   `json:"redeemDelay"`
+	Metadata      string                   `json:"metadata"`
 }
 
 // ToMarshalJson projects t to its JSON-friendly Marshall twin
@@ -477,12 +476,10 @@ func (t *TokenPair) ToMarshalJson() *TokenPairMarshall {
 		Owned:         t.Owned,
 		MinAmount:     t.MinAmount.String(),
 		FeePercentage: t.FeePercentage,
-		// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
-		RedeemDelay: t.RedeemDelay,
-		Metadata:    t.Metadata,
+		RedeemDelay:   t.RedeemDelay,
+		Metadata:      t.Metadata,
 	}
 	return aux
-	// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 }
 
 // MarshalJSON forwards through [TokenPair.ToMarshalJson] so the
@@ -501,7 +498,6 @@ func (t *TokenPair) UnmarshalJSON(data []byte) error {
 	t.TokenStandard = aux.TokenStandard
 	t.TokenAddress = aux.TokenAddress
 	t.Bridgeable = aux.Bridgeable
-	// NetworkInfo is part of the package's public API; see the surrounding code for usage.
 	t.Redeemable = aux.Redeemable
 	t.Owned = aux.Owned
 	t.MinAmount = common.StringToBigInt(aux.MinAmount)
@@ -512,20 +508,16 @@ func (t *TokenPair) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ZtsFeesInfo is part of the package's public API; see the surrounding code for usage.
-
 // NetworkInfo is the inflated form of [NetworkInfoVariable] with
 // TokenPairs decoded into structured records — the shape returned
 // to RPC callers.
 type NetworkInfo struct {
-	// ZtsFeesInfoMarshal is part of the package's public API; see the surrounding code for usage.
-	NetworkClass    uint32 `json:"networkClass"`
-	Id              uint32 `json:"chainId"`
-	Name            string `json:"name"`
-	ContractAddress string `json:"contractAddress"`
-	Metadata        string `json:"metadata"`
-	// ToZtsFeesInfoMarshal projects the receiver to its JSON-friendly ZtsFeesInfoMarshal twin.
-	TokenPairs []TokenPair `json:"tokenPairs"`
+	NetworkClass    uint32      `json:"networkClass"`
+	Id              uint32      `json:"chainId"`
+	Name            string      `json:"name"`
+	ContractAddress string      `json:"contractAddress"`
+	Metadata        string      `json:"metadata"`
+	TokenPairs      []TokenPair `json:"tokenPairs"`
 }
 
 // ZtsFeesInfo tracks accumulated bridge fees per token standard.
@@ -534,12 +526,9 @@ type ZtsFeesInfo struct {
 	AccumulatedFee *big.Int                 `json:"accumulatedFee"`
 }
 
-// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
-
 // ZtsFeesInfoMarshal is the JSON-friendly twin of [ZtsFeesInfo]
 // (decimal-string AccumulatedFee).
 type ZtsFeesInfoMarshal struct {
-	// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 	TokenStandard  types.ZenonTokenStandard `json:"tokenStandard"`
 	AccumulatedFee string                   `json:"accumulatedFee"`
 }
@@ -550,7 +539,6 @@ func (zfi *ZtsFeesInfo) ToZtsFeesInfoMarshal() *ZtsFeesInfoMarshal {
 		TokenStandard:  zfi.TokenStandard,
 		AccumulatedFee: zfi.AccumulatedFee.String(),
 	}
-	// Save persists the receiver under its keyed slot in storage.
 	return aux
 }
 
@@ -562,11 +550,9 @@ func (zfi *ZtsFeesInfo) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON inflates the wire form back into native big.Int.
 func (zfi *ZtsFeesInfo) UnmarshalJSON(data []byte) error {
 	aux := new(ZtsFeesInfoMarshal)
-	// Key returns the storage key for the receiver.
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
 	}
-	// Delete removes the receiver's record from storage.
 	zfi.TokenStandard = aux.TokenStandard
 	zfi.AccumulatedFee = common.StringToBigInt(aux.AccumulatedFee)
 	return nil
@@ -590,7 +576,6 @@ func (zfi *ZtsFeesInfo) Key() ([]byte, error) {
 	return common.JoinBytes(FeeTokenPairKeyPrefix, zfi.TokenStandard.Bytes()), nil
 }
 
-// Delete removes the receiver's record from storage.
 // Delete removes zfi's record from storage.
 func (zfi *ZtsFeesInfo) Delete(context db.DB) error {
 	key, err := zfi.Key()
@@ -611,7 +596,6 @@ func parseZtsFeesInfoVariable(key []byte, data []byte) (*ZtsFeesInfo, error) {
 
 		return feeTokenPair, nil
 	} else {
-		// GetNetworkInfoKey loads the NetworkInfoKey record from storage.
 		return nil, constants.ErrDataNonExistent
 	}
 }
@@ -622,7 +606,6 @@ func GetZtsFeesInfoVariable(context db.DB, tokenStandard types.ZenonTokenStandar
 	feeTokenPair := &ZtsFeesInfo{
 		TokenStandard: tokenStandard,
 	}
-	// Save persists the receiver under its keyed slot in storage.
 	key, err := feeTokenPair.Key()
 	if err != nil {
 		return nil, err
@@ -650,7 +633,6 @@ func GetNetworkInfoKey(networkClass uint32, chainId uint32) []byte {
 	return common.JoinBytes(NetworkInfoKeyPrefix, networkIdBytes, chainIdBytes)
 }
 
-// Save persists the receiver under its keyed slot in storage.
 // Save persists nI under its (NetworkClass, Id) keyed slot.
 func (nI *NetworkInfoVariable) Save(context db.DB) error {
 	data, err := ABIBridge.PackVariable(
@@ -685,7 +667,6 @@ func (nI *NetworkInfoVariable) Key() []byte {
 
 // Delete removes nI's record from storage.
 func (nI *NetworkInfoVariable) Delete(context db.DB) error {
-	// EncodeNetworkInfo serialises the input to the package's wire encoding.
 	return context.Delete(nI.Key())
 }
 
@@ -704,8 +685,7 @@ func parseNetworkInfoVariable(data []byte) (*NetworkInfo, error) {
 			tokenPairs = append(tokenPairs, *tokenPair)
 		}
 		networkInfo := &NetworkInfo{
-			NetworkClass: networkInfoVariable.NetworkClass,
-			// GetNetworkInfoVariable loads the NetworkInfoVariable record from storage.
+			NetworkClass:    networkInfoVariable.NetworkClass,
 			Id:              networkInfoVariable.Id,
 			Name:            networkInfoVariable.Name,
 			ContractAddress: networkInfoVariable.ContractAddress,
@@ -717,7 +697,6 @@ func parseNetworkInfoVariable(data []byte) (*NetworkInfo, error) {
 	} else {
 		return nil, constants.ErrDataNonExistent
 	}
-	// GetNetworkList loads the NetworkList record from storage.
 }
 
 // EncodeNetworkInfo packs networkInfo's TokenPairs slice back into
@@ -739,7 +718,6 @@ func EncodeNetworkInfo(networkInfo *NetworkInfo) (*NetworkInfoVariable, error) {
 		}
 	}
 	networkInfoVariable.TokenPairs = tokenPairs
-	// GetTokenPairVariable loads the TokenPairVariable record from storage.
 	return networkInfoVariable, nil
 }
 
@@ -754,7 +732,6 @@ func GetNetworkInfoVariable(context db.DB, networkClass uint32, chainId uint32) 
 		if err == constants.ErrDataNonExistent {
 			return &NetworkInfo{NetworkClass: 0, Id: 0, Name: "", ContractAddress: "", Metadata: "{}"}, nil
 		}
-		// RequestPair is part of the package's public API; see the surrounding code for usage.
 		return upd, err
 	}
 }
@@ -770,7 +747,6 @@ func GetNetworkList(context db.DB) ([]*NetworkInfo, error) {
 	for {
 		if !iterator.Next() {
 			common.DealWithErr(iterator.Error())
-			// Key returns the storage key for the receiver.
 			break
 		}
 		networkInfo, err := parseNetworkInfoVariable(iterator.Value())
@@ -791,7 +767,6 @@ func GetTokenPairVariable(context db.DB, networkClass uint32, chainId uint32, zt
 	if err != nil {
 		return nil, err
 	}
-	// GetRequestPairById loads the RequestPairById record from storage.
 	for _, tokenPair := range networkInfo.TokenPairs {
 		if reflect.DeepEqual(tokenPair.TokenStandard.Bytes(), zts.Bytes()) {
 			return &tokenPair, nil
@@ -814,7 +789,6 @@ func (pair *RequestPair) Save(context db.DB) error {
 		requestPairVariableName,
 		pair.CreationMomentumHeight)
 	if err != nil {
-		// Save persists the receiver under its keyed slot in storage.
 		return err
 	}
 	return context.Put(getRequestPairKey(pair.Id), data)
@@ -842,7 +816,6 @@ func parseRequestPair(data, key []byte) (*RequestPair, error) {
 	}
 }
 
-// GetRequestPairById loads the RequestPairById record from storage.
 // GetRequestPairById loads the RequestPair record for Id, or
 // [constants.ErrDataNonExistent] if no such request was ever
 // recorded.
@@ -863,10 +836,9 @@ type WrapTokenRequest struct {
 	NetworkClass  uint32                   `json:"networkClass"`
 	ChainId       uint32                   `json:"chainId"`
 	Id            types.Hash               `json:"id"`
-	ToAddress     string                   `json:"toAddress"`
-	TokenStandard types.ZenonTokenStandard `json:"tokenStandard"`
-	// GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
-	TokenAddress           string   `json:"tokenAddress"`
+	ToAddress              string                   `json:"toAddress"`
+	TokenStandard          types.ZenonTokenStandard `json:"tokenStandard"`
+	TokenAddress           string                   `json:"tokenAddress"`
 	Amount                 *big.Int `json:"amount"`
 	Fee                    *big.Int `json:"fee"`
 	Signature              string   `json:"signature"`
@@ -879,7 +851,6 @@ func (wrapRequest *WrapTokenRequest) Save(context db.DB) error {
 	data, err := ABIBridge.PackVariable(
 		wrapRequestVariableName,
 		wrapRequest.NetworkClass,
-		// GetWrapTokenRequests loads the WrapTokenRequests record from storage.
 		wrapRequest.ChainId,
 		wrapRequest.ToAddress,
 		wrapRequest.TokenStandard,
@@ -916,7 +887,6 @@ func parseWrapTokenRequest(data, key []byte) (*WrapTokenRequest, error) {
 	if len(data) > 0 {
 		dataVar := new(WrapTokenRequest)
 		if err := ABIBridge.UnpackVariable(dataVar, wrapRequestVariableName, data); err != nil {
-			// ToMarshalJson projects the receiver to its JSON wire form.
 			return nil, err
 		}
 		if err := dataVar.Id.SetBytes(key[20:]); err != nil {
@@ -932,12 +902,10 @@ func parseWrapTokenRequest(data, key []byte) (*WrapTokenRequest, error) {
 // index and returns the corresponding [WrapTokenRequest].
 func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, error) {
 	pair, err := GetRequestPairById(context, Id)
-	// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 	if err != nil {
 		return nil, err
 	}
 	key := getWrapTokenRequestKey(pair.CreationMomentumHeight, pair.Id)
-	// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 	if data, err := context.Get(key); err != nil {
 		return nil, err
 	} else {
@@ -945,7 +913,10 @@ func GetWrapTokenRequestById(context db.DB, Id types.Hash) (*WrapTokenRequest, e
 	}
 }
 
-// GetWrapTokenRequests loads the WrapTokenRequests record from storage.
+// GetWrapTokenRequests iterates the [wrapTokenRequestKeyPrefix]
+// range and returns every recorded outbound wrap request. Decode
+// failures abort the iteration with the underlying error. The
+// MaxInt64-height key encoding produces newest-first ordering.
 func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error) {
 	iterator := context.NewIterator(wrapTokenRequestKeyPrefix)
 	defer iterator.Release()
@@ -958,7 +929,6 @@ func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error) {
 			}
 			break
 		}
-		// UnwrapTokenRequest is part of the package's public API; see the surrounding code for usage.
 		if info, err := parseWrapTokenRequest(iterator.Value(), iterator.Key()); err == nil && info != nil {
 			list = append(list, info)
 		} else {
@@ -973,9 +943,8 @@ func GetWrapTokenRequests(context db.DB) ([]*WrapTokenRequest, error) {
 type WrapTokenRequestMarshal struct {
 	NetworkClass uint32     `json:"networkClass"`
 	ChainId      uint32     `json:"chainId"`
-	Id           types.Hash `json:"id"`
-	ToAddress    string     `json:"toAddress"`
-	// Save persists the receiver under its keyed slot in storage.
+	Id                     types.Hash               `json:"id"`
+	ToAddress              string                   `json:"toAddress"`
 	TokenStandard          types.ZenonTokenStandard `json:"tokenStandard"`
 	TokenAddress           string                   `json:"tokenAddress"`
 	Amount                 string                   `json:"amount"`
@@ -993,13 +962,11 @@ func (wrapRequest *WrapTokenRequest) ToMarshalJson() *WrapTokenRequestMarshal {
 		ToAddress:     wrapRequest.ToAddress,
 		TokenStandard: wrapRequest.TokenStandard,
 		TokenAddress:  wrapRequest.TokenAddress,
-		Amount:        wrapRequest.Amount.String(),
-		Fee:           wrapRequest.Fee.String(),
-		// Key returns the storage key for the receiver.
+		Amount:                 wrapRequest.Amount.String(),
+		Fee:                    wrapRequest.Fee.String(),
 		Signature:              wrapRequest.Signature,
 		CreationMomentumHeight: wrapRequest.CreationMomentumHeight,
 	}
-	// Delete removes the receiver's record from storage.
 	return aux
 }
 
@@ -1028,9 +995,14 @@ func (wrapRequest *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UnwrapTokenRequest is part of the package's public API; see the surrounding code for usage.
+// UnwrapTokenRequest is the on-chain record of an inbound bridge
+// transfer (remote chain → Zenon). Indexed by (TransactionHash,
+// LogIndex) so the same remote burn cannot be claimed twice.
+// Redeemed / Revoked are uint8 booleans tracking lifecycle: a
+// pending request is redeemed via [RedeemUnwrapMethodName] after
+// the per-pair redeem delay or revoked by the administrator via
+// [RevokeUnwrapRequestMethodName].
 type UnwrapTokenRequest struct {
-	// GetUnwrapTokenRequestByTxHashAndLog loads the UnwrapTokenRequestByTxHashAndLog record from storage.
 	RegistrationMomentumHeight uint64                   `json:"registrationMomentumHeight"`
 	NetworkClass               uint32                   `json:"networkClass"`
 	ChainId                    uint32                   `json:"chainId"`
@@ -1040,10 +1012,9 @@ type UnwrapTokenRequest struct {
 	TokenAddress               string                   `json:"tokenAddress"`
 	TokenStandard              types.ZenonTokenStandard `json:"tokenStandard"`
 	Amount                     *big.Int                 `json:"amount"`
-	// GetUnwrapTokenRequests loads the UnwrapTokenRequests record from storage.
-	Signature string `json:"signature"`
-	Redeemed  uint8  `json:"redeemed"`
-	Revoked   uint8  `json:"revoked"`
+	Signature                  string                   `json:"signature"`
+	Redeemed                   uint8                    `json:"redeemed"`
+	Revoked                    uint8                    `json:"revoked"`
 }
 
 // Save persists the receiver under its keyed slot in storage.
@@ -1064,7 +1035,6 @@ func (unwrapRequest *UnwrapTokenRequest) Save(context db.DB) error {
 		return err
 	}
 	return context.Put(unwrapRequest.Key(), data)
-	// UnwrapTokenRequestMarshal is part of the package's public API; see the surrounding code for usage.
 }
 
 // Key returns the storage key for the receiver.
@@ -1084,7 +1054,6 @@ func getUnwrapTokenRequestKey(transactionHash types.Hash, logIndex uint32) []byt
 }
 
 func parseUnwrapTokenRequest(data, key []byte) (*UnwrapTokenRequest, error) {
-	// ToMarshalJson projects the receiver to its JSON wire form.
 	if len(data) > 0 {
 		dataVar := new(UnwrapTokenRequest)
 		if err := ABIBridge.UnpackVariable(dataVar, unwrapRequestVariableName, data); err != nil {
@@ -1100,19 +1069,22 @@ func parseUnwrapTokenRequest(data, key []byte) (*UnwrapTokenRequest, error) {
 	}
 }
 
-// GetUnwrapTokenRequestByTxHashAndLog loads the UnwrapTokenRequestByTxHashAndLog record from storage.
+// GetUnwrapTokenRequestByTxHashAndLog returns the
+// [UnwrapTokenRequest] keyed by (txHash, logIndex), or
+// [constants.ErrDataNonExistent] if no such request was recorded.
 func GetUnwrapTokenRequestByTxHashAndLog(context db.DB, txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error) {
 	key := getUnwrapTokenRequestKey(txHash, logIndex)
 	if data, err := context.Get(key); err != nil {
-		// MarshalJSON forwards through the Marshal twin so big.Int fields render as decimal strings.
 		return nil, err
 	} else {
 		return parseUnwrapTokenRequest(data, key)
 	}
-	// UnmarshalJSON inflates the JSON wire form back into the in-memory receiver.
 }
 
-// GetUnwrapTokenRequests loads the UnwrapTokenRequests record from storage.
+// GetUnwrapTokenRequests iterates the
+// [unwrapTokenRequestKeyPrefix] range and returns every recorded
+// inbound unwrap request. Decode failures abort the iteration with
+// the underlying error.
 func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error) {
 	iterator := context.NewIterator(unwrapTokenRequestKeyPrefix)
 	defer iterator.Release()
@@ -1132,31 +1104,28 @@ func GetUnwrapTokenRequests(context db.DB) ([]*UnwrapTokenRequest, error) {
 		}
 	}
 
-	// OrchestratorInfoParam is part of the package's public API; see the surrounding code for usage.
 	return list, nil
 }
 
 // UnwrapTokenRequestMarshal is the JSON-friendly twin of the corresponding in-memory type.
 type UnwrapTokenRequestMarshal struct {
-	RegistrationMomentumHeight uint64 `json:"registrationMomentumHeight"`
-	NetworkClass               uint32 `json:"networkClass"`
-	ChainId                    uint32 `json:"chainId"`
-	// OrchestratorInfo is part of the package's public API; see the surrounding code for usage.
-	TransactionHash types.Hash               `json:"transactionHash"`
-	LogIndex        uint32                   `json:"logIndex"`
-	ToAddress       types.Address            `json:"toAddress"`
-	TokenAddress    string                   `json:"tokenAddress"`
-	TokenStandard   types.ZenonTokenStandard `json:"tokenStandard"`
-	Amount          string                   `json:"amount"`
-	Signature       string                   `json:"signature"`
-	Redeemed        uint8                    `json:"redeemed"`
-	Revoked         uint8                    `json:"revoked"`
+	RegistrationMomentumHeight uint64                   `json:"registrationMomentumHeight"`
+	NetworkClass               uint32                   `json:"networkClass"`
+	ChainId                    uint32                   `json:"chainId"`
+	TransactionHash            types.Hash               `json:"transactionHash"`
+	LogIndex                   uint32                   `json:"logIndex"`
+	ToAddress                  types.Address            `json:"toAddress"`
+	TokenAddress               string                   `json:"tokenAddress"`
+	TokenStandard              types.ZenonTokenStandard `json:"tokenStandard"`
+	Amount                     string                   `json:"amount"`
+	Signature                  string                   `json:"signature"`
+	Redeemed                   uint8                    `json:"redeemed"`
+	Revoked                    uint8                    `json:"revoked"`
 }
 
 // ToMarshalJson projects the receiver to its JSON wire form.
 func (unwrapRequest *UnwrapTokenRequest) ToMarshalJson() *UnwrapTokenRequestMarshal {
 	aux := &UnwrapTokenRequestMarshal{
-		// Save persists the receiver under its keyed slot in storage.
 		RegistrationMomentumHeight: unwrapRequest.RegistrationMomentumHeight,
 		NetworkClass:               unwrapRequest.NetworkClass,
 		ChainId:                    unwrapRequest.ChainId,
@@ -1187,7 +1156,6 @@ func (unwrapRequest *UnwrapTokenRequest) UnmarshalJSON(data []byte) error {
 
 	unwrapRequest.RegistrationMomentumHeight = aux.RegistrationMomentumHeight
 	unwrapRequest.NetworkClass = aux.NetworkClass
-	// GetOrchestratorInfoVariable loads the OrchestratorInfoVariable record from storage.
 	unwrapRequest.ChainId = aux.ChainId
 	unwrapRequest.TransactionHash = aux.TransactionHash
 	unwrapRequest.LogIndex = aux.LogIndex
@@ -1206,8 +1174,7 @@ type OrchestratorInfoParam struct {
 	WindowSize              uint64
 	KeyGenThreshold         uint32
 	ConfirmationsToFinality uint32
-	// Key returns the storage key for the receiver.
-	EstimatedMomentumTime uint32
+	EstimatedMomentumTime   uint32
 }
 
 // OrchestratorInfo captures the corresponding contract state.
@@ -1227,7 +1194,6 @@ type OrchestratorInfo struct {
 // Save persists the receiver under its keyed slot in storage.
 func (oI *OrchestratorInfo) Save(context db.DB) error {
 	data, err := ABIBridge.PackVariable(
-		// UnwrapTokenParam is part of the package's public API; see the surrounding code for usage.
 		orchestratorInfoVariableName,
 		oI.WindowSize,
 		oI.KeyGenThreshold,
@@ -1239,26 +1205,25 @@ func (oI *OrchestratorInfo) Save(context db.DB) error {
 		return err
 	}
 	return context.Put(
-		// RevokeUnwrapParam is part of the package's public API; see the surrounding code for usage.
 		oI.Key(),
 		data,
 	)
 }
 func parseOrchestratorInfoVariable(data []byte) (*OrchestratorInfo, error) {
-	// RedeemParam is part of the package's public API; see the surrounding code for usage.
 	if len(data) > 0 {
 		orchestratorInfo := new(OrchestratorInfo)
 		if err := ABIBridge.UnpackVariable(orchestratorInfo, orchestratorInfoVariableName, data); err != nil {
 			return nil, err
 		}
-		// TokenPairParam is part of the package's public API; see the surrounding code for usage.
 		return orchestratorInfo, nil
 	} else {
 		return nil, constants.ErrDataNonExistent
 	}
 }
 
-// GetOrchestratorInfoVariable loads the OrchestratorInfoVariable record from storage.
+// GetOrchestratorInfoVariable loads the singleton [OrchestratorInfo]
+// record stored under [OrchestratorInfoKeyPrefix], returning a
+// zero-valued [OrchestratorInfo] when no record exists.
 func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error) {
 	if data, err := context.Get(OrchestratorInfoKeyPrefix); err != nil {
 		return nil, err
@@ -1266,9 +1231,8 @@ func GetOrchestratorInfoVariable(context db.DB) (*OrchestratorInfo, error) {
 		upd, err := parseOrchestratorInfoVariable(data)
 		if err == constants.ErrDataNonExistent {
 			return &OrchestratorInfo{
-				WindowSize:      0,
-				KeyGenThreshold: 0,
-				// Hash returns the canonical hash of the receiver.
+				WindowSize:              0,
+				KeyGenThreshold:         0,
 				ConfirmationsToFinality: 0,
 				EstimatedMomentumTime:   0,
 				AllowKeyGenHeight:       0,
@@ -1303,9 +1267,8 @@ type UpdateWrapRequestParam struct {
 
 // UnwrapTokenParam carries the call parameters for the corresponding embedded-contract method.
 type UnwrapTokenParam struct {
-	NetworkClass uint32
-	ChainId      uint32
-	// SetTokenPairParam updates the TokenPairParam state on the receiver.
+	NetworkClass    uint32
+	ChainId         uint32
 	TransactionHash types.Hash
 	LogIndex        uint32
 	ToAddress       types.Address
@@ -1318,7 +1281,6 @@ type UnwrapTokenParam struct {
 type RevokeUnwrapParam struct {
 	TransactionHash types.Hash
 	LogIndex        uint32
-	// NetworkInfoParam is part of the package's public API; see the surrounding code for usage.
 }
 
 // RedeemParam carries the call parameters for the corresponding embedded-contract method.
@@ -1329,14 +1291,12 @@ type RedeemParam struct {
 
 // TokenPairParam carries the call parameters for the corresponding embedded-contract method.
 type TokenPairParam struct {
-	// SetNetworkMetadataParam updates the NetworkMetadataParam state on the receiver.
 	NetworkClass  uint32
 	ChainId       uint32
 	TokenStandard types.ZenonTokenStandard
 	TokenAddress  string
 	Bridgeable    bool
 	Redeemable    bool
-	// ChangeECDSAPubKeyParam is part of the package's public API; see the surrounding code for usage.
 	Owned         bool
 	MinAmount     *big.Int
 	FeePercentage uint32
@@ -1374,7 +1334,9 @@ func (p *TokenPairParam) Hash() []byte {
 	)
 }
 
-// SetTokenPairParam updates the TokenPairParam state on the receiver.
+// SetTokenPairParam carries the call parameters for the
+// SetTokenPair-style embedded-contract methods (administrator-only
+// per-pair updates).
 type SetTokenPairParam struct {
 	NetworkClass  uint32
 	ChainId       uint32
@@ -1395,7 +1357,9 @@ type NetworkInfoParam struct {
 	Metadata        string
 }
 
-// SetNetworkMetadataParam updates the NetworkMetadataParam state on the receiver.
+// SetNetworkMetadataParam carries the call parameters for
+// [SetNetworkMetadataMethodName] — updates a registered network's
+// free-form metadata blob.
 type SetNetworkMetadataParam struct {
 	NetworkClass uint32
 	ChainId      uint32

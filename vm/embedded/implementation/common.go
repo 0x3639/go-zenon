@@ -20,7 +20,7 @@ var (
 )
 
 // CanPerformUpdate checks if embedded contract can be updated
-//   - returns util.ErrUpdateTooRecent if not due
+//   - returns constants.ErrUpdateTooRecent if not due
 func CanPerformUpdate(context vm_context.AccountVmContext) error {
 	momentum, err := context.GetFrontierMomentum()
 	if err != nil {
@@ -42,7 +42,7 @@ func CanPerformUpdate(context vm_context.AccountVmContext) error {
 
 // Generic function, used to limits calls to the update method once every UpdateMinNumMomentums blocks
 //   - automatically stores new height
-//   - returns util.ErrUpdateTooRecent if not due
+//   - returns constants.ErrUpdateTooRecent if not due
 func checkAndPerformUpdate(context vm_context.AccountVmContext) error {
 	if err := CanPerformUpdate(context); err != nil {
 		return err
@@ -58,7 +58,7 @@ func checkAndPerformUpdate(context vm_context.AccountVmContext) error {
 }
 
 // CanPerformEpochUpdate checks if embedded contract can perform an epoch update, used most commonly to give rewards
-//   - returns util.EpochUpdateNotDue if not due
+//   - returns constants.ErrEpochUpdateTooRecent if not due
 func CanPerformEpochUpdate(context vm_context.AccountVmContext, epoch *definition.LastEpochUpdate) error {
 	_, currentEpochEndTime := context.EpochTicker().ToTime(uint64(epoch.LastEpoch + 1))
 	frontierMomentum, err := context.GetFrontierMomentum()
@@ -74,7 +74,7 @@ func CanPerformEpochUpdate(context vm_context.AccountVmContext, epoch *definitio
 
 // Generic function to check if epoch can be updated, if true, update it and save
 //   - automatically moves up epoch by one if possible
-//   - returns util.EpochUpdateNotDue if not due
+//   - returns constants.ErrEpochUpdateTooRecent if not due
 func checkAndPerformUpdateEpoch(context vm_context.AccountVmContext, epoch *definition.LastEpochUpdate) error {
 	if err := CanPerformEpochUpdate(context, epoch); err != nil {
 		return err

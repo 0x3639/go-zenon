@@ -887,8 +887,11 @@ func (p *SetIsHalted) ReceiveBlock(context vm_context.AccountVmContext, sendBloc
 	return nil, nil
 }
 
-// UnlockLiquidityStakeEntries refunds every cancelled-and-due
-// stake entry for the caller in one batch.
+// UnlockLiquidityStakeEntries iterates every liquidity-stake entry
+// matching the send block's token standard and forces its
+// ExpirationTime down to the current frontier-momentum timestamp,
+// effectively early-unlocking the entire population for that
+// token. Administrator-only.
 type UnlockLiquidityStakeEntries struct {
 	MethodName string
 }

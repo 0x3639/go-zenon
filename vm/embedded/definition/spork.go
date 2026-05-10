@@ -43,7 +43,7 @@ const (
 // bracket the window in which the [types.CommunitySporkAddress]
 // transitional spork-controlling address is allowed to operate.
 var (
-	// ABISpork is abi definition of token contract.
+	// ABISpork is the abi definition of the Spork contract.
 	ABISpork = abi.JSONToABIContract(strings.NewReader(jsonSpork))
 
 	// CommunitySporkAddressStartHeight is the momentum height at

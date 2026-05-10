@@ -242,7 +242,11 @@ func (p *WrapTokenMethod) ReceiveBlock(context vm_context.AccountVmContext, send
 	return nil, nil
 }
 
-// GetMessageToSignEvm loads the MessageToSignEvm record from storage.
+// GetMessageToSignEvm wraps the 32-byte data argument in the
+// EIP-191 personal_sign envelope ("\x19Ethereum Signed Message:\n32"
+// + data) and returns the keccak256 digest that an EVM-compatible
+// signer would actually sign. Returns an error if data is not 32
+// bytes.
 func GetMessageToSignEvm(data []byte) ([]byte, error) {
 	if len(data) != 32 {
 		return nil, errors.New("data len is not 32")
@@ -251,7 +255,10 @@ func GetMessageToSignEvm(data []byte) ([]byte, error) {
 	return crypto.Keccak256([]byte(msg)), nil
 }
 
-// HashByNetworkClass reports whether the receiver has the hByNetworkClass property.
+// HashByNetworkClass returns the canonical signing digest for data
+// under the given networkClass: a single Hash for [definition.NoMClass]
+// or the EIP-191-wrapped keccak256-of-keccak256 for
+// [definition.EvmClass]. Returns an error for unsupported classes.
 func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error) {
 	switch networkClass {
 	case definition.NoMClass:
@@ -263,7 +270,11 @@ func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error) {
 	}
 }
 
-// GetWrapTokenRequestMessage loads the WrapTokenRequestMessage record from storage.
+// GetWrapTokenRequestMessage returns the signing digest the
+// orchestrator's TSS key must sign to authorize a wrap request:
+// the ABI-packed (NetworkClass, ChainId, contractAddress,
+// requestId, ToAddress, TokenAddress, Amount-Fee) tuple, hashed
+// via [HashByNetworkClass] for the request's network class.
 func GetWrapTokenRequestMessage(request *definition.WrapTokenRequest, contractAddress *ecommon.Address) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -375,7 +386,11 @@ func (p *UpdateWrapRequestMethod) ReceiveBlock(context vm_context.AccountVmConte
 	return nil, nil
 }
 
-// GetUnwrapTokenRequestMessage loads the UnwrapTokenRequestMessage record from storage.
+// GetUnwrapTokenRequestMessage returns the signing digest the
+// orchestrator's TSS key must produce for an inbound unwrap claim:
+// the ABI-packed (NetworkClass, ChainId, TransactionHash,
+// LogIndex, ToAddress, TokenAddress, Amount) tuple, hashed via
+// [HashByNetworkClass] for the param's network class.
 func GetUnwrapTokenRequestMessage(param *definition.UnwrapTokenParam) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.AddressTy}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -979,7 +994,11 @@ func (p *RemoveTokenPairMethod) ReceiveBlock(context vm_context.AccountVmContext
 	return nil, nil
 }
 
-// GetBasicMethodMessage loads the BasicMethodMessage record from storage.
+// GetBasicMethodMessage returns the signing digest used to
+// authorize parameterless administrator/guardian calls (Halt,
+// Emergency, etc.): the ABI-packed (methodName, networkClass,
+// chainId, tssNonce) tuple, hashed via [HashByNetworkClass] for
+// the given network class.
 func GetBasicMethodMessage(methodName string, tssNonce uint64, networkClass uint32, chainId uint64) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.StringTy}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)
@@ -1136,10 +1155,12 @@ func (p *UnhaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlo
 	return nil, nil
 }
 
-// EmergencyMethod is the panic button: halts the bridge,
-// nominates the caller as administrator, and zeroes guardian /
-// TSS configuration so an incident-response governance can
-// re-bootstrap the bridge.
+// EmergencyMethod is the panic button: halts the bridge, zeroes
+// the administrator address (resets to [types.ZeroAddress]) and
+// clears both compressed and decompressed TSS public keys.
+// Administrator-only; the cleared state forces guardian-driven
+// re-bootstrap via [ProposeAdministratorMethod] / TSS keygen
+// before the bridge can resume.
 type EmergencyMethod struct {
 	MethodName string
 }
@@ -1201,7 +1222,11 @@ func (p *EmergencyMethod) ReceiveBlock(context vm_context.AccountVmContext, send
 	return nil, nil
 }
 
-// GetChangePubKeyMessage loads the ChangePubKeyMessage record from storage.
+// GetChangePubKeyMessage returns the signing digest used to
+// authorize a TSS-key rotation: the ABI-packed (methodName,
+// networkClass, chainId, tssNonce, base64-decoded pubKey) tuple,
+// hashed via [HashByNetworkClass]. Both the old and new keys must
+// produce a signature over this digest.
 func GetChangePubKeyMessage(methodName string, networkClass uint32, chainId, tssNonce uint64, pubKey string) ([]byte, error) {
 	args := eabi.Arguments{{Type: definition.StringTy}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}, {Type: definition.Uint256Ty}}
 	values := make([]interface{}, 0)

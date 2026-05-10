@@ -207,7 +207,9 @@ func (pillar *PillarInfo) Save(context db.DB) error {
 	return context.Put(GetPillarInfoKey(pillar.Name), data)
 }
 
-// GetPillarInfoKey loads the PillarInfoKey record from storage.
+// GetPillarInfoKey builds the storage key for the [PillarInfo]
+// entry of the pillar with the given display name:
+// pillarInfoKeyPrefix || hash(name).
 func GetPillarInfoKey(name string) []byte {
 	return common.JoinBytes(pillarInfoKeyPrefix, types.NewHash([]byte(name)).Bytes())
 }
@@ -233,7 +235,12 @@ func GetPillarInfo(context db.DB, name string) (*PillarInfo, error) {
 	}
 }
 
-// GetPillarsList loads the PillarsList record from storage.
+// GetPillarsList iterates the [PillarInfo] prefix range and returns
+// every registered pillar matching the filters: onlyActive limits
+// to entries with no RevokeTime; pillarType filters by
+// [LegacyPillarType] / [NormalPillarType] (use [AnyPillarType] to
+// match either). Decode failures abort the iteration with the
+// underlying error.
 func GetPillarsList(context db.DB, onlyActive bool, pillarType uint8) ([]*PillarInfo, error) {
 	iterator := context.NewIterator(pillarInfoKeyPrefix)
 	defer iterator.Release()
@@ -279,7 +286,9 @@ func (ppName *ProducingPillar) Save(context db.DB) error {
 	return context.Put(GetProducingPillarKey(*ppName.Producing), data)
 }
 
-// GetProducingPillarKey loads the ProducingPillarKey record from storage.
+// GetProducingPillarKey builds the storage key for the
+// [ProducingPillar] reverse-index entry keyed by the producing
+// address: producingPillarNameKeyPrefix || producing.Bytes().
 func GetProducingPillarKey(producing types.Address) []byte {
 	return common.JoinBytes(producingPillarNameKeyPrefix, producing.Bytes())
 }
@@ -394,7 +403,10 @@ func GetDelegationInfo(context db.DB, address types.Address) (*DelegationInfo, e
 	}
 }
 
-// GetDelegationsList loads the DelegationsList record from storage.
+// GetDelegationsList iterates the [DelegationInfo] prefix range
+// and returns every recorded delegation. Each backer contributes
+// at most one entry (delegations are exclusive). Decode failures
+// abort the iteration with the underlying error.
 func GetDelegationsList(context db.DB) ([]*DelegationInfo, error) {
 	iterator := context.NewIterator(delegationInfoKeyPrefix)
 	defer iterator.Release()
@@ -486,7 +498,10 @@ func GetLegacyPillarEntry(context db.DB, keyIdHash types.Hash) (*LegacyPillarEnt
 	}
 }
 
-// GetLegacyPillarList loads the LegacyPillarList record from storage.
+// GetLegacyPillarList iterates the [LegacyPillarEntry] prefix
+// range and returns every legacy-claim entry that still has slots
+// remaining. Empty value entries are skipped; decode failures
+// abort the iteration with the underlying error.
 func GetLegacyPillarList(context db.DB) ([]*LegacyPillarEntry, error) {
 	iterator := context.NewIterator(legacyPillarEntryKeyPrefix)
 	defer iterator.Release()
@@ -580,7 +595,10 @@ func parsePillarEpochHistoryEntry(key, data []byte) (*PillarEpochHistory, error)
 	}
 }
 
-// GetPillarEpochHistoryList loads the PillarEpochHistoryList record from storage.
+// GetPillarEpochHistoryList iterates the per-epoch
+// [PillarEpochHistory] prefix range and returns every entry
+// recorded for the given epoch. Decode failures abort the
+// iteration with the underlying error.
 func GetPillarEpochHistoryList(context db.DB, epoch uint64) ([]*PillarEpochHistory, error) {
 	iterator := context.NewIterator(getPillarEpochHistoryPrefixKey(epoch))
 	defer iterator.Release()

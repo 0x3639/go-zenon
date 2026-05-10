@@ -17,10 +17,15 @@ var (
 	htlcLog = common.EmbeddedLogger.New("contract", "htlc")
 )
 
-// GetHtlcProxyUnlockStatus loads the HtlcProxyUnlockStatus record from storage.
-// This means there are really 3 states: Default, ExplicitDeny, ExplicitAllow
-// And once an address has explicitly denied/allowed proxy unlock, it can no longer go back to using the default
-// This is to ensure that if we ever change the default to deny, addresses that have called the Allow method will still work as expected
+// GetHtlcProxyUnlockStatus reads the [definition.HtlcProxyUnlockInfo]
+// record for address and returns its Allowed flag. There are really
+// 3 states: Default, ExplicitDeny, ExplicitAllow — when no record
+// exists ([constants.ErrDataNonExistent]) the function returns the
+// current default (true / proxy-unlock allowed). Once an address has
+// explicitly denied or allowed proxy unlock it can no longer go back
+// to the default; this guarantees that addresses which have already
+// called Allow keep working even if the default is later flipped to
+// deny.
 func GetHtlcProxyUnlockStatus(context vm_context.AccountVmContext, address types.Address) (bool, error) {
 	info, err := definition.GetHtlcProxyUnlockInfo(context.Storage(), address)
 	if err != nil {
