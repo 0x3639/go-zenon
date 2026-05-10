@@ -126,7 +126,10 @@ type SwapLegacyPillarEntry struct {
 
 // === Swap Assets ===
 
-// GetAssetsByKeyIdHash loads the AssetsByKeyIdHash record from storage.
+// GetAssetsByKeyIdHash returns the post-decay swap balance for keyIdHash.
+// Composes definition.GetSwapAssetsByKeyIdHash with implementation.ApplyDecay
+// at the current epoch; missing entries are returned as a zero-amount stub
+// rather than ErrDataNonExistent.
 func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, error) {
 	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
 	if err != nil {
@@ -156,7 +159,10 @@ func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, e
 	}, nil
 }
 
-// GetAssets loads the Assets record from storage.
+// GetAssets returns every swap entry keyed by legacy KeyIdHash, with
+// implementation.ApplyDecay applied to each at the current epoch.
+// Composes definition.GetSwapAssets and projects entries to wire-form
+// [SwapAssetEntrySimple] (no key field, key lives in the map).
 func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
 	if err != nil {
@@ -185,7 +191,10 @@ func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 
 // === Swap Legacy Pillars ===
 
-// GetLegacyPillars loads the LegacyPillars record from storage.
+// GetLegacyPillars returns the unswapped legacy pillar registry, projecting
+// each entry to wire-form [SwapLegacyPillarEntry] with a hex-encoded
+// KeyIdHash. Composes definition.GetLegacyPillarList; reads from the pillar
+// contract's storage rather than the swap contract.
 func (p *SwapApi) GetLegacyPillars() ([]*SwapLegacyPillarEntry, error) {
 	_, context, err := api.GetFrontierContext(p.chain, types.PillarContract)
 	if err != nil {

@@ -37,12 +37,16 @@ func NewStakeApi(z zenon.Zenon) *StakeApi {
 
 // === Shared RPCs ===
 
-// GetUncollectedReward loads the UncollectedReward record from storage.
+// GetUncollectedReward returns the unclaimed staking reward accrued
+// for address. Thin wrapper over the shared [getUncollectedReward]
+// helper, scoped to the stake contract.
 func (a *StakeApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.StakeContract, address)
 }
 
-// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
+// GetFrontierRewardByPage returns address's reward history walking
+// backwards from the frontier momentum, sliced to (pageIndex, pageSize).
+// Thin wrapper over the shared [getFrontierRewardByPage] helper.
 func (a *StakeApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -154,7 +158,12 @@ func (s *StakeList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GetEntriesByAddress loads the EntriesByAddress record from storage.
+// GetEntriesByAddress returns address's stake entries sorted by
+// descending expiration time, sliced to (pageIndex, pageSize).
+// Composes definition.GetStakeListByAddress with sort + pagination
+// and projects each entry to the wire-form [StakeEntry]. The
+// TotalAmount / TotalWeightedAmount fields are computed across the
+// full (unpaged) list.
 func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*StakeList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

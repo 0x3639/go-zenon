@@ -211,7 +211,11 @@ func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error) {
 	}, nil
 }
 
-// GetEntriesByAddress loads the EntriesByAddress record from storage.
+// GetEntriesByAddress returns address's plasma fusion entries sorted by
+// ascending expiration height (Beneficiary-tiebroken), sliced to
+// (pageIndex, pageSize). Composes definition.GetFusionInfoListByOwner with
+// [SortFusionEntryByHeight] and projects each entry to wire-form [FusionEntry];
+// QsrAmount in the response is the total fused QSR across the full list.
 func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*FusionEntryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -242,7 +246,9 @@ func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSi
 	return &FusionEntryList{amount, listLen, entryList}, nil
 }
 
-// GetRequiredParam loads the RequiredParam record from storage.
+// GetRequiredParam is the request shape for [PlasmaApi.GetRequiredPoWForAccountBlock]:
+// the prospective account block's address, type, recipient, and data, used
+// to compute the PoW difficulty needed to cover its plasma cost.
 type GetRequiredParam struct {
 	SelfAddr  types.Address  `json:"address"`
 	BlockType uint64         `json:"blockType"`
@@ -250,14 +256,20 @@ type GetRequiredParam struct {
 	Data      []byte         `json:"data"`
 }
 
-// GetRequiredResult loads the RequiredResult record from storage.
+// GetRequiredResult is the response shape for [PlasmaApi.GetRequiredPoWForAccountBlock]:
+// the caller's currently-available plasma, the block's base plasma cost, and
+// the PoW difficulty (zero when available plasma already covers the cost).
 type GetRequiredResult struct {
 	AvailablePlasma    uint64 `json:"availablePlasma"`
 	BasePlasma         uint64 `json:"basePlasma"`
 	RequiredDifficulty uint64 `json:"requiredDifficulty"`
 }
 
-// GetRequiredPoWForAccountBlock loads the RequiredPoWForAccountBlock record from storage.
+// GetRequiredPoWForAccountBlock returns the PoW difficulty a caller must
+// solve to send the prospective account block described by param. Composes
+// vm.AvailablePlasma + vm.GetBasePlasmaForAccountBlock; if available plasma
+// already covers the base cost the returned RequiredDifficulty is 0,
+// otherwise it is computed via vm.GetDifficultyForPlasma on the shortfall.
 func (a *PlasmaApi) GetRequiredPoWForAccountBlock(param GetRequiredParam) (*GetRequiredResult, error) {
 	_, context, err := api.GetFrontierContext(a.chain, param.SelfAddr)
 	frontierMomentum, err := context.GetFrontierMomentum()

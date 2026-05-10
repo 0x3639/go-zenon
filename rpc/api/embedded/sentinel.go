@@ -58,7 +58,10 @@ func (api *SentinelApi) toSentinelInfo(sentinel *definition.SentinelInfo) *Senti
 	}
 }
 
-// GetByOwner loads the ByOwner record from storage.
+// GetByOwner returns owner's sentinel registration projected to wire-form
+// [SentinelInfo] (with revoke status filled in via [toSentinelInfo]).
+// Composes definition.GetSentinelInfoByOwner; returns (nil, nil) — not an
+// error — when no registration exists.
 func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 	_, context, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
 	if err != nil {
@@ -72,7 +75,10 @@ func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 	}
 }
 
-// GetAllActive loads the AllActive record from storage.
+// GetAllActive returns the non-revoked sentinel registrations sliced to
+// (pageIndex, pageSize). Composes definition.GetAllSentinelInfo, filters by
+// RevokeTimestamp == 0, then projects each survivor through [toSentinelInfo]
+// before pagination.
 func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoList, error) {
 	if pageSize > rpcapi.RpcMaxPageSize {
 		return nil, rpcapi.ErrPageSizeParamTooBig
@@ -100,18 +106,24 @@ func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoL
 
 // === Shared RPCs ===
 
-// GetDepositedQsr loads the DepositedQsr record from storage.
+// GetDepositedQsr returns address's QSR deposit held by the sentinel
+// contract pending registration, as a decimal string. Thin wrapper over the
+// shared [getDepositedQsr] helper, scoped to the sentinel contract.
 func (api *SentinelApi) GetDepositedQsr(address types.Address) (string, error) {
 	depositedQsr, err := getDepositedQsr(api.chain, types.SentinelContract, address)
 	return depositedQsr.String(), err
 }
 
-// GetUncollectedReward loads the UncollectedReward record from storage.
+// GetUncollectedReward returns the unclaimed sentinel reward accrued for
+// address. Thin wrapper over the shared [getUncollectedReward] helper,
+// scoped to the sentinel contract.
 func (api *SentinelApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(api.chain, types.SentinelContract, address)
 }
 
-// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
+// GetFrontierRewardByPage returns address's sentinel reward history walking
+// backwards from the frontier momentum, sliced to (pageIndex, pageSize).
+// Thin wrapper over the shared [getFrontierRewardByPage] helper.
 func (api *SentinelApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > rpcapi.RpcMaxPageSize {
 		return nil, rpcapi.ErrPageSizeParamTooBig

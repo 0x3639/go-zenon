@@ -178,7 +178,10 @@ type ProjectList struct {
 
 // === Getters for projects ===
 
-// GetAll loads the All record from storage.
+// GetAll returns the full project list, sorted by descending
+// LastUpdateTimestamp and sliced to the requested page. Composes
+// definition.GetProjectList plus per-project [toProject] expansion;
+// pagination is applied after the full list materializes.
 func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -209,7 +212,9 @@ func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error
 	return result, nil
 }
 
-// GetProjectById loads the ProjectById record from storage.
+// GetProjectById returns the project with the given id, expanded
+// through [toProject] so the response carries phase entries and
+// vote breakdowns inline.
 func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -223,7 +228,9 @@ func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	return a.toProject(context, project), nil
 }
 
-// GetPhaseById loads the PhaseById record from storage.
+// GetPhaseById returns one phase by id, paired with its vote
+// breakdown. Composes definition.GetPhaseEntry +
+// definition.GetVoteBreakdown.
 func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -240,7 +247,9 @@ func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 	}, nil
 }
 
-// GetVoteBreakdown loads the VoteBreakdown record from storage.
+// GetVoteBreakdown returns the aggregated yes/no/abstain counts for a
+// project or phase. Returns [constants.ErrDataNonExistent] when no
+// vote record exists.
 func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakdown, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {
@@ -253,7 +262,10 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 	return voteBreakdown, nil
 }
 
-// GetPillarVotes loads the PillarVotes record from storage.
+// GetPillarVotes returns the vote cast by pillar `name` on each
+// project/phase id in `hashes`. The result slice is index-aligned with
+// `hashes`; positions where the pillar has not voted are nil rather
+// than an error.
 func (a *AcceleratorApi) GetPillarVotes(name string, hashes []types.Hash) ([]*definition.PillarVote, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
 	if err != nil {

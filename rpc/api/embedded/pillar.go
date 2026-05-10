@@ -48,18 +48,24 @@ var (
 
 // === Shared RPCs ===
 
-// GetDepositedQsr loads the DepositedQsr record from storage.
+// GetDepositedQsr returns address's QSR deposit held by the pillar contract
+// pending registration, as a decimal string. Thin wrapper over the shared
+// [getDepositedQsr] helper, scoped to the pillar contract.
 func (a *PillarApi) GetDepositedQsr(address types.Address) (string, error) {
 	depositedQsr, err := getDepositedQsr(a.chain, types.PillarContract, address)
 	return depositedQsr.String(), err
 }
 
-// GetUncollectedReward loads the UncollectedReward record from storage.
+// GetUncollectedReward returns the unclaimed pillar reward accrued for
+// address. Thin wrapper over the shared [getUncollectedReward] helper,
+// scoped to the pillar contract.
 func (a *PillarApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.PillarContract, address)
 }
 
-// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
+// GetFrontierRewardByPage returns address's pillar reward history walking
+// backwards from the frontier momentum, sliced to (pageIndex, pageSize).
+// Thin wrapper over the shared [getFrontierRewardByPage] helper.
 func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -67,7 +73,10 @@ func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pa
 	return getFrontierRewardByPage(a.chain, types.PillarContract, address, pageIndex, pageSize)
 }
 
-// GetQsrRegistrationCost loads the QsrRegistrationCost record from storage.
+// GetQsrRegistrationCost returns the QSR amount required to register the
+// next pillar, as a decimal string. Delegates to
+// implementation.GetQsrCostForNextPillar, which derives the cost from the
+// current pillar count rather than reading a stored value directly.
 func (a *PillarApi) GetQsrRegistrationCost() (string, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
 	if err != nil {
@@ -198,7 +207,12 @@ func (a PillarInfoByWeight) Less(i, j int) bool {
 	}
 }
 
-// GetAll loads the All record from storage.
+// GetAll returns every registered pillar (active + revoked), enriched with
+// election weight and current-epoch produced/expected momentum stats from
+// the consensus cache, sorted descending by weight (Name-tiebroken) so each
+// entry's Rank reflects its election position, then sliced to
+// (pageIndex, pageSize). Composes definition.GetPillarsList +
+// implementation.PillarGetRevokeStatus + ConsensusCache.Get.
 func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -276,7 +290,9 @@ func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) 
 	}, nil
 }
 
-// GetByOwner loads the ByOwner record from storage.
+// GetByOwner returns every pillar whose stake address matches stakeAddress.
+// Reuses [PillarApi.GetAll] (with full-page sizing) and filters in-memory;
+// returns an empty slice — not nil, not an error — when nothing matches.
 func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error) {
 	list, err := a.GetAll(0, api.RpcMaxPageSize)
 	if err != nil {
@@ -292,7 +308,10 @@ func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error
 	return targetList, nil
 }
 
-// GetByName loads the ByName record from storage.
+// GetByName returns the pillar registered under name, or (nil, nil) when no
+// such pillar exists. Reuses [PillarApi.GetAll] (with full-page sizing) and
+// scans in-memory rather than calling definition.GetPillarInfo directly,
+// so the response includes weight + current-epoch stats.
 func (a *PillarApi) GetByName(name string) (*PillarInfo, error) {
 	list, err := a.GetAll(0, api.RpcMaxPageSize)
 	if err != nil {
@@ -328,14 +347,19 @@ func (a *PillarApi) CheckNameAvailability(name string) (bool, error) {
 	return true, nil
 }
 
-// GetDelegatedPillarResponse loads the DelegatedPillarResponse record from storage.
+// GetDelegatedPillarResponse is the wire-form result of
+// [PillarApi.GetDelegatedPillar]: the delegated pillar's name, current
+// active/inactive node status, and the delegator's ZNN balance (used as
+// delegation weight).
 type GetDelegatedPillarResponse struct {
 	Name       string   `json:"name"`
 	NodeStatus uint8    `json:"status"`
 	Balance    *big.Int `json:"weight"`
 }
 
-// GetDelegatedPillarResponseMarshal loads the DelegatedPillarResponseMarshal record from storage.
+// GetDelegatedPillarResponseMarshal is the JSON-friendly twin of
+// [GetDelegatedPillarResponse], with the big.Int Balance rendered as a
+// decimal string.
 type GetDelegatedPillarResponseMarshal struct {
 	Name       string `json:"name"`
 	NodeStatus uint8  `json:"status"`
@@ -369,7 +393,12 @@ func (g *GetDelegatedPillarResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GetDelegatedPillar loads the DelegatedPillar record from storage.
+// GetDelegatedPillar returns the pillar that addr currently delegates to,
+// alongside addr's ZNN balance (= delegated weight) and the pillar's
+// active/inactive status. Composes definition.GetDelegationInfo +
+// definition.GetPillarInfo + the account-store balance lookup; returns
+// (nil, nil) when addr has no active delegation or the delegated pillar
+// has been removed.
 func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarResponse, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
 	if err != nil {
@@ -412,7 +441,12 @@ type PillarEpochHistoryList struct {
 	List  []*definition.PillarEpochHistory `json:"list"`
 }
 
-// GetPillarEpochHistory loads the PillarEpochHistory record from storage.
+// GetPillarEpochHistory returns pillarName's per-epoch performance records
+// walking backwards from the latest epoch, sliced to (pageIndex, pageSize).
+// Composes definition.GetLastEpochUpdate + per-epoch
+// definition.GetPillarEpochHistoryList lookups; epochs in which the pillar
+// did not appear are filled with a zero-valued placeholder rather than
+// dropped, so the page length matches pageSize until the chain runs out.
 func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -468,7 +502,10 @@ func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize
 	return result, err
 }
 
-// GetPillarsHistoryByEpoch loads the PillarsHistoryByEpoch record from storage.
+// GetPillarsHistoryByEpoch returns the per-pillar performance records for
+// epoch, sliced to (pageIndex, pageSize). Composes
+// definition.GetPillarEpochHistoryList with pagination; preserves the
+// underlying storage iteration order (no explicit sort).
 func (a *PillarApi) GetPillarsHistoryByEpoch(epoch uint64, pageIndex, pageSize uint32) (*PillarEpochHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

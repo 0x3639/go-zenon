@@ -111,7 +111,10 @@ func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GetLiquidityStakeEntriesByAddress loads the LiquidityStakeEntriesByAddress record from storage.
+// GetLiquidityStakeEntriesByAddress returns address's liquidity-stake
+// entries sorted by descending expiration time, sliced to (pageIndex, pageSize).
+// Composes definition.GetLiquidityStakeListByAddress with sort + pagination;
+// TotalAmount / TotalWeightedAmount are computed across the full unpaged list.
 func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*LiquidityStakeList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -139,12 +142,16 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 	}, nil
 }
 
-// GetUncollectedReward loads the UncollectedReward record from storage.
+// GetUncollectedReward returns the unclaimed liquidity-mining reward accrued
+// for address. Thin wrapper over the shared [getUncollectedReward] helper,
+// scoped to the liquidity contract.
 func (a *LiquidityApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.LiquidityContract, address)
 }
 
-// GetFrontierRewardByPage loads the FrontierRewardByPage record from storage.
+// GetFrontierRewardByPage returns address's liquidity-mining reward history
+// walking backwards from the frontier momentum, sliced to (pageIndex, pageSize).
+// Thin wrapper over the shared [getFrontierRewardByPage] helper.
 func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -152,7 +159,10 @@ func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex,
 	return getFrontierRewardByPage(a.chain, types.LiquidityContract, address, pageIndex, pageSize)
 }
 
-// GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
+// GetTimeChallengesInfo returns the active time-challenge records for the
+// four governance-gated liquidity methods (NominateGuardians, SetTokenTuple,
+// ChangeAdministrator, SetAdditionalReward). Composes per-method
+// definition.GetTimeChallengeInfoVariable calls; nil entries are filtered out.
 func (a *LiquidityApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {

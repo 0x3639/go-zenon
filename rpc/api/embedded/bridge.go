@@ -67,7 +67,9 @@ func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) 
 	return security, nil
 }
 
-// GetOrchestratorInfo loads the OrchestratorInfo record from storage.
+// GetOrchestratorInfo returns the bridge's orchestrator parameters
+// (key-sign threshold, confirmations-to-finality, etc.). Thin wrapper over
+// definition.GetOrchestratorInfoVariable.
 func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -88,7 +90,11 @@ type TimeChallengesList struct {
 	List  []*definition.TimeChallengeInfo `json:"list"`
 }
 
-// GetTimeChallengesInfo loads the TimeChallengesInfo record from storage.
+// GetTimeChallengesInfo returns the active time-challenge records for the
+// four governance-gated bridge methods (NominateGuardians,
+// ChangeTssECDSAPubKey, ChangeAdministrator, SetTokenPair). Composes
+// per-method definition.GetTimeChallengeInfoVariable calls; nil entries
+// are filtered out.
 func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -114,7 +120,9 @@ func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	}, nil
 }
 
-// GetNetworkInfo loads the NetworkInfo record from storage.
+// GetNetworkInfo returns the configuration record for the bridge network
+// identified by (networkClass, chainId), including its registered token
+// pairs. Thin wrapper over definition.GetNetworkInfoVariable.
 func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*definition.NetworkInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -129,7 +137,9 @@ func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*defini
 	return networkInfo, nil
 }
 
-// GetAllNetworks loads the AllNetworks record from storage.
+// GetAllNetworks returns every registered bridge network sliced to
+// (pageIndex, pageSize). Composes definition.GetNetworkList with pagination;
+// preserves the underlying storage iteration order (no explicit sort).
 func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -280,7 +290,11 @@ func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapT
 	return actualConfirmationsToFinality, nil
 }
 
-// GetWrapTokenRequestById loads the WrapTokenRequestById record from storage.
+// GetWrapTokenRequestById returns the wrap-request id, enriched with its
+// resolved token info and remaining momentum confirmations to finality.
+// Composes definition.GetWrapTokenRequestById +
+// definition.GetOrchestratorInfoVariable + [getToken] +
+// [getConfirmationsToFinality].
 func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -319,7 +333,12 @@ type WrapTokenRequestList struct {
 	List  []*WrapTokenRequest `json:"list"`
 }
 
-// GetAllWrapTokenRequests loads the AllWrapTokenRequests record from storage.
+// GetAllWrapTokenRequests returns every wrap request sliced to
+// (pageIndex, pageSize), each enriched with its resolved token info and
+// remaining momentum confirmations to finality. Composes
+// definition.GetWrapTokenRequests with pagination + per-entry [getToken] +
+// [getConfirmationsToFinality]; entries whose token or confirmation lookup
+// fails are silently skipped (Count still reflects the unfiltered total).
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -361,7 +380,13 @@ func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTo
 	return result, nil
 }
 
-// GetAllWrapTokenRequestsByToAddress loads the AllWrapTokenRequestsByToAddress record from storage.
+// GetAllWrapTokenRequestsByToAddress returns wrap requests destined for
+// toAddress sliced to (pageIndex, pageSize), each enriched as in
+// [BridgeApi.GetAllWrapTokenRequests]. An empty toAddress short-circuits
+// the filter and yields the unfiltered list. Composes
+// definition.GetWrapTokenRequests with an in-memory ToAddress filter +
+// per-entry [getToken] + [getConfirmationsToFinality]; failed token or
+// confirmation lookups skip the entry silently.
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -413,7 +438,13 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageInd
 	return result, nil
 }
 
-// GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId loads the AllWrapTokenRequestsByToAddressNetworkClassAndChainId record from storage.
+// GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId returns wrap
+// requests filtered by (networkClass, chainId) and optionally toAddress
+// (empty string disables that part of the filter), sliced to
+// (pageIndex, pageSize) and enriched as in
+// [BridgeApi.GetAllWrapTokenRequests]. Composes
+// definition.GetWrapTokenRequests with an in-memory tri-key filter +
+// per-entry [getToken] + [getConfirmationsToFinality].
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toAddress string, networkClass, chainId uint32, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -462,7 +493,12 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toA
 	return result, nil
 }
 
-// GetAllUnsignedWrapTokenRequests loads the AllUnsignedWrapTokenRequests record from storage.
+// GetAllUnsignedWrapTokenRequests returns wrap requests still missing an
+// orchestrator signature, reversed (newest-first by storage iteration order)
+// and sliced to (pageIndex, pageSize). Composes
+// definition.GetWrapTokenRequests with a Signature == "" filter +
+// per-entry [getToken] + [getConfirmationsToFinality]; failed token or
+// confirmation lookups skip the entry silently.
 func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -575,7 +611,13 @@ type UnwrapTokenRequestList struct {
 	List  []*UnwrapTokenRequest `json:"list"`
 }
 
-// GetUnwrapTokenRequestByHashAndLog loads the UnwrapTokenRequestByHashAndLog record from storage.
+// GetUnwrapTokenRequestByHashAndLog returns the unwrap request keyed by
+// (txHash, logIndex), enriched with its resolved token info and the
+// remaining momentum delay until it becomes redeemable. Composes
+// definition.GetUnwrapTokenRequestByTxHashAndLog +
+// implementation.CheckNetworkAndPairExist + [getToken] + [getRedeemableIn];
+// errors out (rather than returning nil) when the network/token pair is
+// missing.
 func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -606,7 +648,12 @@ func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logInde
 	return unwrapRequest, nil
 }
 
-// GetAllUnwrapTokenRequests loads the AllUnwrapTokenRequests record from storage.
+// GetAllUnwrapTokenRequests returns every unwrap request sliced to
+// (pageIndex, pageSize), each enriched with token info and remaining
+// redemption delay. Composes definition.GetUnwrapTokenRequests with
+// pagination + per-entry [getToken] + implementation.CheckNetworkAndPairExist
+// + [getRedeemableIn]; failed token lookups skip the entry, but a missing
+// network/token pair errors the entire call.
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -646,7 +693,13 @@ func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*Unwr
 	return result, nil
 }
 
-// GetAllUnwrapTokenRequestsByToAddress loads the AllUnwrapTokenRequestsByToAddress record from storage.
+// GetAllUnwrapTokenRequestsByToAddress returns unwrap requests destined for
+// toAddress sliced to (pageIndex, pageSize), each enriched as in
+// [BridgeApi.GetAllUnwrapTokenRequests]. An empty toAddress short-circuits
+// the filter; otherwise matches are sorted by descending
+// RegistrationMomentumHeight before pagination. Composes
+// definition.GetUnwrapTokenRequests with the filter + sort +
+// implementation.CheckNetworkAndPairExist + [getToken] + [getRedeemableIn].
 func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -699,7 +752,8 @@ func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageI
 	return result, nil
 }
 
-// GetFeeTokenPair loads the FeeTokenPair record from storage.
+// GetFeeTokenPair returns the accumulated bridge fees recorded for the
+// given ZTS. Thin wrapper over definition.GetZtsFeesInfoVariable.
 func (a *BridgeApi) GetFeeTokenPair(zts types.ZenonTokenStandard) (*definition.ZtsFeesInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
