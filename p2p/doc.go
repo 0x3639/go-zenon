@@ -62,8 +62,10 @@
 //
 // Defaults are conservative and exposed via the [Net] config type:
 //
-//   - [DefaultMaxPeers]=60, [DefaultMinPeers]=8,
-//     [DefaultMinConnectedPeers]=16, [DefaultMaxPendingPeers]=10
+//   - [DefaultMaxPeers]=60, [DefaultMinConnectedPeers]=16 (the p2p
+//     dial target), [DefaultMaxPendingPeers]=10. [DefaultMinPeers]=8
+//     is consumed by the protocol layer's sync gate, not by the p2p
+//     dialer — see protocol/handler.go.
 //   - [defaultDialTimeout]=15s, [refreshPeersInterval]=30s,
 //     [staticPeerCheckInterval]=15s
 //   - [frameReadTimeout]=30s (effective idle timeout),

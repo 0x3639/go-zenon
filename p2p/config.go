@@ -25,15 +25,19 @@ const (
 	// DefaultWSPort is the JSON-RPC WebSocket listen port.
 	DefaultWSPort = 35998
 
-	// DefaultMinPeers is the floor before the dialer aggressively
-	// solicits new peers.
+	// DefaultMinPeers is the *protocol-layer* sync floor: the
+	// [github.com/zenon-network/go-zenon/protocol] handler refuses to
+	// drive momentum sync until it has this many connected peers (see
+	// protocol/sync.go and protocol/handler.go's minPeers field). It is
+	// not consulted by the p2p dialer.
 	DefaultMinPeers = 8
 	// DefaultMaxPeers caps the simultaneous connected peers.
 	DefaultMaxPeers = 60
 	// DefaultMaxPendingPeers caps concurrent in-flight handshakes.
 	DefaultMaxPendingPeers = 10
-	// DefaultMinConnectedPeers is the dynamic-dial target — Server.run
-	// will keep trying to fill up to this many dynamic peers.
+	// DefaultMinConnectedPeers is the p2p dynamic-dial target — Server.run
+	// keeps issuing dial tasks until at least this many dynamic peers
+	// are connected (see p2p/server.go: srv.MinConnectedPeers usage).
 	DefaultMinConnectedPeers = 16
 
 	// DefaultNetDirName is the subdirectory under DataDir holding
