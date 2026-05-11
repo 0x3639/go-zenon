@@ -13,11 +13,16 @@ import (
 	"sort"
 )
 
+// LiquidityApi serves read RPCs for the liquidity contract —
+// the cross-chain liquidity-stake program with administrator
+// controls (token tuples, guardian set, reward parameters).
 type LiquidityApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// NewLiquidityApi returns a LiquidityApi bound to z's chain.
+// Liquidity reads do not need a consensus handle.
 func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 	return &LiquidityApi{
 		chain: z.Chain(),
@@ -25,6 +30,10 @@ func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 	}
 }
 
+// GetLiquidityInfo returns the LiquidityInfo singleton record —
+// the current administrator, additional-reward parameters, and
+// related configuration. Errors from the storage read propagate
+// unchanged.
 func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
@@ -39,6 +48,11 @@ func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	return liquidityInfo, nil
 }
 
+// GetSecurityInfo returns the SecurityInfoVariable singleton:
+// the guardian set, the soft-delay, and other governance
+// parameters that gate administrator actions. Identically shaped
+// to BridgeApi.GetSecurityInfo but reads the liquidity contract's
+// own storage.
 func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
@@ -53,6 +67,11 @@ func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, erro
 	return security, nil
 }
 
+// LiquidityStakeList is the paged response shape for one
+// address's liquidity-stake enumeration. TotalAmount and
+// TotalWeightedAmount are the full pre-paging totals;
+// Count is the entry count before paging; Entries is the
+// requested page.
 type LiquidityStakeList struct {
 	TotalAmount         *big.Int                          `json:"totalAmount"`
 	TotalWeightedAmount *big.Int                          `json:"totalWeightedAmount"`
@@ -60,6 +79,10 @@ type LiquidityStakeList struct {
 	Entries             []*definition.LiquidityStakeEntry `json:"list"`
 }
 
+// LiquidityStakeListMarshal mirrors LiquidityStakeList with the
+// *big.Int totals encoded as decimal strings for JSON precision
+// safety. Entries elements use definition.LiquidityStakeEntry's
+// own marshalling unchanged.
 type LiquidityStakeListMarshal struct {
 	TotalAmount         string                            `json:"totalAmount"`
 	TotalWeightedAmount string                            `json:"totalWeightedAmount"`
@@ -67,6 +90,8 @@ type LiquidityStakeListMarshal struct {
 	Entries             []*definition.LiquidityStakeEntry `json:"list"`
 }
 
+// ToLiquidityStakeListMarshal converts stake into its string-totals
+// wire form.
 func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeListMarshal {
 	aux := &LiquidityStakeListMarshal{
 		TotalAmount:         stake.TotalAmount.String(),
@@ -80,10 +105,14 @@ func (stake *LiquidityStakeList) ToLiquidityStakeListMarshal() *LiquidityStakeLi
 	return aux
 }
 
+// MarshalJSON renders stake through LiquidityStakeListMarshal so
+// totals are emitted as decimal strings.
 func (stake *LiquidityStakeList) MarshalJSON() ([]byte, error) {
 	return json.Marshal(stake.ToLiquidityStakeListMarshal())
 }
 
+// UnmarshalJSON reads a LiquidityStakeListMarshal payload and
+// rehydrates the *big.Int totals via common.StringToBigInt.
 func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	aux := new(LiquidityStakeListMarshal)
 	if err := json.Unmarshal(data, aux); err != nil {
@@ -99,6 +128,15 @@ func (stake *LiquidityStakeList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetLiquidityStakeEntriesByAddress returns every liquidity-stake
+// entry recorded under address, sorted by ascending expiration
+// time (via definition.LiquidityStakeByExpirationTime), and a
+// page of the result. TotalAmount and TotalWeightedAmount are the
+// full pre-paging totals from
+// definition.GetLiquidityStakeListByAddress.
+//
+// pageSize > api.RpcMaxPageSize is rejected with
+// api.ErrPageSizeParamTooBig.
 func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, pageIndex, pageSize uint32) (*LiquidityStakeList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -126,9 +164,17 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 	}, nil
 }
 
+// GetUncollectedReward returns the cumulative uncollected
+// ZNN + QSR reward owed to address by the liquidity contract, or
+// (nil, nil) when no entry exists. Forwards to the shared.go
+// helper scoped to the LiquidityContract address.
 func (a *LiquidityApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.LiquidityContract, address)
 }
+
+// GetFrontierRewardByPage walks epochs descending from the latest
+// LastEpochUpdate and returns a paged window of per-epoch rewards
+// for address from the liquidity contract.
 func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex, pageSize uint32) (*RewardHistoryList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -136,6 +182,15 @@ func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex,
 	return getFrontierRewardByPage(a.chain, types.LiquidityContract, address, pageIndex, pageSize)
 }
 
+// GetTimeChallengesInfo returns the time-challenge record (if any)
+// for each of the liquidity contract's four administrator-gated
+// methods: NominateGuardians, SetTokenTuple, ChangeAdministrator,
+// SetAdditionalReward. Methods without an outstanding challenge
+// are silently omitted from the result, so Count reflects only the
+// methods currently mid-challenge.
+//
+// This is the structural twin of BridgeApi.GetTimeChallengesInfo
+// with the liquidity contract's method names.
 func (a *LiquidityApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
 	if err != nil {
