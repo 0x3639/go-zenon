@@ -19,11 +19,16 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// BridgeApi serves read RPCs for the cross-chain bridge contract:
+// wrap/unwrap request enumeration, network configuration, security
+// info, and administrator time-challenges.
 type BridgeApi struct {
 	chain chain.Chain
 	log   log15.Logger
 }
 
+// NewBridgeApi returns a BridgeApi bound to z's chain. Bridge
+// reads do not need a consensus handle.
 func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 	return &BridgeApi{
 		chain: z.Chain(),
@@ -31,6 +36,15 @@ func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 	}
 }
 
+// GetBridgeInfo returns the BridgeInfoVariable singleton: the
+// administrator address, the orchestrator's TSS ECDSA public-key
+// pair (compressed + decompressed), the AllowKeyGen and Halted
+// flags, the unhalt countdown (UnhaltedAt +
+// UnhaltDurationInMomentums), the current TssNonce, and a free-form
+// Metadata string (JSON-validated on writes by the implementation
+// layer). The orchestrator's own networking/finality settings live
+// separately in OrchestratorInfo (see GetOrchestratorInfo). Errors
+// from the storage read propagate unchanged.
 func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -45,6 +59,11 @@ func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	return bridgeInfo, nil
 }
 
+// GetSecurityInfo returns the SecurityInfoVariable singleton:
+// the guardian set, the soft-delay, and other governance
+// parameters that gate administrator actions on this contract.
+// Structurally identical to LiquidityApi.GetSecurityInfo but reads
+// the bridge contract's own storage.
 func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -59,6 +78,10 @@ func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) 
 	return security, nil
 }
 
+// GetOrchestratorInfo returns the OrchestratorInfo singleton —
+// the off-chain orchestrator's signing-key state and the
+// confirmations-to-finality threshold used by wrap-request
+// hydration.
 func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -73,11 +96,25 @@ func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) 
 	return orchestratorInfo, nil
 }
 
+// TimeChallengesList is the response shape for time-challenge
+// enumeration on the bridge or liquidity contracts: each entry
+// is one outstanding administrator-action challenge. Methods
+// without an outstanding challenge are omitted, so Count reflects
+// only the in-flight subset.
+//
+// The type is declared here because the bridge contract was the
+// first user of the time-challenge pattern; LiquidityApi reuses
+// it verbatim for its own four method names.
 type TimeChallengesList struct {
 	Count int                             `json:"count"`
 	List  []*definition.TimeChallengeInfo `json:"list"`
 }
 
+// GetTimeChallengesInfo returns the time-challenge record (if any)
+// for each of the bridge contract's four administrator-gated
+// methods: NominateGuardians, ChangeTssECDSAPubKey,
+// ChangeAdministrator, SetTokenPair. Methods without an
+// outstanding challenge are silently omitted.
 func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -103,6 +140,10 @@ func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	}, nil
 }
 
+// GetNetworkInfo returns the NetworkInfo for one (networkClass,
+// chainId) pair — the off-chain network's enabled state, contract
+// address, and registered token pairs. Returns the underlying
+// storage error when the network is unknown.
 func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*definition.NetworkInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -117,6 +158,10 @@ func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*defini
 	return networkInfo, nil
 }
 
+// GetAllNetworks returns one page of every registered network,
+// in the order returned by definition.GetNetworkList (no
+// post-sort). pageSize > api.RpcMaxPageSize is rejected with
+// api.ErrPageSizeParamTooBig.
 func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig
@@ -140,11 +185,19 @@ func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList
 	return result, nil
 }
 
+// NetworkInfoList is the paged response shape for network
+// enumeration. Count is the full pre-paging total.
 type NetworkInfoList struct {
 	Count int                       `json:"count"`
 	List  []*definition.NetworkInfo `json:"list"`
 }
 
+// toRequest hydrates an outbound (wrap) request with the matching
+// foreign-chain TokenAddress, taken from the network's token-pair
+// table. Returns nil when no matching pair is registered for the
+// request's TokenStandard on its (NetworkClass, ChainId) — the
+// caller is expected to skip such requests rather than surface a
+// half-populated record.
 func (a *BridgeApi) toRequest(context vm_context.AccountVmContext, abiRequest *definition.WrapTokenRequest) *definition.WrapTokenRequest {
 	if abiRequest == nil {
 		return nil
@@ -174,12 +227,22 @@ func (a *BridgeApi) toRequest(context vm_context.AccountVmContext, abiRequest *d
 	return request
 }
 
+// WrapTokenRequest is the RPC view of an outbound (NoM-to-foreign)
+// bridge request: the on-chain definition.WrapTokenRequest record
+// plus the resolved token metadata and a countdown of remaining
+// momentums until the request reaches the configured
+// confirmations-to-finality threshold (0 once finalised).
 type WrapTokenRequest struct {
 	*definition.WrapTokenRequest
 	TokenInfo               *api.Token `json:"token"`
 	ConfirmationsToFinality uint64     `json:"confirmationsToFinality"`
 }
 
+// MarshalJSON renders w as a flat JSON object combining the
+// embedded definition.WrapTokenRequestMarshal fields, the
+// TokenMarshal token info, and ConfirmationsToFinality. The
+// embedded marshal handles the *big.Int → string conversion for
+// amount fields on the wrap-request itself.
 func (w *WrapTokenRequest) MarshalJSON() ([]byte, error) {
 	aux := struct {
 		*definition.WrapTokenRequestMarshal
@@ -196,6 +259,10 @@ func (w *WrapTokenRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// UnmarshalJSON reverses MarshalJSON: it reads the flat
+// definition.WrapTokenRequestMarshal + TokenMarshal +
+// ConfirmationsToFinality payload and rehydrates the *big.Int
+// amount and fee fields via common.StringToBigInt.
 func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		*definition.WrapTokenRequestMarshal
@@ -225,6 +292,14 @@ func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// getToken fetches the on-chain token registry record for zts
+// and converts it to the RPC api.Token view. Returns (nil, nil)
+// when no token is registered (the underlying
+// constants.ErrDataNonExistent is swallowed) and (nil, err) on
+// any other storage failure. Note that enumerator callers
+// (GetAllWrapTokenRequests, GetAllUnwrapTokenRequests, etc.)
+// only `continue` on err != nil, so an unknown ZTS produces an
+// entry with TokenInfo == nil rather than a skipped slot.
 func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
 	if err != nil {
@@ -243,6 +318,9 @@ func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error) {
 	return nil, nil
 }
 
+// getRedeemableIn returns how many momentums are still required
+// before unwrapTokenRequest may be redeemed under tokenPair's
+// RedeemDelay policy. Returns 0 once the delay has elapsed.
 func (a *BridgeApi) getRedeemableIn(unwrapTokenRequest definition.UnwrapTokenRequest, tokenPair definition.TokenPair, momentum nom.Momentum) uint64 {
 	var redeemableIn uint64
 	if momentum.Height-unwrapTokenRequest.RegistrationMomentumHeight >= uint64(tokenPair.RedeemDelay) {
@@ -253,6 +331,13 @@ func (a *BridgeApi) getRedeemableIn(unwrapTokenRequest definition.UnwrapTokenReq
 	return redeemableIn
 }
 
+// getConfirmationsToFinality returns how many momentums are still
+// required before wrapTokenRequest reaches the configured
+// finality threshold (orchestrator-side this is when the
+// off-chain bridge will sign the request). Returns 0 once the
+// threshold has elapsed. Despite the (uint64, error) signature
+// the implementation cannot return a non-nil error today; the
+// error return is retained for forward compatibility.
 func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapTokenRequest, confirmationsToFinality uint32, momentum nom.Momentum) (uint64, error) {
 	var actualConfirmationsToFinality uint64
 	if momentum.Height-wrapTokenRequest.CreationMomentumHeight >= uint64(confirmationsToFinality) {
@@ -263,6 +348,10 @@ func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapT
 	return actualConfirmationsToFinality, nil
 }
 
+// GetWrapTokenRequestById returns one wrap request by id with
+// token metadata and confirmations-to-finality countdown attached.
+// Errors from any of the storage/momentum/orchestrator reads
+// propagate unchanged.
 func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -295,11 +384,22 @@ func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, e
 	return &WrapTokenRequest{wrapTokenRequest, token, confirmationsToFinality}, nil
 }
 
+// WrapTokenRequestList is the paged response shape for wrap-request
+// enumeration. Count reflects different things depending on the
+// caller — see each Get*WrapTokenRequests* method for the precise
+// definition (raw total vs filtered total vs unsigned-only total).
 type WrapTokenRequestList struct {
 	Count int                 `json:"count"`
 	List  []*WrapTokenRequest `json:"list"`
 }
 
+// GetAllWrapTokenRequests returns one page of every recorded wrap
+// request, in the order returned by definition.GetWrapTokenRequests.
+// Count is the raw underlying total before paging. Per-entry token
+// lookups go through getToken, which returns (nil, nil) for
+// unknown ZTSes — those entries still appear in List with
+// TokenInfo == nil. Entries are only skipped when getToken or
+// getConfirmationsToFinality returns a non-nil error.
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -341,6 +441,11 @@ func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTo
 	return result, nil
 }
 
+// GetAllWrapTokenRequestsByToAddress returns one page of wrap
+// requests filtered by ToAddress. Passing toAddress == "" yields
+// the unfiltered set (equivalent to GetAllWrapTokenRequests but
+// without the in-loop skip behaviour). Count reflects the
+// filtered total prior to paging.
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -392,6 +497,11 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageInd
 	return result, nil
 }
 
+// GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId returns
+// one page of wrap requests filtered by NetworkClass + ChainId
+// and (optionally) ToAddress. Passing toAddress == "" disables
+// the address filter. Count reflects the filtered total prior to
+// paging.
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toAddress string, networkClass, chainId uint32, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -440,6 +550,11 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toA
 	return result, nil
 }
 
+// GetAllUnsignedWrapTokenRequests returns one page of wrap
+// requests whose Signature is still empty (i.e. waiting on the
+// off-chain orchestrator). The full filtered list is reversed
+// before paging so callers see the oldest unsigned request first.
+// Count reflects the unsigned-only total prior to paging.
 func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -490,12 +605,22 @@ func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) 
 	return result, nil
 }
 
+// UnwrapTokenRequest is the RPC view of an inbound
+// (foreign-to-NoM) bridge request: the on-chain
+// definition.UnwrapTokenRequest record plus token metadata and a
+// countdown of momentums until the request becomes redeemable
+// per the token pair's RedeemDelay (0 once redeemable).
 type UnwrapTokenRequest struct {
 	*definition.UnwrapTokenRequest
 	TokenInfo    *api.Token `json:"token"`
 	RedeemableIn uint64     `json:"redeemableIn"`
 }
 
+// MarshalJSON renders u as a flat JSON object combining the
+// embedded definition.UnwrapTokenRequestMarshal fields, the
+// TokenMarshal token info, and RedeemableIn. The embedded marshal
+// handles the *big.Int → string conversion for the request's
+// Amount field.
 func (u *UnwrapTokenRequest) MarshalJSON() ([]byte, error) {
 	aux := struct {
 		*definition.UnwrapTokenRequestMarshal
@@ -511,6 +636,11 @@ func (u *UnwrapTokenRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// UnmarshalJSON reverses MarshalJSON: it reads the flat
+// definition.UnwrapTokenRequestMarshal + TokenMarshal +
+// RedeemableIn payload and rehydrates the embedded
+// definition.UnwrapTokenRequest with its *big.Int Amount
+// reconstituted via common.StringToBigInt.
 func (u *UnwrapTokenRequest) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		*definition.UnwrapTokenRequestMarshal
@@ -543,11 +673,24 @@ func (u *UnwrapTokenRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// UnwrapTokenRequestList is the paged response shape for
+// unwrap-request enumeration. Count is the underlying total.
 type UnwrapTokenRequestList struct {
 	Count int                   `json:"count"`
 	List  []*UnwrapTokenRequest `json:"list"`
 }
 
+// GetUnwrapTokenRequestByHashAndLog returns one unwrap request
+// keyed by the foreign-chain transaction hash + log index that
+// produced it, hydrated with token metadata and the
+// RedeemableIn countdown.
+//
+// Errors:
+//   - returns "token pair not found" (an errors.New value) when
+//     the request's network/chain/token-address triple has no
+//     registered TokenPair on the bridge — typically a stale
+//     request whose pair has since been unregistered.
+//   - propagates storage and momentum-read errors unchanged.
 func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -578,6 +721,16 @@ func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logInde
 	return unwrapRequest, nil
 }
 
+// GetAllUnwrapTokenRequests returns one page of every recorded
+// unwrap request, in the order returned by
+// definition.GetUnwrapTokenRequests. Count is the raw underlying
+// total before paging. Per-entry token lookups go through
+// getToken: an unknown ZTS yields (nil, nil) and the entry is
+// appended with TokenInfo == nil rather than skipped (the loop
+// only `continue`s when getToken returns a non-nil error).
+// CheckNetworkAndPairExist failures, by contrast, abort the
+// whole call with errors.New("token pair not found") — they do
+// not skip a single entry.
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -617,6 +770,12 @@ func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*Unwr
 	return result, nil
 }
 
+// GetAllUnwrapTokenRequestsByToAddress returns one page of unwrap
+// requests filtered by ToAddress (string match against
+// UnwrapTokenRequest.ToAddress.String()). Passing
+// toAddress == "" yields the unfiltered set; when filtered, the
+// matching subset is sorted by descending RegistrationMomentumHeight
+// (newest first) before paging. Count is the filtered total.
 func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -669,6 +828,9 @@ func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageI
 	return result, nil
 }
 
+// GetFeeTokenPair returns the ZtsFeesInfo record for the given
+// token standard — the bridge's per-token fee schedule. Errors
+// from the storage read propagate unchanged.
 func (a *BridgeApi) GetFeeTokenPair(zts types.ZenonTokenStandard) (*definition.ZtsFeesInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
