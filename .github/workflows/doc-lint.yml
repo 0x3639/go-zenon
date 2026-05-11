@@ -1,0 +1,62 @@
+name: Doc lint
+
+on:
+  pull_request:
+    branches:
+      - master
+      - 'docs/**'
+  push:
+    branches:
+      - master
+      - 'docs/**'
+  workflow_dispatch:
+
+# Documentation rollout state — docs/coverage-v2 incremental pass. Revive's
+# `exported` and `package-comments` rules run at warning severity and the
+# job exits 0 regardless of issue count, so layer-scoped PRs can land
+# without master-wide coverage. The final v2 PR removes
+# `--issues-exit-code=0` and bumps `.golangci.yml` severity to `error`,
+# at which point uncovered exports fail CI.
+
+permissions:
+  contents: read
+
+jobs:
+  harden_security:
+    name: Harden Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Ensure SHA pinned actions
+        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@2d6823da4039243036c86d76f503c84e2ded2517 # v3.0.16
+
+  doc-lint:
+    needs: harden_security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        with:
+          go-version: '1.20'
+          cache: true
+
+      - name: Install golangci-lint
+        # Pull the installer from the v2.6.2 tag (immutable) rather than
+        # the mutable master branch, so the install script content is
+        # pinned to the same release as the binary version we install.
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.6.2/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.6.2
+
+      - name: Run doc lint (warnings only — v2 rollout)
+        env:
+          GOWORK: off
+        run: |
+          "$(go env GOPATH)/bin/golangci-lint" run \
+            --config=.golangci.yml \
+            --issues-exit-code=0 \
+            ./...

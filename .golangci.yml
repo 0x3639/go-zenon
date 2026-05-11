@@ -1,0 +1,66 @@
+# Configuration for golangci-lint v2, scoped to documentation rules.
+#
+# Backs the `make doc-lint` target and the `doc-lint` GitHub Actions workflow.
+#
+# Current severity: warn. This is the docs/coverage-v2 incremental rollout
+# state — godoc gaps surface as warnings so layer-scoped PRs can land
+# without master-wide coverage. The companion workflow and Makefile target
+# pass `--issues-exit-code=0` so warnings do not fail CI during the
+# incremental rollout. The final PR in the v2 sequence flips severity to
+# `error` and drops `--issues-exit-code=0`, at which point uncovered exports
+# fail CI.
+#
+# Configured rules:
+#   - revive `exported`         — exported symbols must have godoc.
+#   - revive `package-comments` — every package needs a doc.go comment.
+#
+# Both rules respect the `Code generated .* DO NOT EDIT.` marker, so
+# generated protobuf files (.pb.go) are skipped automatically. Test mocks
+# under /mock/ are also excluded.
+version: "2"
+run:
+  go: "1.20"
+  tests: false
+linters:
+  default: none
+  enable:
+    - revive
+  settings:
+    revive:
+      confidence: 0.8
+      severity: warning
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
+          severity: warning
+          disabled: false
+        - name: package-comments
+          severity: warning
+          disabled: false
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - revive
+        path: \.pb\.go$
+      - linters:
+          - revive
+        path: /mock/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+severity:
+  default: warning
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

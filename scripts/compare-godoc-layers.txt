@@ -1,0 +1,31 @@
+# Layer → Go package mapping for scripts/compare-godoc.sh.
+#
+# Format: <layer-name>:<comma-separated-go-package-paths>
+# Each package path is resolved with `go doc -all <pkg>` on both
+# docs/coverage-v2 (HEAD) and docs/godoc-coverage (v1 worktree).
+# Comments (#) and blank lines are ignored.
+#
+# Layers correspond to PRs 1–10 in the v2 rollout. Every package
+# listed below is a buildable Go package returned by
+# `GOWORK=off go list ./...` AND has at least one non-test .go file
+# (so `go doc -all <pkg>` succeeds). If a package is added or removed
+# from the module, update this file in the same PR.
+#
+# Test-only packages (currently just ./vm/embedded/tests) are
+# deliberately excluded because `go doc` skips _test.go files —
+# `go doc -all ./vm/embedded/tests` errors with
+# "no source-code package in directory". Test-file documentation
+# in those packages still needs review in the corresponding layer
+# PR; use `git diff origin/docs/godoc-coverage..HEAD -- <path>`
+# directly for that subset.
+
+chain:./chain,./chain/momentum,./chain/account,./chain/account/mailbox,./chain/store,./chain/genesis,./chain/genesis/mock,./chain/nom
+consensus:./consensus,./consensus/api,./consensus/storage
+common:./common,./common/db,./common/types,./common/crypto
+network:./protocol,./protocol/downloader,./protocol/fetcher,./p2p,./p2p/nat,./p2p/discover
+vm-core:./vm,./vm/abi,./vm/constants,./vm/embedded,./vm/vm_context
+vm-embedded-defs:./vm/embedded/definition
+vm-embedded-impls:./vm/embedded/implementation
+rpc-core:./rpc,./rpc/server,./rpc/api,./rpc/api/subscribe
+rpc-embedded:./rpc/api/embedded
+app-misc:./app,./cmd/znnd,./node,./wallet,./pow,./metadata,./pillar,./verifier,./zenon,./zenon/mock

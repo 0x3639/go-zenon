@@ -1,4 +1,4 @@
-.PHONY: all clean znnd
+.PHONY: all clean znnd docs doc-lint doc-api
 
 GO ?= latest
 
@@ -39,3 +39,27 @@ clean:
 	rm -r $(BUILDDIR)/
 
 all: znnd libznn
+
+# Documentation targets — incremental v2 rollout on docs/coverage-v2.
+# See docs/coverage-v2-conventions.md for godoc style.
+
+docs: ## Serve godoc locally on http://localhost:6060
+	@GOBIN_DIR="$$(go env GOBIN)"; \
+	if [ -z "$$GOBIN_DIR" ]; then GOBIN_DIR="$$(go env GOPATH)/bin"; fi; \
+	export PATH="$$GOBIN_DIR:$$PATH"; \
+	if ! command -v godoc >/dev/null 2>&1; then \
+		echo "godoc not found; installing golang.org/x/tools/cmd/godoc..."; \
+		go install golang.org/x/tools/cmd/godoc@latest; \
+	fi; \
+	echo "godoc serving on http://localhost:6060/pkg/github.com/zenon-network/go-zenon/"; \
+	godoc -http=:6060
+
+doc-lint: ## Run godoc lint (revive exported + package-comments at warning severity)
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found; install from https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	}
+	GOWORK=off golangci-lint run --config=.golangci.yml --issues-exit-code=0 ./...
+
+doc-api: ## Regenerate static markdown API docs under docs/api/ (requires AGENTS.md, docs/STYLE.md — landed in final v2 PR)
+	./scripts/gen-api-docs.sh
