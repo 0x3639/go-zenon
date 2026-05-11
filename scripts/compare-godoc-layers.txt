@@ -5,16 +5,18 @@
 # docs/coverage-v2 (HEAD) and docs/godoc-coverage (v1 worktree).
 # Comments (#) and blank lines are ignored.
 #
-# Layers correspond to PRs 1–10 in the v2 rollout. Edit if the
-# rollout layout changes.
+# Layers correspond to PRs 1–10 in the v2 rollout. Every package
+# listed below is a buildable Go package returned by
+# `GOWORK=off go list ./...`. If a package is added or removed from
+# the module, update this file in the same PR.
 
 chain:./chain,./chain/momentum,./chain/account,./chain/account/mailbox,./chain/store,./chain/genesis,./chain/genesis/mock,./chain/nom
-consensus:./consensus
+consensus:./consensus,./consensus/api,./consensus/storage
 common:./common,./common/db,./common/types,./common/crypto
-network:./protocol,./protocol/fetcher,./p2p,./p2p/nat,./p2p/discover,./p2p/discv5
-vm-core:./vm,./vm/abi,./vm/constants
+network:./protocol,./protocol/downloader,./protocol/fetcher,./p2p,./p2p/nat,./p2p/discover
+vm-core:./vm,./vm/abi,./vm/constants,./vm/embedded,./vm/vm_context
 vm-embedded-defs:./vm/embedded/definition
-vm-embedded-impls:./vm/embedded/implementation
-rpc-core:./rpc/server,./rpc/api,./rpc/api/subscribe
+vm-embedded-impls:./vm/embedded/implementation,./vm/embedded/tests
+rpc-core:./rpc,./rpc/server,./rpc/api,./rpc/api/subscribe
 rpc-embedded:./rpc/api/embedded
-app-misc:./app,./cmd/znnd,./cmd/libznn,./node,./wallet,./pow,./crypto,./metadata
+app-misc:./app,./cmd/znnd,./node,./wallet,./pow,./metadata,./pillar,./verifier,./zenon,./zenon/mock

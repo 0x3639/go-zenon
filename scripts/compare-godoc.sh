@@ -45,12 +45,22 @@ if [ -z "$PKGS" ]; then
   exit 2
 fi
 
-# Ensure the v1 reference worktree exists. The worktree lives outside the
-# repo so it does not pollute git status. If origin/docs/godoc-coverage
-# is missing locally, `git fetch origin` first.
+# Ensure the v1 reference worktree exists and tracks the current
+# remote HEAD of V1_REF. The worktree lives outside the repo so it
+# does not pollute git status. We always fetch first so a moving
+# origin/docs/godoc-coverage cannot leave the worktree silently
+# pinned to a stale commit.
+git fetch origin --quiet
+V1_TARGET="$(git rev-parse "$V1_REF")"
 if [ ! -d "$V1_WORKTREE" ]; then
-  echo "Creating worktree at $V1_WORKTREE pinned to $V1_REF..."
-  git worktree add "$V1_WORKTREE" "$V1_REF"
+  echo "Creating worktree at $V1_WORKTREE pinned to $V1_REF ($V1_TARGET)..."
+  git worktree add --detach "$V1_WORKTREE" "$V1_TARGET"
+else
+  V1_CURRENT="$(git -C "$V1_WORKTREE" rev-parse HEAD)"
+  if [ "$V1_CURRENT" != "$V1_TARGET" ]; then
+    echo "Updating worktree at $V1_WORKTREE: $V1_CURRENT -> $V1_TARGET"
+    git -C "$V1_WORKTREE" reset --hard "$V1_TARGET"
+  fi
 fi
 
 mkdir -p "$OUT_DIR"
