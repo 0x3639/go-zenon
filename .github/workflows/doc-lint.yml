@@ -45,8 +45,11 @@ jobs:
           cache: true
 
       - name: Install golangci-lint
+        # Pull the installer from the v2.6.2 tag (immutable) rather than
+        # the mutable master branch, so the install script content is
+        # pinned to the same release as the binary version we install.
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.6.2/install.sh \
             | sh -s -- -b "$(go env GOPATH)/bin" v2.6.2
 
       - name: Run doc lint (warnings only — v2 rollout)

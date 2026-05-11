@@ -17,6 +17,16 @@
 set -euo pipefail
 
 LAYER="${1:?usage: compare-godoc.sh <layer-name>}"
+
+# Reject layer names that contain path separators or any character outside
+# [A-Za-z0-9_-]. The layer name is interpolated directly into the output
+# path below; unsanitized input like "../../foo" would let a caller write
+# outside docs/coverage-v2-comparison/.
+if ! printf '%s' "$LAYER" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+  echo "error: layer name must match [A-Za-z0-9_-]+ (got: '$LAYER')" >&2
+  exit 2
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 

@@ -27,6 +27,34 @@ export GOWORK=off
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Preflight: the index writer below pulls package descriptions from AGENTS.md
+# and the cross-reference block links to docs/STYLE.md and ARCHITECTURE.md.
+# Those files land in the final docs/coverage-v2 PR. Until then, fail fast
+# with a targeted message rather than blowing up halfway through with an
+# obscure awk "cannot open file" error.
+missing=()
+for f in AGENTS.md docs/STYLE.md ARCHITECTURE.md; do
+  [ -f "$f" ] || missing+=("$f")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  cat >&2 <<EOM
+gen-api-docs.sh: missing required reference file(s):
+  ${missing[*]}
+
+This script needs AGENTS.md (for per-package one-liners), docs/STYLE.md,
+and ARCHITECTURE.md (for the index cross-references) at repo root / docs/.
+Those files land in the final docs/coverage-v2 PR alongside the docs/api/
+regeneration; until that PR merges, \`make doc-api\` is not exercised.
+
+If you need to run this locally before then, grab the missing files from
+origin/docs/godoc-coverage with:
+  git show origin/docs/godoc-coverage:AGENTS.md > AGENTS.md
+  git show origin/docs/godoc-coverage:docs/STYLE.md > docs/STYLE.md
+  git show origin/docs/godoc-coverage:ARCHITECTURE.md > ARCHITECTURE.md
+EOM
+  exit 1
+fi
+
 OUT_DIR="docs/api"
 MODULE="$(go list -m)"
 
