@@ -132,7 +132,12 @@ write_report() {
     else
       V1_LINES=$(wc -l < "$V1_OUT" | tr -d ' ')
       V2_LINES=$(wc -l < "$V2_OUT" | tr -d ' ')
-      DIFF_LINES=$(diff -u "$V1_OUT" "$V2_OUT" | wc -l | tr -d ' ' || true)
+      # Wrap diff in a subshell so its non-zero exit (1 when files differ)
+      # is contained before the pipe — set -o pipefail at the top of the
+      # script would otherwise make the whole pipeline fail-then-recover
+      # via `|| true` and DIFF_LINES capture would depend on shell
+      # implementation details.
+      DIFF_LINES=$( (diff -u "$V1_OUT" "$V2_OUT" || true) | wc -l | tr -d ' ' )
       echo "v1: $V1_LINES lines · v2: $V2_LINES lines · diff: $DIFF_LINES lines"
       echo
       echo '<details><summary>Diff (v1 → v2)</summary>'

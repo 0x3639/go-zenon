@@ -117,9 +117,11 @@ gomarkdoc \
 # Strip trailing whitespace from generated markdown. gomarkdoc preserves
 # trailing spaces and tabs that bleed through from source comments and ABI
 # string literals, which trips `git diff --check`. Use sed -i.bak (+ delete)
-# for portability between BSD sed (macOS) and GNU sed (Linux CI).
-find "$OUT_DIR" -name '*.md' -print0 \
-  | xargs -0 sed -i.bak 's/[[:space:]]*$//'
+# for portability between BSD sed (macOS) and GNU sed (Linux CI). Using
+# `-exec ... +` rather than `| xargs ...` so the script is a no-op when
+# gomarkdoc has produced zero markdown files (which would otherwise vary
+# across xargs implementations and `sed -i` with no file arguments).
+find "$OUT_DIR" -name '*.md' -exec sed -i.bak 's/[[:space:]]*$//' {} +
 find "$OUT_DIR" -name '*.md.bak' -delete
 
 # Build a TSV lookup of `package path -> one-liner description` from the
