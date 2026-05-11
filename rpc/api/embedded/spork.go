@@ -41,9 +41,12 @@ type SporkList struct {
 }
 
 // GetAll returns one page of every spork registered on chain,
-// ordered as returned by definition.GetAllSporks (insertion order
-// in the spork map). pageSize larger than api.RpcMaxPageSize is
-// rejected with api.ErrPageSizeParamTooBig before the chain read.
+// ordered as returned by definition.GetAllSporks: that helper
+// iterates the LevelDB key prefix for spork records, so the
+// result is sorted by ascending key bytes (sporkInfoPrefix ||
+// sporkId) — effectively by sporkId, not by registration order.
+// pageSize larger than api.RpcMaxPageSize is rejected with
+// api.ErrPageSizeParamTooBig before the chain read.
 func (a *SporkApi) GetAll(pageIndex, pageSize uint32) (*SporkList, error) {
 	if pageSize > api.RpcMaxPageSize {
 		return nil, api.ErrPageSizeParamTooBig

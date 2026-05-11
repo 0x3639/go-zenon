@@ -85,6 +85,7 @@ func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 		return nil, nil
 	}
 }
+
 // GetAllActive iterates every sentinel record, keeps only those
 // whose RevokeTimestamp is zero, and returns a page of the result.
 // Count reflects the number of active sentinels after filtering, not
@@ -129,8 +130,10 @@ func (api *SentinelApi) GetDepositedQsr(address types.Address) (string, error) {
 }
 
 // GetUncollectedReward returns the cumulative uncollected
-// ZNN + QSR reward owed to address by the sentinel contract, or
-// (nil, nil) when no entry exists.
+// ZNN + QSR reward owed to address by the sentinel contract.
+// The definition layer zero-fills the "no entry" case, so the
+// result is never (nil, nil); a zero-valued *RewardDeposit
+// (Znn = Qsr = 0) represents "nothing owed yet".
 func (api *SentinelApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(api.chain, types.SentinelContract, address)
 }

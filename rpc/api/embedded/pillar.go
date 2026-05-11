@@ -65,8 +65,10 @@ func (a *PillarApi) GetDepositedQsr(address types.Address) (string, error) {
 }
 
 // GetUncollectedReward returns the cumulative uncollected
-// ZNN + QSR reward owed to address by the pillar contract, or
-// (nil, nil) when no entry exists.
+// ZNN + QSR reward owed to address by the pillar contract.
+// The definition layer zero-fills the "no entry" case, so the
+// result is never (nil, nil); a zero-valued *RewardDeposit
+// (Znn = Qsr = 0) represents "nothing owed yet".
 func (a *PillarApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.PillarContract, address)
 }
@@ -327,6 +329,7 @@ func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) 
 		List:  targetList[start:end],
 	}, nil
 }
+
 // GetByOwner returns every pillar whose StakeAddress matches the
 // supplied address. Implemented in terms of GetAll, so the same
 // consensus-cache freshness and sort order apply. An empty slice
@@ -345,6 +348,7 @@ func (a *PillarApi) GetByOwner(stakeAddress types.Address) ([]*PillarInfo, error
 
 	return targetList, nil
 }
+
 // GetByName returns the pillar with the matching Name, or
 // (nil, nil) when no such pillar is registered. Implemented as a
 // linear scan over GetAll's full result, so cost grows with the

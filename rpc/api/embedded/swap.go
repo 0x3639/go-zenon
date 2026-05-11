@@ -178,6 +178,7 @@ func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, e
 		Qsr:       entry.Qsr,
 	}, nil
 }
+
 // GetAssets returns every recorded swap claim keyed by KeyIdHash,
 // with current-epoch decay applied to each entry. Unlike
 // GetAssetsByKeyIdHash this is an all-or-nothing read — no

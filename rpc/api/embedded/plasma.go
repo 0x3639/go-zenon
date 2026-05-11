@@ -53,6 +53,7 @@ type PlasmaInfo struct {
 	MaxPlasma     uint64   `json:"maxPlasma"`
 	QsrAmount     *big.Int `json:"qsrAmount"`
 }
+
 // PlasmaInfoMarshal mirrors PlasmaInfo with QsrAmount encoded as
 // a decimal string for JSON precision safety. The uint64 plasma
 // fields cross the wire unchanged.
@@ -246,6 +247,7 @@ func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error) {
 		QsrAmount:     amount,
 	}, nil
 }
+
 // GetEntriesByAddress returns every fusion entry recorded for
 // owner-address, sorted by ascending expiration height (via
 // SortFusionEntryByHeight), and a page of the result. QsrAmount in

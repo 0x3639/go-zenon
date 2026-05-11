@@ -78,8 +78,15 @@ write_report() {
   # generated artifact is reproducible across machines — the actual
   # absolute paths in $V1_WORKTREE / $ROOT are author-local and would
   # otherwise leak into the committed report.
-  echo "| Side | Branch | Commit | Worktree |"
-  echo "|------|--------|--------|----------|"
+  #
+  # The "Captured at" column is the HEAD SHA at the moment the script
+  # ran — not a claim about the report's currency. The report is
+  # checked in alongside the godoc commit it documents, so once any
+  # later commit lands on the branch (docs-infra fixes, follow-ups)
+  # the captured SHA will lag HEAD by one or more commits without
+  # the report being stale.
+  echo "| Side | Branch | Captured at | Worktree |"
+  echo "|------|--------|-------------|----------|"
   echo "| v1   | \`$V1_REF\` | \`$V1_SHORT\` | \`../zenon-v1-ref\` |"
   echo "| v2   | \`$HEAD_BRANCH\` | \`$HEAD_SHORT\` | \`.\` |"
   echo
@@ -130,6 +137,16 @@ write_report() {
       continue
     fi
 
+    # Strip trailing whitespace and convert "space-before-tab" indents
+    # to plain tabs in the captured go doc output. Both artefacts come
+    # straight from go doc -all, which preserves trailing whitespace
+    # and emits a leading-space-then-tab indent on some struct field
+    # comments — those trip `git diff --check` when the markdown is
+    # checked in. Use sed -i.bak (+ delete) for portability between
+    # BSD sed (macOS) and GNU sed (Linux CI).
+    sed -i.bak -E -e 's/[[:space:]]+$//' -e 's/^ +\t/\t/' "$V1_OUT" "$V2_OUT"
+    rm -f "$V1_OUT.bak" "$V2_OUT.bak"
+
     if cmp -s "$V1_OUT" "$V2_OUT"; then
       echo "**Match.** v1 and v2 emit byte-identical \`go doc -all\` output."
       echo
@@ -148,8 +165,14 @@ write_report() {
       echo
       echo '```diff'
       # -L overrides the per-file header lines so mktemp paths and
-      # mtimes do not bleed into the committed artifact.
-      diff -u -L "v1 (go doc -all)" -L "v2 (go doc -all)" "$V1_OUT" "$V2_OUT" || true
+      # mtimes do not bleed into the committed artifact. The trailing
+      # sed strips whitespace from each emitted diff line: unified
+      # diff renders an unchanged blank line as a single space (the
+      # context-line prefix), which trips `git diff --check`. Run
+      # diff in a subshell so its exit-1-on-differ does not blow up
+      # the pipeline under `set -o pipefail`.
+      (diff -u -L "v1 (go doc -all)" -L "v2 (go doc -all)" "$V1_OUT" "$V2_OUT" || true) \
+        | sed -E 's/[[:space:]]+$//'
       echo '```'
       echo
       echo '</details>'

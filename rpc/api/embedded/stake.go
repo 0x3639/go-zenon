@@ -44,8 +44,10 @@ func NewStakeApi(z zenon.Zenon) *StakeApi {
 // not deposited QSR, so the helper does not apply here.
 
 // GetUncollectedReward returns the cumulative uncollected
-// ZNN + QSR reward owed to address by the stake contract, or
-// (nil, nil) when no entry exists.
+// ZNN + QSR reward owed to address by the stake contract.
+// The definition layer zero-fills the "no entry" case, so the
+// result is never (nil, nil); a zero-valued *RewardDeposit
+// (Znn = Qsr = 0) represents "nothing owed yet".
 func (a *StakeApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.StakeContract, address)
 }

@@ -40,10 +40,11 @@ func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 // administrator address, the orchestrator's TSS ECDSA public-key
 // pair (compressed + decompressed), the AllowKeyGen and Halted
 // flags, the unhalt countdown (UnhaltedAt +
-// UnhaltDurationInMomentums), and the current TssNonce. The
-// orchestrator's own networking/finality settings live separately
-// in OrchestratorInfo (see GetOrchestratorInfo). Errors from the
-// storage read propagate unchanged.
+// UnhaltDurationInMomentums), the current TssNonce, and a free-form
+// Metadata string (JSON-validated on writes by the implementation
+// layer). The orchestrator's own networking/finality settings live
+// separately in OrchestratorInfo (see GetOrchestratorInfo). Errors
+// from the storage read propagate unchanged.
 func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -291,11 +292,14 @@ func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// getToken fetches the on-chain token registry record for zts and
-// converts it to the RPC api.Token view. Returns (nil, nil) when
-// no token is registered (constants.ErrDataNonExistent), so
-// callers can treat missing tokens as a "skip this entry" signal
-// instead of an error.
+// getToken fetches the on-chain token registry record for zts
+// and converts it to the RPC api.Token view. Returns (nil, nil)
+// when no token is registered (the underlying
+// constants.ErrDataNonExistent is swallowed) and (nil, err) on
+// any other storage failure. Note that enumerator callers
+// (GetAllWrapTokenRequests, GetAllUnwrapTokenRequests, etc.)
+// only `continue` on err != nil, so an unknown ZTS produces an
+// entry with TokenInfo == nil rather than a skipped slot.
 func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
 	if err != nil {
@@ -391,10 +395,11 @@ type WrapTokenRequestList struct {
 
 // GetAllWrapTokenRequests returns one page of every recorded wrap
 // request, in the order returned by definition.GetWrapTokenRequests.
-// Count is the raw underlying count (before any token-lookup
-// failures that cause individual entries to be skipped), so List
-// may have fewer than (end - start) entries when some requests
-// reference unknown ZTSes.
+// Count is the raw underlying total before paging. Per-entry token
+// lookups go through getToken, which returns (nil, nil) for
+// unknown ZTSes — those entries still appear in List with
+// TokenInfo == nil. Entries are only skipped when getToken or
+// getConfirmationsToFinality returns a non-nil error.
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {
@@ -718,10 +723,14 @@ func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logInde
 
 // GetAllUnwrapTokenRequests returns one page of every recorded
 // unwrap request, in the order returned by
-// definition.GetUnwrapTokenRequests. Count is the raw total
-// before per-entry token lookups (which silently skip on
-// not-found) and before token-pair existence checks (which
-// abort with "token pair not found").
+// definition.GetUnwrapTokenRequests. Count is the raw underlying
+// total before paging. Per-entry token lookups go through
+// getToken: an unknown ZTS yields (nil, nil) and the entry is
+// appended with TokenInfo == nil rather than skipped (the loop
+// only `continue`s when getToken returns a non-nil error).
+// CheckNetworkAndPairExist failures, by contrast, abort the
+// whole call with errors.New("token pair not found") — they do
+// not skip a single entry.
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
 	if err != nil {

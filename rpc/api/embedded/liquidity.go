@@ -165,9 +165,11 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 }
 
 // GetUncollectedReward returns the cumulative uncollected
-// ZNN + QSR reward owed to address by the liquidity contract, or
-// (nil, nil) when no entry exists. Forwards to the shared.go
-// helper scoped to the LiquidityContract address.
+// ZNN + QSR reward owed to address by the liquidity contract.
+// The definition layer zero-fills the "no entry" case, so the
+// result is never (nil, nil); a zero-valued *RewardDeposit
+// (Znn = Qsr = 0) represents "nothing owed yet". Forwards to
+// the shared.go helper scoped to the LiquidityContract address.
 func (a *LiquidityApi) GetUncollectedReward(address types.Address) (*definition.RewardDeposit, error) {
 	return getUncollectedReward(a.chain, types.LiquidityContract, address)
 }

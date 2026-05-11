@@ -11,3 +11,6 @@ build/
 # IDE
 .vscode
 .idea/
+
+# Local scratchpad for in-progress notes (not committed).
+/scratchpad/

@@ -71,6 +71,7 @@ func (a *TokenAPI) GetAll(pageIndex, pageSize uint32) (*TokenList, error) {
 		List:  tokenList[start:end],
 	}, nil
 }
+
 // GetByOwner returns the page-sliced tokens whose Owner matches
 // the supplied address. Filtering happens after the full registry
 // read, so Count reflects the filtered total (not the registry
@@ -104,6 +105,7 @@ func (a *TokenAPI) GetByOwner(owner types.Address, pageIndex, pageSize uint32) (
 		List:  tokenList[start:end],
 	}, nil
 }
+
 // GetByZts looks up a single token by its ZenonTokenStandard
 // identifier. Returns (nil, nil) when no token is registered under
 // zts — constants.ErrDataNonExistent from the storage read is

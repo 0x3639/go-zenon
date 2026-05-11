@@ -232,6 +232,7 @@ func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error
 
 	return result, nil
 }
+
 // GetProjectById looks up one accelerator project by its id and
 // returns the fully-hydrated RPC view (project record + vote
 // breakdown + phases each with their own vote breakdown). Storage
@@ -248,6 +249,7 @@ func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	}
 	return a.toProject(context, project), nil
 }
+
 // GetPhaseById looks up one phase by its id and returns the
 // phase record plus its current pillar VoteBreakdown.
 func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
@@ -265,6 +267,7 @@ func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 		Votes: definition.GetVoteBreakdown(context.Storage(), phase.Id),
 	}, nil
 }
+
 // GetVoteBreakdown returns the pillar vote breakdown for the
 // given project or phase id, or constants.ErrDataNonExistent
 // when the underlying definition lookup returns no breakdown.
@@ -279,6 +282,7 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 	}
 	return voteBreakdown, nil
 }
+
 // GetPillarVotes returns the individual votes the named pillar
 // has cast on each of the supplied project/phase hashes, returned
 // in the same order as the input. A nil slot in the result means

@@ -27,10 +27,14 @@ func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Ad
 		return qsrDeposit.Qsr, nil
 	}
 }
+
 // getUncollectedReward returns the cumulative uncollected
-// ZNN + QSR reward owed to address by contract, or (nil, nil) when
-// definition.GetRewardDeposit reports no entry. Called by every
-// reward-bearing API (Pillar/Sentinel/Stake/Liquidity).
+// ZNN + QSR reward owed to address by contract. The definition
+// layer (definition.GetRewardDeposit) synthesises a zero-valued
+// *RewardDeposit (Znn = Qsr = 0) when no entry exists, so callers
+// always receive a non-nil result for the "no rewards yet" case;
+// (nil, err) is returned only on a real storage error. Used by
+// every reward-bearing API (Pillar/Sentinel/Stake/Liquidity).
 func getUncollectedReward(chain chain.Chain, contract types.Address, address types.Address) (*definition.RewardDeposit, error) {
 	_, context, err := api.GetFrontierContext(chain, contract)
 	if err != nil {
@@ -103,11 +107,15 @@ type RewardHistoryList struct {
 	List  []*RewardHistoryEntry `json:"list"`
 }
 
-// getFrontierRewardByPage walks epochs descending starting from the
-// latest LastEpochUpdate, skipping epochs with no recorded deposit,
-// and returns a paged window. Epochs are produced newest-first; the
-// loop stops when either pageSize entries have been collected or
-// the epoch counter falls below zero.
+// getFrontierRewardByPage walks epochs descending starting from
+// the latest LastEpochUpdate and returns a paged window. The
+// definition layer (definition.GetRewardDepositHistory)
+// zero-fills missing epochs, so absent epochs surface as
+// RewardHistoryEntry rows with Znn = Qsr = 0 rather than being
+// skipped. The loop stops when either pageSize entries have been
+// collected or the epoch counter falls below zero, so the page
+// contains exactly min(pageSize, lastEpoch + 1 - pageIndex*pageSize)
+// entries.
 //
 // pageSize > api.RpcMaxPageSize is rejected with
 // api.ErrPageSizeParamTooBig before the chain read.

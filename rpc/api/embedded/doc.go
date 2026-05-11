@@ -3,7 +3,7 @@
 // sentinel, stake, token, plasma, spork, accelerator, htlc, bridge,
 // liquidity, swap).
 //
-// One Api struct per contract
+// # One Api struct per contract
 //
 // Each contract has its own handler struct (PillarApi, BridgeApi, …)
 // constructed via the corresponding New<Name>Api factory. The struct
@@ -12,7 +12,7 @@
 // log15.Logger from common.RPCLogger is attached per submodule so RPC
 // errors surface with module context.
 //
-// Per-call pattern
+// # Per-call pattern
 //
 // A typical handler method:
 //
@@ -30,7 +30,7 @@
 //     api.ErrPageSizeParamTooBig.
 //  5. Wraps the result in a response struct defined in this package.
 //
-// Response types and Marshal twins
+// # Response types and Marshal twins
 //
 // Many response structs in this package come in pairs:
 // <Name> uses *big.Int for token amounts (so the runtime keeps
@@ -46,7 +46,7 @@
 // match their <TypeName> exactly; those are pre-existing names
 // preserved to avoid breaking callers.
 //
-// What this package does NOT do
+// # What this package does NOT do
 //
 // Embedded-contract state mutation flows through send-block
 // submission, not through this package; the handlers here are
