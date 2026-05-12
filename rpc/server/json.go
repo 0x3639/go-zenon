@@ -135,10 +135,15 @@ func (err *jsonError) Error() string {
 	return err.Message
 }
 
+// ErrorCode returns the JSON-RPC error code carried by err. Used
+// by callers that need to distinguish wire-level error categories
+// programmatically rather than by message text.
 func (err *jsonError) ErrorCode() int {
 	return err.Code
 }
 
+// ErrorData returns the optional application-defined data field
+// from the JSON-RPC error envelope. May be nil.
 func (err *jsonError) ErrorData() interface{} {
 	return err.Data
 }

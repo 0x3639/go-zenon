@@ -25,10 +25,20 @@ var (
 	singleton    *Server
 )
 
+// Momentum is the compact event payload broadcast on momentum
+// subscriptions: just the hash and height of the inserted
+// momentum. Subscribers that need the full body must follow up
+// with LedgerApi.GetMomentumByHash.
 type Momentum struct {
 	Hash   types.Hash `json:"hash"`
 	Height uint64     `json:"height"`
 }
+
+// AccountBlock is the compact event payload broadcast on
+// account-block subscriptions: enough to identify the block and
+// the parties involved without prefetching the full record.
+// FromHash is the source send block's hash for receive-side
+// events, and the empty hash for send-side events.
 type AccountBlock struct {
 	BlockType uint64        `json:"blockType"`
 	Hash      types.Hash    `json:"hash"`
@@ -54,11 +64,26 @@ func newAccountBlock(block *nom.AccountBlock) []*AccountBlock {
 	return all
 }
 
+// Api is the RPC handler half of the subscribe layer: the small
+// surface that znnd registers under the "ledger" namespace for
+// subscription methods (Momentums / AllAccountBlocks /
+// AccountBlocksByAddress / UnreceivedAccountBlocksByAddress).
+// Each method installs a Subscription into the Server's per-type
+// map via installCh; the Server's worker goroutine drains that
+// channel and the matching event channels.
 type Api struct {
 	chain     chain.Chain
 	log       log15.Logger
 	installCh chan *Subscription // add subscription
 }
+
+// Server is the process-wide event broker: it holds the live
+// subscriptions, fans incoming chain events out to them, and
+// registers/deregisters itself with chain.Chain as a momentum
+// listener. The embedded *Api gives the Server access to the same
+// installCh that the public subscription methods write to. Server
+// is a singleton constructed by GetSubscribeServer; GetSubscribeApi
+// returns its embedded *Api after Start().
 type Server struct {
 	*Api
 
@@ -72,6 +97,13 @@ type Server struct {
 	wg sync.WaitGroup
 }
 
+// GetSubscribeServer returns the process-wide subscribe Server,
+// lazily constructing it on first call bound to the supplied
+// chain.Chain. Subsequent calls return the existing singleton and
+// ignore the chain argument. Safe to call concurrently
+// (synchronised via oneSingleton). Stop() resets the singleton so
+// the next call rebuilds it — useful for tests that tear down
+// between cases.
 func GetSubscribeServer(chain chain.Chain) *Server {
 	oneSingleton.Lock()
 	defer oneSingleton.Unlock()
@@ -93,6 +125,12 @@ func GetSubscribeServer(chain chain.Chain) *Server {
 	}
 	return singleton
 }
+
+// GetSubscribeApi returns the embedded *Api on the running
+// singleton Server. **Panics** if GetSubscribeServer has not yet
+// been called, or if the Server has been constructed but not yet
+// Start()ed — RPC routing must not hand subscription handlers to
+// clients before the event-fanout goroutine is alive.
 func GetSubscribeApi() *Api {
 	oneSingleton.Lock()
 	defer oneSingleton.Unlock()
@@ -105,6 +143,9 @@ func GetSubscribeApi() *Api {
 	return singleton.Api
 }
 
+// Init prepares the Server's per-type subscription map. Must be
+// called before Start. Returns nil unconditionally; the (error)
+// return is kept for forward compatibility.
 func (s *Server) Init() error {
 	s.log.Info("init")
 	defer s.log.Info("finish init")
@@ -113,6 +154,12 @@ func (s *Server) Init() error {
 	}
 	return nil
 }
+
+// Start registers the Server as a momentum listener on its chain
+// (chain.Register), marks the Server as started so GetSubscribeApi
+// will hand out the *Api, and spawns the worker goroutine that
+// drains the install/uninstall/event channels. Returns nil
+// unconditionally.
 func (s *Server) Start() error {
 	s.log.Info("start")
 	defer s.log.Info("finish start")
@@ -125,6 +172,13 @@ func (s *Server) Start() error {
 	}()
 	return nil
 }
+
+// Stop tears the Server down: unregisters from chain.Chain,
+// signals the worker via the stopped channel, waits for the
+// goroutine to exit, and clears the singleton so the next
+// GetSubscribeServer call constructs a fresh Server. Active
+// subscriptions are dropped when the worker exits and clears
+// s.subscriptions. Returns nil unconditionally.
 func (s *Server) Stop() error {
 	s.log.Info("stop")
 	defer s.log.Info("finish stop")
@@ -138,6 +192,15 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+// InsertMomentum implements the chain.MomentumEventListener side
+// of the Server: receives a newly inserted detailed momentum and
+// enqueues two events onto the worker channels — a Momentum and
+// the flattened slice of AccountBlock events for every block (and
+// recursive descendant block) in the momentum. **Non-blocking**:
+// if either channel is full, the event is dropped with an error
+// log rather than stalling the chain's insertion goroutine. The
+// trade-off favours liveness of the chain over delivery
+// guarantees for subscribers.
 func (s *Server) InsertMomentum(detailed *nom.DetailedMomentum) {
 	select {
 	case s.mCh <- &Momentum{
@@ -159,6 +222,12 @@ func (s *Server) InsertMomentum(detailed *nom.DetailedMomentum) {
 	}
 	return
 }
+
+// DeleteMomentum implements the chain.MomentumEventListener side
+// of the Server for rollbacks. The current implementation is a
+// no-op: subscribers receive insert events but no compensating
+// delete events on chain reorgs. Callers that need rollback
+// awareness must reconcile against LedgerApi reads.
 func (s *Server) DeleteMomentum(*nom.DetailedMomentum) {
 }
 
@@ -185,6 +254,12 @@ func (s *Server) work() {
 	}
 }
 
+// BroadcastStats accumulates the result of one broadcast pass:
+// how many subscriptions received a Notify, and how many were
+// uninstalled in-place because they reported Closed. Logged at
+// info level at the end of each broadcastMomentums /
+// broadcastBlocks call so operators can correlate event volume
+// with subscriber churn.
 type BroadcastStats struct {
 	NumNotify     int
 	NumUninstalls int
@@ -269,18 +344,39 @@ func (s *Api) subscribe(ctx context.Context, options *subscriptionOptions) (*rpc
 	return subscription.rpc, nil
 }
 
+// Momentums installs a subscription that fires once per momentum
+// inserted by the chain. Each event carries Momentum (hash +
+// height); subscribers needing the full body must follow up with
+// LedgerApi.GetMomentumByHash. Returns
+// rpc.ErrNotificationsUnsupported when the underlying transport
+// does not support push notifications (e.g. plain HTTP).
 func (s *Api) Momentums(ctx context.Context) (*rpc.Subscription, error) {
 	s.log.Info("new subscription", "type", "Momentums")
 	return s.subscribe(ctx, NewMomentumsSubscription())
 }
+
+// AllAccountBlocks installs an unfiltered account-block
+// subscription: every block emitted by every account, including
+// recursively-walked descendant blocks. Same transport caveat as
+// Momentums (rpc.ErrNotificationsUnsupported on plain HTTP).
 func (s *Api) AllAccountBlocks(ctx context.Context) (*rpc.Subscription, error) {
 	s.log.Info("new subscription", "type", "AllAccountBlocks")
 	return s.subscribe(ctx, NewBlocksSubscription())
 }
+
+// AccountBlocksByAddress installs an account-block subscription
+// filtered to blocks where AccountBlock.Address == address (the
+// producer side). Same transport caveat as Momentums.
 func (s *Api) AccountBlocksByAddress(ctx context.Context, address types.Address) (*rpc.Subscription, error) {
 	s.log.Info("new subscription", "type", "AccountBlocksByAddress")
 	return s.subscribe(ctx, NewBlocksByAddressSubscription(address))
 }
+
+// UnreceivedAccountBlocksByAddress installs a subscription that
+// fires when a send block destined for address is broadcast — the
+// receive side, so address knows it owes an acknowledgement.
+// Only send blocks (where AccountBlock.ToAddress == address) reach
+// the subscriber. Same transport caveat as Momentums.
 func (s *Api) UnreceivedAccountBlocksByAddress(ctx context.Context, address types.Address) (*rpc.Subscription, error) {
 	s.log.Info("new subscription", "type", "UnreceivedAccountBlocksByAddress")
 	return s.subscribe(ctx, NewToUnreceivedBlocksSubscription(address))

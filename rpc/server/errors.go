@@ -60,6 +60,7 @@ const defaultErrorCode = -32000
 
 type methodNotFoundError struct{ method string }
 
+// ErrorCode returns -32601 (JSON-RPC "method not found").
 func (e *methodNotFoundError) ErrorCode() int { return -32601 }
 
 func (e *methodNotFoundError) Error() string {
@@ -68,6 +69,9 @@ func (e *methodNotFoundError) Error() string {
 
 type subscriptionNotFoundError struct{ namespace, subscription string }
 
+// ErrorCode returns -32601 (JSON-RPC "method not found"); the
+// subscription helpers reuse the method-not-found code for an
+// unknown subscription name in the targeted namespace.
 func (e *subscriptionNotFoundError) ErrorCode() int { return -32601 }
 
 func (e *subscriptionNotFoundError) Error() string {
@@ -77,6 +81,7 @@ func (e *subscriptionNotFoundError) Error() string {
 // Invalid JSON was received by the server.
 type parseError struct{ message string }
 
+// ErrorCode returns -32700 (JSON-RPC "parse error").
 func (e *parseError) ErrorCode() int { return -32700 }
 
 func (e *parseError) Error() string { return e.message }
@@ -84,6 +89,7 @@ func (e *parseError) Error() string { return e.message }
 // received message isn't a valid request
 type invalidRequestError struct{ message string }
 
+// ErrorCode returns -32600 (JSON-RPC "invalid request").
 func (e *invalidRequestError) ErrorCode() int { return -32600 }
 
 func (e *invalidRequestError) Error() string { return e.message }
@@ -91,6 +97,8 @@ func (e *invalidRequestError) Error() string { return e.message }
 // received message is invalid
 type invalidMessageError struct{ message string }
 
+// ErrorCode returns -32700 (JSON-RPC "parse error"); upstream
+// uses the parse-error code for any malformed message envelope.
 func (e *invalidMessageError) ErrorCode() int { return -32700 }
 
 func (e *invalidMessageError) Error() string { return e.message }
@@ -98,6 +106,7 @@ func (e *invalidMessageError) Error() string { return e.message }
 // unable to decode supplied params, or an invalid number of parameters
 type invalidParamsError struct{ message string }
 
+// ErrorCode returns -32602 (JSON-RPC "invalid params").
 func (e *invalidParamsError) ErrorCode() int { return -32602 }
 
 func (e *invalidParamsError) Error() string { return e.message }
