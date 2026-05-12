@@ -34,7 +34,10 @@ import (
 var (
 	// ErrNotificationsUnsupported is returned when the connection doesn't support notifications
 	ErrNotificationsUnsupported = errors.New("notifications not supported")
-	// ErrSubscriptionNotFound is returned when a notification for the given id is not found.
+	// ErrSubscriptionNotFound is returned when no subscription with
+	// the given id is registered on the server (used by
+	// handler.unsubscribe when a client asks to cancel a subscription
+	// it never installed, or one that has already been dropped).
 	ErrSubscriptionNotFound = errors.New("subscription not found")
 )
 

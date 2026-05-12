@@ -26,8 +26,12 @@ import (
 )
 
 // MetadataApi is the namespace under which the server registers
-// its own introspection methods (e.g. rpc_modules). Reserved at
+// its own introspection methods (RPCService.Modules). Reserved at
 // the server level so user-registered services may not bind to it.
+// The wire method name is "rpc.modules" — this fork uses "." as
+// the service-method separator (see serviceMethodSeparator in
+// json.go:34), distinct from upstream go-ethereum's underscore
+// convention.
 const MetadataApi = "rpc"
 
 // CodecOption specifies which type of messages a codec supports.

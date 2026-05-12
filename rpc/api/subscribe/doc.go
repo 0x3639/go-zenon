@@ -2,7 +2,9 @@
 // account-block and momentum events. It is registered under the
 // "ledger" RPC namespace (alongside LedgerApi's synchronous
 // methods) by rpc/apis.go's "ledgerSubscribe" module so clients
-// invoke subscriptions via ledger_subscribe / ledger_unsubscribe.
+// invoke subscriptions via ledger.subscribe / ledger.unsubscribe
+// (rpc/server uses "." as the separator and ".subscribe" /
+// ".unsubscribe" suffixes — see rpc/server/json.go:34-37).
 //
 // # Server singleton
 //
@@ -49,10 +51,11 @@
 //
 // # What this package does NOT do
 //
-// Subscription transport (WebSocket / IPC framing,
-// notifier lifecycle) and the eth_subscribe/eth_unsubscribe wire
-// protocol live in rpc/server.Notifier. Chain-side event sourcing
-// (when a new momentum is published) lives in chain/. This package
-// is the bridge between those two layers, plus the four
-// per-shape subscription installers.
+// Subscription transport (WebSocket / IPC framing, notifier
+// lifecycle) and the generic <namespace>.subscribe /
+// <namespace>.unsubscribe wire-protocol dispatch live in
+// rpc/server.Notifier. Chain-side event sourcing (when a new
+// momentum is published) lives in chain/. This package is the
+// bridge between those two layers, plus the four per-shape
+// subscription installers.
 package subscribe

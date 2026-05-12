@@ -57,10 +57,13 @@ type jsonWriter interface {
 // BlockNumber is the upstream go-ethereum chain-height parameter
 // type. It encodes either a positive block height or one of three
 // well-known special values ("pending" / "latest" / "earliest")
-// via the negative sentinels below. Retained verbatim from the
-// upstream rpc package; go-zenon does not currently dispatch on
-// BlockNumber but keeps the type exported so embedded code that
-// shares wire shapes with go-ethereum compiles unchanged.
+// via the sentinel constants below — PendingBlockNumber and
+// LatestBlockNumber are negative, EarliestBlockNumber is zero,
+// so positive values are unambiguously block heights. Retained
+// verbatim from the upstream rpc package; go-zenon does not
+// currently dispatch on BlockNumber but keeps the type exported
+// so embedded code that shares wire shapes with go-ethereum
+// compiles unchanged.
 type BlockNumber int64
 
 // Well-known BlockNumber sentinels matching the upstream JSON-RPC
@@ -107,10 +110,10 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 }
 
 // Int64 returns the underlying int64 representation of bn,
-// including the negative sentinels for "pending" / "latest" /
-// "earliest". Callers branching on the well-known values should
-// compare against the BlockNumber constants rather than the raw
-// int.
+// including the sentinel values for "pending" (-2), "latest"
+// (-1), and "earliest" (0). Callers branching on the well-known
+// values should compare against the BlockNumber constants rather
+// than the raw int.
 func (bn BlockNumber) Int64() int64 {
 	return (int64)(bn)
 }

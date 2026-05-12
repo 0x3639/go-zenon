@@ -17,11 +17,14 @@
 /*
 Package server implements bi-directional JSON-RPC 2.0 on multiple transports.
 
-This package is a vendored fork of go-ethereum's rpc package and retains
-its upstream wire-format behaviour (object dispatch, batch handling,
-publish/subscribe). It is renamed to "server" because go-zenon binds it
-under that name everywhere in rpc/ — see rpc/apis.go and the per-domain
-handlers in rpc/api for the consumer side.
+This package is a vendored fork of go-ethereum's rpc package, renamed to
+"server" because rpc/ is now the parent directory. Consumers across go-zenon
+import it with the conventional `rpc "..."` alias (see rpc/apis.go and
+rpc/api/subscribe/api.go), so the symbol names below render as rpc.Server /
+rpc.Subscription / etc. at the call site even though the package itself is
+named server. Wire-format behaviour (object dispatch, batch handling, the
+generic <namespace>.subscribe / <namespace>.unsubscribe pub-sub surface)
+matches upstream.
 
 It provides access to the exported methods of an object across a network or other I/O
 connection. After creating a server or client instance, objects can be registered to make
