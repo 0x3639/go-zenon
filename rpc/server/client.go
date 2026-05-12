@@ -32,9 +32,17 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+// Client-side error sentinels exported for caller pattern-matching.
 var (
-	ErrClientQuit                = errors.New("client is closed")
-	ErrNoResult                  = errors.New("no result in JSON-RPC response")
+	// ErrClientQuit is returned by Client methods after the client
+	// has been closed.
+	ErrClientQuit = errors.New("client is closed")
+	// ErrNoResult is returned when a JSON-RPC response carries no
+	// result field (and no error field).
+	ErrNoResult = errors.New("no result in JSON-RPC response")
+	// ErrSubscriptionQueueOverflow is returned to a subscriber
+	// whose receive channel falls behind faster than the buffer
+	// can absorb.
 	ErrSubscriptionQueueOverflow = errors.New("subscription queue overflow")
 	errClientReconnected         = errors.New("client reconnected")
 	errDead                      = errors.New("connection lost")
@@ -188,8 +196,9 @@ func DialContext(ctx context.Context, rawurl string) (*Client, error) {
 	}
 }
 
-// Client retrieves the client from the context, if any. This can be used to perform
-// 'reverse calls' in a handler method.
+// ClientFromContext retrieves the Client previously attached to
+// ctx, if any. This can be used to perform 'reverse calls' in a
+// handler method.
 func ClientFromContext(ctx context.Context) (*Client, bool) {
 	client, ok := ctx.Value(clientContextKey{}).(*Client)
 	return client, ok
@@ -335,9 +344,9 @@ func (c *Client) BatchCall(b []BatchElem) error {
 	return c.BatchCallContext(ctx, b)
 }
 
-// BatchCall sends all given requests as a single batch and waits for the server
-// to return a response for all of them. The wait duration is bounded by the
-// context's deadline.
+// BatchCallContext sends all given requests as a single batch and waits for the
+// server to return a response for all of them. The wait duration is bounded by
+// the context's deadline.
 //
 // In contrast to CallContext, BatchCallContext only returns errors that have occurred
 // while sending the request. Any error specific to a request is reported through the

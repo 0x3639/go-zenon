@@ -54,8 +54,20 @@ type jsonWriter interface {
 	remoteAddr() string
 }
 
+// BlockNumber is the upstream go-ethereum chain-height parameter
+// type. It encodes either a positive block height or one of three
+// well-known special values ("pending" / "latest" / "earliest")
+// via the sentinel constants below — PendingBlockNumber and
+// LatestBlockNumber are negative, EarliestBlockNumber is zero,
+// so positive values are unambiguously block heights. Retained
+// verbatim from the upstream rpc package; go-zenon does not
+// currently dispatch on BlockNumber but keeps the type exported
+// so embedded code that shares wire shapes with go-ethereum
+// compiles unchanged.
 type BlockNumber int64
 
+// Well-known BlockNumber sentinels matching the upstream JSON-RPC
+// strings "pending" / "latest" / "earliest".
 const (
 	PendingBlockNumber  = BlockNumber(-2)
 	LatestBlockNumber   = BlockNumber(-1)
@@ -97,16 +109,32 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Int64 returns the underlying int64 representation of bn,
+// including the sentinel values for "pending" (-2), "latest"
+// (-1), and "earliest" (0). Callers branching on the well-known
+// values should compare against the BlockNumber constants rather
+// than the raw int.
 func (bn BlockNumber) Int64() int64 {
 	return (int64)(bn)
 }
 
+// BlockNumberOrHash is the upstream go-ethereum union parameter
+// type accepting either a BlockNumber or a block hash (mutually
+// exclusive). RequireCanonical asks the server to fail rather
+// than serve an answer from a non-canonical block when the hash
+// form is used.
 type BlockNumberOrHash struct {
 	BlockNumber      *BlockNumber `json:"blockNumber,omitempty"`
 	BlockHash        *common.Hash `json:"blockHash,omitempty"`
 	RequireCanonical bool         `json:"requireCanonical,omitempty"`
 }
 
+// UnmarshalJSON parses either a structured object form
+// ({"blockNumber":...} or {"blockHash":...}) or a bare string of
+// the same shapes as BlockNumber.UnmarshalJSON. A structured form
+// that sets both BlockNumber and BlockHash returns an error.
+// 66-character bare strings are treated as block hashes (32-byte
+// hex with leading "0x"); other strings parse as hex block numbers.
 func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 	type erased BlockNumberOrHash
 	e := erased{}
@@ -162,6 +190,9 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 	}
 }
 
+// Number returns the BlockNumber payload if the union was set via
+// the BlockNumber arm. The second return is false when the union
+// is empty or carries a hash instead.
 func (bnh *BlockNumberOrHash) Number() (BlockNumber, bool) {
 	if bnh.BlockNumber != nil {
 		return *bnh.BlockNumber, true
@@ -169,6 +200,9 @@ func (bnh *BlockNumberOrHash) Number() (BlockNumber, bool) {
 	return BlockNumber(0), false
 }
 
+// Hash returns the block-hash payload if the union was set via
+// the BlockHash arm. The second return is false when the union
+// is empty or carries a block number instead.
 func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool) {
 	if bnh.BlockHash != nil {
 		return *bnh.BlockHash, true
@@ -176,6 +210,8 @@ func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool) {
 	return common.Hash{}, false
 }
 
+// BlockNumberOrHashWithNumber returns a BlockNumberOrHash with
+// blockNr set on the BlockNumber arm and RequireCanonical = false.
 func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash {
 	return BlockNumberOrHash{
 		BlockNumber:      &blockNr,
@@ -184,6 +220,11 @@ func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash {
 	}
 }
 
+// BlockNumberOrHashWithHash returns a BlockNumberOrHash with hash
+// set on the BlockHash arm. canonical controls the
+// RequireCanonical flag — when true, the server is asked to
+// reject queries that would otherwise be answered from a
+// non-canonical block at that hash.
 func BlockNumberOrHashWithHash(hash common.Hash, canonical bool) BlockNumberOrHash {
 	return BlockNumberOrHash{
 		BlockNumber:      nil,

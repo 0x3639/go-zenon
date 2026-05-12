@@ -16,12 +16,21 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// StatsApi serves the "stats" RPC namespace: node-introspection
+// methods that expose host OS information, the running binary's
+// version, the live p2p peer set, and consensus sync state. The
+// methods are read-only and do not require any chain access — they
+// reflect the running process rather than chain state.
 type StatsApi struct {
 	z   zenon.Zenon
 	p2p *p2p.Server
 	log log15.Logger
 }
 
+// NewStatsApi returns a StatsApi bound to z and the live p2p
+// server. The logger module tag is "net_api" (the package's
+// historical name before the rename to stats); it remains "net_api"
+// in logs so existing log filters keep matching.
 func NewStatsApi(z zenon.Zenon, p2p *p2p.Server) *StatsApi {
 	return &StatsApi{
 		z:   z,
@@ -30,6 +39,11 @@ func NewStatsApi(z zenon.Zenon, p2p *p2p.Server) *StatsApi {
 	}
 }
 
+// OsInfoResponse is the wire shape returned by StatsApi.OsInfo. It
+// merges host-level OS identifiers (from gopsutil/host.Info) with
+// runtime memory (gopsutil/mem.VirtualMemory) and Go-runtime
+// counters (runtime.NumCPU, runtime.NumGoroutine). Fields sourced
+// from gopsutil are zero-valued if the underlying probe fails.
 type OsInfoResponse struct {
 	Os              string `json:"os"`
 	Platform        string `json:"platform"`
@@ -42,6 +56,11 @@ type OsInfoResponse struct {
 	NumGoroutine    int    `json:"numGoroutine"`
 }
 
+// OsInfo returns the host OS snapshot described by OsInfoResponse.
+// gopsutil probe failures are swallowed: Memory* and Platform*
+// fields stay zero-valued rather than propagating the underlying
+// error, so OsInfo never returns a non-nil error in current code.
+// The (error) return is kept for forward compatibility.
 func (api *StatsApi) OsInfo() (*OsInfoResponse, error) {
 	result := &OsInfoResponse{}
 	stat, e := host.Info()
@@ -64,11 +83,19 @@ func (api *StatsApi) OsInfo() (*OsInfoResponse, error) {
 	return result, nil
 }
 
+// ProcessInfoResponse is the wire shape returned by
+// StatsApi.ProcessInfo: the build-time identifiers baked into the
+// running binary via the metadata package.
 type ProcessInfoResponse struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 }
 
+// ProcessInfo returns the running binary's version (metadata.Version,
+// the release tag at build time) and short commit hash
+// (metadata.GitCommit, set via -ldflags by the Makefile). The
+// (error) return is kept for forward compatibility; the current
+// implementation never returns a non-nil error.
 func (api *StatsApi) ProcessInfo() (*ProcessInfoResponse, error) {
 	return &ProcessInfoResponse{
 		Version: metadata.Version,
@@ -76,11 +103,21 @@ func (api *StatsApi) ProcessInfo() (*ProcessInfoResponse, error) {
 	}, nil
 }
 
+// Peer is the wire view of one P2P peer used in NetworkInfoResponse.
+// PublicKey is the node ID (hex-encoded), IP is the remote address
+// stripped of its port, and Name is the announced peer name. The
+// Self peer is synthesised with IP "127.0.0.1" and Name "*self*".
 type Peer struct {
 	PublicKey string `json:"publicKey"`
 	IP        string `json:"ip"`
 	Name      string `json:"name"`
 }
+
+// NetworkInfoResponse is the wire shape returned by
+// StatsApi.NetworkInfo: the live peer set plus the node's own
+// identity. NumPeers reflects p2p.Server.PeerCount at call time,
+// which may differ from len(Peers) if a peer was added or removed
+// between the two reads.
 type NetworkInfoResponse struct {
 	NumPeers int     `json:"numPeers"`
 	Peers    []*Peer `json:"peers"`
@@ -104,6 +141,10 @@ func selfToPeer(node *discover.Node) *Peer {
 	}
 }
 
+// NetworkInfo enumerates the current p2p peer set and returns it
+// wrapped in NetworkInfoResponse. A failed per-peer address
+// conversion aborts the whole call rather than skipping that peer,
+// so the result is all-or-nothing.
 func (api *StatsApi) NetworkInfo() (*NetworkInfoResponse, error) {
 	peersRaw := api.p2p.Peers()
 	peers := make([]*Peer, 0, len(peersRaw))
@@ -122,6 +163,10 @@ func (api *StatsApi) NetworkInfo() (*NetworkInfoResponse, error) {
 	}, nil
 }
 
+// SyncInfo returns the consensus-broadcaster's view of how far the
+// local node is from the network frontier. The (error) return is
+// kept for forward compatibility; the current implementation
+// always returns a non-nil *SyncInfo and a nil error.
 func (api *StatsApi) SyncInfo() (*protocol.SyncInfo, error) {
 	return api.z.Broadcaster().SyncInfo(), nil
 }

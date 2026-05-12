@@ -53,14 +53,21 @@ func (io stdioConn) Write(b []byte) (n int, err error) {
 	return io.out.Write(b)
 }
 
+// Close is a no-op for stdio: the underlying os.Stdin / os.Stdout
+// handles are owned by the process, not the conn.
 func (io stdioConn) Close() error {
 	return nil
 }
 
+// RemoteAddr returns the literal "/dev/stdin" for logging — stdio
+// has no real remote address.
 func (io stdioConn) RemoteAddr() string {
 	return "/dev/stdin"
 }
 
+// SetWriteDeadline rejects deadline configuration on stdio with a
+// net.OpError carrying "deadline not supported"; stdio has no
+// underlying deadline mechanism.
 func (io stdioConn) SetWriteDeadline(t time.Time) error {
 	return &net.OpError{Op: "set", Net: "stdio", Source: nil, Addr: nil, Err: errors.New("deadline not supported")}
 }

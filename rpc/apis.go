@@ -9,6 +9,11 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
+// getApi resolves one module name to its rpc.API descriptors. The
+// supported names and the namespaces they register are documented
+// on the package; unknown names yield an empty slice rather than
+// an error so a caller may pass an unrecognised module without
+// aborting the rest of the registration.
 func getApi(z zenon.Zenon, p2p *p2p.Server, apiModule string) []rpc.API {
 	switch apiModule {
 	case "ledger":
@@ -111,6 +116,11 @@ func getApi(z zenon.Zenon, p2p *p2p.Server, apiModule string) []rpc.API {
 		return []rpc.API{}
 	}
 }
+
+// GetApis composes the rpc.API descriptors for the supplied module
+// names, in order. Unrecognised names contribute nothing (they are
+// silently skipped by getApi); the result is the concatenation of
+// each module's namespace bindings.
 func GetApis(z zenon.Zenon, p2p *p2p.Server, apiModule ...string) []rpc.API {
 	var apis []rpc.API
 	for _, m := range apiModule {
@@ -118,6 +128,12 @@ func GetApis(z zenon.Zenon, p2p *p2p.Server, apiModule ...string) []rpc.API {
 	}
 	return apis
 }
+
+// GetPublicApis returns the full default public surface — every
+// module: "ledger", "ledgerSubscribe", "embedded", "stats" — bound
+// in that order. This is the set znnd exposes by default; an
+// operator restricting the surface should call GetApis with an
+// explicit module list instead.
 func GetPublicApis(z zenon.Zenon, p2p *p2p.Server) []rpc.API {
 	return GetApis(z, p2p, "ledger", "ledgerSubscribe", "embedded", "stats")
 }
