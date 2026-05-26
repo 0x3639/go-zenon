@@ -17,6 +17,7 @@ import (
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/types"
+	"github.com/zenon-network/go-zenon/rpc/api"
 	"github.com/zenon-network/go-zenon/rpc/api/embedded"
 	"github.com/zenon-network/go-zenon/vm/constants"
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
@@ -1989,16 +1990,19 @@ t=2001-09-09T02:05:00+0000 lvl=eror msg=Unwrap-ErrInvalidSignature module=embedd
 // The underlying GetUnwrapTokenRequests iterates LevelDB by
 // (TransactionHash, LogIndex), so the input slice arrives in an order
 // that is *unrelated* to height. The API uses sort.SliceStable, which
-// preserves the deterministic upstream tx-hash order as an implicit
-// tie-breaker for equal-height entries.
+// preserves the deterministic upstream order as an implicit tie-breaker
+// for equal-height entries.
 //
-// To meaningfully exercise stability vs sort.Slice, the test creates 12
-// unwraps in a single momentum batch sharing one RegistrationMomentumHeight.
-// Below ~12 elements Go's sort uses insertion sort — incidentally stable —
-// so smaller fixtures cannot distinguish SliceStable from Slice. With 12
-// ties + a 13th newer entry, Go's pdqsort reorders the ties under Slice
-// but preserves them under SliceStable; this test pins the SliceStable
-// order and therefore fails if the API reverts to sort.Slice.
+// The stability assertion is contract-based: we capture the raw
+// upstream order via definition.GetUnwrapTokenRequests and require the
+// API to preserve the relative order of tied entries. This avoids
+// coupling the test to Go's sort implementation details (pdqsort
+// cutoffs, insertion-sort thresholds, etc.).
+//
+// The 12-tie fixture is sized to force the unstable path — at this size
+// Go's current sort.Slice reorders ties via pdqsort, while SliceStable
+// preserves them. If a future Go version changes the cutoff, the
+// fixture may need to grow; the assertion itself remains valid.
 //
 // Tx-hash prefixes are also chosen so that lexicographic tx-hash order
 // disagrees with height-descending order — proving the sort is doing
@@ -2072,19 +2076,39 @@ func TestBridge_GetAllUnwrapTokenRequests_SortStability(t *testing.T) {
 		}
 	}
 
-	// Index 0 is the newest unwrap (hash 0xff). Indices 1..12 are the
-	// tied entries in LevelDB tx-hash-ascending order (0x00..0x0b). With
-	// Go's pdqsort, sort.Slice reorders these ties for inputs of this
-	// size; sort.SliceStable preserves them. This is the assertion that
-	// distinguishes the two implementations.
+	// Capture the raw upstream order so the stability assertion is
+	// algorithm-independent: SliceStable must preserve the upstream
+	// relative order of tied entries, regardless of how LevelDB or Go's
+	// sort happen to arrange them.
+	_, context, err := api.GetFrontierContext(z.Chain(), types.BridgeContract)
+	common.FailIfErr(t, err)
+	upstream, err := definition.GetUnwrapTokenRequests(context.Storage())
+	common.FailIfErr(t, err)
+
+	upstreamTied := make([]*definition.UnwrapTokenRequest, 0, tieCount)
+	for _, r := range upstream {
+		if r.RegistrationMomentumHeight == tiedHeight {
+			upstreamTied = append(upstreamTied, r)
+		}
+	}
+	if len(upstreamTied) != tieCount {
+		t.Fatalf("expected %d tied entries upstream, got %d", tieCount, len(upstreamTied))
+	}
+
+	// Index 0 is the newest unwrap (height > tiedHeight). Indices
+	// 1..tieCount are the tied entries; their relative order in the API
+	// output must match upstream. This is the SliceStable contract that
+	// distinguishes it from sort.Slice (which would reorder ties for
+	// inputs at this size under Go's current pdqsort).
 	if full.List[0].TransactionHash != hashNewest {
 		t.Fatalf("index 0: expected newest %v, got %v", hashNewest, full.List[0].TransactionHash)
 	}
 	for i := 0; i < tieCount; i++ {
 		got := full.List[i+1].TransactionHash
-		if got != tieHashes[i] {
-			t.Fatalf("index %d (tie-break): expected %v (LevelDB position %d), got %v — stability violated",
-				i+1, tieHashes[i], i, got)
+		want := upstreamTied[i].TransactionHash
+		if got != want {
+			t.Fatalf("index %d (tie-break): expected %v (upstream position %d), got %v — relative order not preserved",
+				i+1, want, i, got)
 		}
 	}
 
