@@ -1055,7 +1055,7 @@ func (p *NominateGuardiansLiquidity) ReceiveBlock(context vm_context.AccountVmCo
 		return nil, err
 	}
 
-	sort.Slice(*guardians, func(i, j int) bool {
+	sort.SliceStable(*guardians, func(i, j int) bool {
 		return (*guardians)[i].String() < (*guardians)[j].String()
 	})
 
