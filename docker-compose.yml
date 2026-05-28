@@ -94,7 +94,7 @@ services:
     depends_on:
       - rpc
     environment:
-      EXPLORER_DEFAULT_ENDPOINT: http://localhost:35997
+      EXPLORER_DEFAULT_ENDPOINT: ${EXPLORER_DEFAULT_ENDPOINT:-http://localhost:35997}
     ports:
       - "36000:80" # Zenon explorer
     networks:

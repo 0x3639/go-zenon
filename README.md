@@ -31,6 +31,7 @@ make devnet-keys    # regenerate committed devnet configs/keys
 The public endpoints are `http://localhost:35997` for HTTP JSON-RPC and
 `ws://localhost:35998` for WebSocket RPC. Pillar 1 also exposes HTTP RPC at
 `http://localhost:35991` for producer-path debugging. The local explorer is
-served at `http://localhost:36000`.
+served at `http://localhost:36000` and is preconfigured to use the public
+devnet RPC endpoint.
 
 More detail: [docker/devnet/README.md](docker/devnet/README.md).

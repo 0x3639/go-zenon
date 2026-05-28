@@ -60,11 +60,58 @@ and configs are all committed under `docker/devnet/`.
 | Pillar 1 HTTP JSON | `http://localhost:35991` |
 | Explorer | `http://localhost:36000` |
 
-The explorer image serves the static
+## Explorer
+
+The `explorer` service runs the static
 [`zenon-network/explorer.zenon.network`](https://github.com/zenon-network/explorer.zenon.network)
-bundle pinned to commit `84b772981f0dd25ed52758f6244f9e1f8d54634b`. It seeds
-browser local storage with `http://localhost:35997` as the default node on each
-page load, so stale explorer settings do not point at another network.
+bundle behind nginx. The image is built locally from `docker/explorer/Dockerfile`
+and pins the upstream bundle to commit
+`84b772981f0dd25ed52758f6244f9e1f8d54634b` for reproducible devnet runs.
+
+Open the explorer at:
+
+```text
+http://localhost:36000
+```
+
+The explorer code runs in your browser, not inside the Docker network, so the
+default RPC endpoint must be a host-reachable URL. The devnet image generates
+`/devnet-endpoint.js` at container startup and injects it before the explorer
+application loads. That script writes these browser local storage keys on every
+page load:
+
+| Key | Value |
+|-----|-------|
+| `defaultEndpoint` | `http://localhost:35997` |
+| `nodes` | list with `http://localhost:35997` first |
+
+The endpoint script is served with `Cache-Control: no-store` and intentionally
+overwrites stale explorer settings. This keeps a browser that was previously
+pointed at another Zenon node from silently showing balances from the wrong
+network.
+
+If you open the explorer from another machine, set the RPC endpoint to a URL
+that machine can reach:
+
+```sh
+EXPLORER_DEFAULT_ENDPOINT=http://YOUR_DOCKER_HOST:35997 make devnet-up
+```
+
+After changing `EXPLORER_DEFAULT_ENDPOINT`, rebuild/recreate the explorer:
+
+```sh
+docker compose up -d --build explorer
+```
+
+Useful checks:
+
+```sh
+curl -s http://localhost:36000/devnet-endpoint.js
+
+curl -sX POST http://localhost:35997 \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"ledger.getAccountInfoByAddress","params":["z1qpeet8dcjg0m6x6m3tg437wnc42aa2nez2fzth"]}'
+```
 
 Quick smoke check:
 
