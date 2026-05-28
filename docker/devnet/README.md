@@ -1,21 +1,24 @@
 # go-zenon devnet
 
-Self-contained four-node Network of Momentum (NoM) for local development.
-Three pillars producing in rotation, plus a public RPC node. Chain ID
-`69`, fully isolated from mainnet.
+Self-contained five-node Network of Momentum (NoM) for local development.
+Three pillars produce in rotation, while a public RPC node and a non-pillar
+observer node provide a more realistic relay/sync path. Chain ID `69`, fully
+isolated from mainnet.
 
 ## Topology
 
-| Service   | Container              | Static IP      | Role                                            | Host ports        |
-|-----------|------------------------|----------------|-------------------------------------------------|-------------------|
-| `pillar`  | `znnd-devnet-pillar`   | `172.30.0.10`  | Pillar 1 — producer + bootstrap (`MinPeers=0`)  | _none exposed_    |
-| `pillar2` | `znnd-devnet-pillar2`  | `172.30.0.12`  | Pillar 2 — producer, seeds off pillar1          | _none exposed_    |
-| `pillar3` | `znnd-devnet-pillar3`  | `172.30.0.13`  | Pillar 3 — producer, seeds off pillar1          | _none exposed_    |
-| `rpc`     | `znnd-devnet-rpc`      | `172.30.0.11`  | Public read-only RPC                            | `35997`, `35998`  |
+| Service    | Container               | Static IP      | Role                                           | Host ports        |
+|------------|-------------------------|----------------|------------------------------------------------|-------------------|
+| `pillar`   | `znnd-devnet-pillar`    | `172.30.0.10`  | Pillar 1 producer + bootstrap (`MinPeers=0`)   | `35991` HTTP RPC  |
+| `pillar2`  | `znnd-devnet-pillar2`   | `172.30.0.12`  | Pillar 2 producer                              | _none exposed_    |
+| `pillar3`  | `znnd-devnet-pillar3`   | `172.30.0.13`  | Pillar 3 producer                              | _none exposed_    |
+| `rpc`      | `znnd-devnet-rpc`       | `172.30.0.11`  | Public RPC ingress                             | `35997`, `35998`  |
+| `observer` | `znnd-devnet-observer`  | `172.30.0.14`  | Non-pillar observer / relay peer               | _none exposed_    |
 
-All four share the bridge network `znnd-devnet` (`172.30.0.0/24`).
-Pillar 1 is the discovery seed for everyone else; once peers are exchanged
-the network forms a mesh.
+All five share the bridge network `znnd-devnet` (`172.30.0.0/24`).
+The RPC and observer nodes have stable p2p identities and seed from all
+three pillars plus each other. Pillar 2 and pillar 3 also seed each other,
+which keeps transaction relay from depending on a single bootstrap path.
 
 ### Chain ID vs Network ID
 
@@ -53,6 +56,7 @@ and configs are all committed under `docker/devnet/`.
 |-----------|------------------------------|
 | HTTP JSON | `http://localhost:35997`     |
 | WebSocket | `ws://localhost:35998`       |
+| Pillar 1 HTTP JSON | `http://localhost:35991` |
 
 Quick smoke check:
 
@@ -62,8 +66,8 @@ curl -sX POST http://localhost:35997 \
   -d '{"jsonrpc":"2.0","id":1,"method":"ledger.getFrontierMomentum","params":[]}'
 ```
 
-The other three nodes only listen on the docker network. To poke them
-directly use `docker exec`:
+Pillar 2, pillar 3, and the observer only listen on the docker network.
+To poke them directly use `docker exec`:
 
 ```sh
 docker exec znnd-devnet-pillar2 wget -qO- \
@@ -133,23 +137,27 @@ owners).
 docker/devnet/
 ├── entrypoint.sh                       # role-aware seeder, runs in every container
 ├── genesis.json                        # ChainIdentifier 69, 3 pillars, dev allocations
+├── observer/                           # non-pillar relay peer
+│   ├── config.json
+│   └── network-private-key
 ├── pillar/                             # pillar 1 (bootstrap)
-│   ├── config.json                     # producer + RPC + Net.MinPeers=0, no seeders
+│   ├── config.json                     # producer + RPC + Net.MinPeers=0
 │   ├── network-private-key             # secp256k1 p2p key (committed)
 │   └── wallet/
 │       └── z1qq9n7...wyg0mq            # encrypted index-0 keystore
-├── pillar2/                            # pillar 2 (seeds off pillar 1)
+├── pillar2/                            # pillar 2
 │   ├── config.json
 │   ├── network-private-key
 │   └── wallet/
 │       └── z1qz9zr5...rn2un            # encrypted index-4 keystore
-├── pillar3/                            # pillar 3 (seeds off pillar 1)
+├── pillar3/                            # pillar 3
 │   ├── config.json
 │   ├── network-private-key
 │   └── wallet/
 │       └── z1qzedcj...a6g8e            # encrypted index-6 keystore
 └── rpc/
-    └── config.json                     # no producer, seeds off pillar 1
+    ├── config.json                     # no producer, public RPC ingress
+    └── network-private-key
 ```
 
 All keystores are encrypted with the password `devnet`.
