@@ -84,6 +84,22 @@ services:
       devnet:
         ipv4_address: 172.30.0.14
 
+  explorer:
+    build:
+      context: .
+      dockerfile: docker/explorer/Dockerfile
+    image: go-zenon-devnet-explorer:latest
+    container_name: znnd-devnet-explorer
+    restart: unless-stopped
+    depends_on:
+      - rpc
+    environment:
+      EXPLORER_DEFAULT_ENDPOINT: http://localhost:35997
+    ports:
+      - "36000:80" # Zenon explorer
+    networks:
+      - devnet
+
 networks:
   devnet:
     name: znnd-devnet

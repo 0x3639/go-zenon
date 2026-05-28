@@ -1,9 +1,9 @@
 # go-zenon devnet
 
-Self-contained five-node Network of Momentum (NoM) for local development.
-Three pillars produce in rotation, while a public RPC node and a non-pillar
-observer node provide a more realistic relay/sync path. Chain ID `69`, fully
-isolated from mainnet.
+Self-contained five-node Network of Momentum (NoM) for local development
+with a local web explorer. Three pillars produce in rotation, while a public
+RPC node and a non-pillar observer node provide a more realistic relay/sync
+path. Chain ID `69`, fully isolated from mainnet.
 
 ## Topology
 
@@ -14,6 +14,7 @@ isolated from mainnet.
 | `pillar3`  | `znnd-devnet-pillar3`   | `172.30.0.13`  | Pillar 3 producer                              | _none exposed_    |
 | `rpc`      | `znnd-devnet-rpc`       | `172.30.0.11`  | Public RPC ingress                             | `35997`, `35998`  |
 | `observer` | `znnd-devnet-observer`  | `172.30.0.14`  | Non-pillar observer / relay peer               | _none exposed_    |
+| `explorer` | `znnd-devnet-explorer`  | Docker-assigned | Static Zenon explorer                          | `36000`           |
 
 All five share the bridge network `znnd-devnet` (`172.30.0.0/24`).
 The RPC and observer nodes have stable p2p identities and seed from all
@@ -57,6 +58,13 @@ and configs are all committed under `docker/devnet/`.
 | HTTP JSON | `http://localhost:35997`     |
 | WebSocket | `ws://localhost:35998`       |
 | Pillar 1 HTTP JSON | `http://localhost:35991` |
+| Explorer | `http://localhost:36000` |
+
+The explorer image serves the static
+[`zenon-network/explorer.zenon.network`](https://github.com/zenon-network/explorer.zenon.network)
+bundle pinned to commit `84b772981f0dd25ed52758f6244f9e1f8d54634b`. It seeds
+browser local storage with `http://localhost:35997` as the default node on each
+page load, so stale explorer settings do not point at another network.
 
 Quick smoke check:
 
