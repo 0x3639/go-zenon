@@ -26,8 +26,8 @@ const (
 
 	// Total derivations exposed in the dev table. 0/4/6 are producer keys
 	// (live in pillar containers); 1/5/7 are pillar owners (held by the
-	// user); 2 is spork; 3 is a general dev account.
-	derivationCount uint32 = 8
+	// user); 2 is spork; 3/8/9 are funded general dev accounts.
+	derivationCount uint32 = 10
 )
 
 // pillarSpec describes one of the three devnet pillars. The producer key for
@@ -227,6 +227,8 @@ func run(force bool) error {
 		5: "pillar 2 owner",
 		6: "pillar 3 producer",
 		7: "pillar 3 owner",
+		8: "general dev account",
+		9: "general dev account",
 	}
 	for i := uint32(0); i < derivationCount; i++ {
 		fmt.Printf("  index %d (%-28s): %s\n", i, roleByIdx[i], addrs[i])

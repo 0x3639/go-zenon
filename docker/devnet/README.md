@@ -92,11 +92,13 @@ password: devnet
 | 0     | `z1qq9n7fpaqd8lpcljandzmx4xtku9w4ftwyg0mq`       | Pillar 1 producer (lives in pillar)   | —                            |
 | 1     | `z1qq6eg8n43g032hanpsfp02qcdmv7zfj3y2lt5d`       | Pillar 1 owner / general dev wallet   | 10,000 ZNN, 100,000 QSR      |
 | 2     | `z1qzmzssx28dc0fmvlca05hyxk2kgkgu7n0cj8pl`       | Spork address                         | —                            |
-| 3     | `z1qp3yph55qgresyytz83anynr2f4z39x2z3ej3e`       | General dev account                   | 50,000 ZNN, 500,000 QSR      |
+| 3     | `z1qp3yph55qgresyytz83anynr2f4z39x2z3ej3e`       | General dev account 1                 | 50,000 ZNN, 500,000 QSR      |
 | 4     | `z1qz9zr5c7a0p8qljvrwt2cy5j99w98c5myrn2un`       | Pillar 2 producer (lives in pillar2)  | —                            |
 | 5     | `z1qqleq9qc2u3039fly4ld5qgngdeapa3yks0e3l`       | Pillar 2 owner                        | —                            |
 | 6     | `z1qzedcjmds6cwuqu7wkrvl0dadwwauzaana6g8e`       | Pillar 3 producer (lives in pillar3)  | —                            |
 | 7     | `z1qq8gll9ey70nym5cjxjqcegymw0g8a4je6kwes`       | Pillar 3 owner                        | —                            |
+| 8     | `z1qpeet8dcjg0m6x6m3tg437wnc42aa2nez2fzth`       | General dev account 2                 | 50,000 ZNN, 500,000 QSR      |
+| 9     | `z1qqcam4ycu0ta8333hx38r5j2z3ry9jjfxkc7t5`       | General dev account 3                 | 50,000 ZNN, 500,000 QSR      |
 
 The Accelerator contract (`z1qxemdeddedxaccelerat0rxxxxxxxxxxp4tk22`)
 is pre-funded with 1,000,000 ZNN + 10,000,000 QSR for proposal payouts.
