@@ -2,21 +2,121 @@ package implementation
 
 import (
 	"encoding/base64"
+	"regexp"
+
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/vm/constants"
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 	"github.com/zenon-network/go-zenon/vm/vm_context"
-	"regexp"
 )
 
 var (
-	governanceLog = common.EmbeddedLogger.New("contract", "governance")
+	governanceLog        = common.EmbeddedLogger.New("contract", "governance")
+	governanceURLPattern = regexp.MustCompile("^([Hh][Tt][Tt][Pp][Ss]?://)?[a-zA-Z0-9]{2,60}\\.[a-zA-Z]{1,63}([-a-zA-Z0-9()@:%_+.~#?&/=]{0,100})$")
 )
 
 type ProposeActionMethod struct {
 	MethodName string
+}
+
+type governanceActionValidator interface {
+	ValidateSendBlock(block *nom.AccountBlock) error
+}
+
+var governanceAllowedActionMethods = map[types.Address]map[string]governanceActionValidator{
+	types.SporkContract: {
+		definition.SporkCreateMethodName:   &CreateSporkMethod{definition.SporkCreateMethodName},
+		definition.SporkActivateMethodName: &ActivateSporkMethod{definition.SporkActivateMethodName},
+	},
+	types.BridgeContract: {
+		definition.SetNetworkMethodName:           &SetNetworkMethod{definition.SetNetworkMethodName},
+		definition.RemoveNetworkMethodName:        &RemoveNetworkMethod{definition.RemoveNetworkMethodName},
+		definition.SetNetworkMetadataMethodName:   &SetNetworkMetadataMethod{definition.SetNetworkMetadataMethodName},
+		definition.SetTokenPairMethod:             &SetTokenPairMethod{definition.SetTokenPairMethod},
+		definition.RemoveTokenPairMethodName:      &RemoveTokenPairMethod{definition.RemoveTokenPairMethodName},
+		definition.HaltMethodName:                 &HaltMethod{definition.HaltMethodName},
+		definition.UnhaltMethodName:               &UnhaltMethod{definition.UnhaltMethodName},
+		definition.EmergencyMethodName:            &EmergencyMethod{definition.EmergencyMethodName},
+		definition.ChangeTssECDSAPubKeyMethodName: &ChangeTssECDSAPubKeyMethod{definition.ChangeTssECDSAPubKeyMethodName},
+		definition.ChangeAdministratorMethodName:  &ChangeAdministratorMethod{definition.ChangeAdministratorMethodName},
+		definition.SetAllowKeygenMethodName:       &SetAllowKeygenMethod{definition.SetAllowKeygenMethodName},
+		definition.SetOrchestratorInfoMethodName:  &SetOrchestratorInfoMethod{definition.SetOrchestratorInfoMethodName},
+		definition.SetBridgeMetadataMethodName:    &SetBridgeMetadataMethod{definition.SetBridgeMetadataMethodName},
+		definition.RevokeUnwrapRequestMethodName:  &RevokeUnwrapRequestMethod{definition.RevokeUnwrapRequestMethodName},
+		definition.NominateGuardiansMethodName:    &NominateGuardiansMethod{definition.NominateGuardiansMethodName},
+	},
+	types.LiquidityContract: {
+		definition.FundMethodName:                        &FundMethod{definition.FundMethodName},
+		definition.BurnZnnMethodName:                     &BurnZnnMethod{definition.BurnZnnMethodName},
+		definition.SetTokenTupleMethodName:               &SetTokenTupleMethod{definition.SetTokenTupleMethodName},
+		definition.SetIsHaltedMethodName:                 &SetIsHalted{definition.SetIsHaltedMethodName},
+		definition.UnlockLiquidityStakeEntriesMethodName: &UnlockLiquidityStakeEntries{definition.UnlockLiquidityStakeEntriesMethodName},
+		definition.SetAdditionalRewardMethodName:         &SetAdditionalReward{definition.SetAdditionalRewardMethodName},
+		definition.ChangeAdministratorMethodName:         &ChangeAdministratorLiquidity{definition.ChangeAdministratorMethodName},
+		definition.NominateGuardiansMethodName:           &NominateGuardiansLiquidity{definition.NominateGuardiansMethodName},
+		definition.EmergencyMethodName:                   &EmergencyLiquidity{definition.EmergencyMethodName},
+	},
+}
+
+func governanceActionMethodName(destination types.Address, data []byte) (string, error) {
+	var (
+		methodName string
+		err        error
+	)
+
+	switch destination {
+	case types.SporkContract:
+		method, methodErr := definition.ABISpork.MethodById(data)
+		if methodErr == nil {
+			methodName = method.Name
+		}
+		err = methodErr
+	case types.BridgeContract:
+		method, methodErr := definition.ABIBridge.MethodById(data)
+		if methodErr == nil {
+			methodName = method.Name
+		}
+		err = methodErr
+	case types.LiquidityContract:
+		method, methodErr := definition.ABILiquidity.MethodById(data)
+		if methodErr == nil {
+			methodName = method.Name
+		}
+		err = methodErr
+	default:
+		return "", constants.ErrPermissionDenied
+	}
+
+	if err != nil {
+		return "", constants.ErrForbiddenParam
+	}
+	return methodName, nil
+}
+
+func checkGovernanceActionDestination(destination types.Address, data []byte) error {
+	allowedMethods, ok := governanceAllowedActionMethods[destination]
+	if !ok {
+		return constants.ErrPermissionDenied
+	}
+
+	methodName, err := governanceActionMethodName(destination, data)
+	if err != nil {
+		return err
+	}
+	validator, ok := allowedMethods[methodName]
+	if !ok {
+		return constants.ErrPermissionDenied
+	}
+
+	return validator.ValidateSendBlock(&nom.AccountBlock{
+		Address:       types.GovernanceContract,
+		ToAddress:     destination,
+		Amount:        common.Big0,
+		TokenStandard: types.ZnnTokenStandard,
+		Data:          append([]byte(nil), data...),
+	})
 }
 
 func checkActionStatic(param *definition.ActionVariable) error {
@@ -31,7 +131,7 @@ func checkActionStatic(param *definition.ActionVariable) error {
 		return constants.ErrInvalidDescription
 	}
 
-	if ok, _ := regexp.MatchString("^([Hh][Tt][Tt][Pp][Ss]?://)?[a-zA-Z0-9]{2,60}\\.[a-zA-Z]{1,6}([-a-zA-Z0-9()@:%_+.~#?&/=]{0,100})$", param.Url); !ok || len(param.Url) == 0 {
+	if !governanceURLPattern.MatchString(param.Url) || len(param.Url) == 0 {
 		governanceLog.Debug("governance-check-action-static", "reason", "malformed-url")
 		return constants.ErrForbiddenParam
 	}
@@ -41,10 +141,27 @@ func checkActionStatic(param *definition.ActionVariable) error {
 		return constants.ErrPermissionDenied
 	}
 
-	_, err := base64.StdEncoding.DecodeString(param.Data)
+	if len(param.Data) > base64.StdEncoding.EncodedLen(constants.GovernanceActionDataMaxLength) {
+		governanceLog.Debug("governance-check-action-static", "reason", "data-too-large")
+		return constants.ErrForbiddenParam
+	}
+
+	data, err := base64.StdEncoding.DecodeString(param.Data)
 	if err != nil {
 		governanceLog.Debug("governance-check-action-static", "reason", "malformed-data")
 		return constants.ErrInvalidB64Decode
+	}
+	if len(data) > constants.GovernanceActionDataMaxLength {
+		governanceLog.Debug("governance-check-action-static", "reason", "data-too-large")
+		return constants.ErrForbiddenParam
+	}
+	if err := checkGovernanceActionDestination(param.Destination, data); err != nil {
+		if err == constants.ErrPermissionDenied {
+			governanceLog.Debug("governance-check-action-static", "reason", "forbidden-destination-or-method")
+		} else {
+			governanceLog.Debug("governance-check-action-static", "reason", "malformed-action-data")
+		}
+		return err
 	}
 	return nil
 }

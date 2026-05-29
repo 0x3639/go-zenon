@@ -72,6 +72,10 @@ type ActionList struct {
 }
 
 func (a *GovernanceApi) GetAllActions(pageIndex, pageSize uint32) (*ActionList, error) {
+	if pageSize > api.RpcMaxPageSize {
+		return nil, api.ErrPageSizeParamTooBig
+	}
+
 	_, context, err := api.GetFrontierContext(a.chain, types.GovernanceContract)
 	if err != nil {
 		return nil, err

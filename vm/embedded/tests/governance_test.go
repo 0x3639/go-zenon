@@ -16,7 +16,28 @@ import (
 	"github.com/zenon-network/go-zenon/zenon/mock"
 )
 
-func activateGovernance(z mock.MockZenon) {
+func overrideGovernanceSporkForTest(t *testing.T, id types.Hash) {
+	t.Helper()
+
+	previousSporkId := types.GovernanceSpork.SporkId
+	previousImplemented, hadPreviousImplemented := types.ImplementedSporksMap[id]
+
+	types.GovernanceSpork.SporkId = id
+	types.ImplementedSporksMap[id] = true
+
+	t.Cleanup(func() {
+		types.GovernanceSpork.SporkId = previousSporkId
+		if hadPreviousImplemented {
+			types.ImplementedSporksMap[id] = previousImplemented
+		} else {
+			delete(types.ImplementedSporksMap, id)
+		}
+	})
+}
+
+func activateGovernance(t *testing.T, z mock.MockZenon) {
+	t.Helper()
+
 	z.InsertSendBlock(&nom.AccountBlock{
 		Address:   g.Spork.Address,
 		ToAddress: types.SporkContract,
@@ -39,19 +60,30 @@ func activateGovernance(z mock.MockZenon) {
 		),
 	}, nil, mock.SkipVmChanges)
 	z.InsertNewMomentum()
-	types.GovernanceSpork.SporkId = id
-	types.ImplementedSporksMap[id] = true
+	overrideGovernanceSporkForTest(t, id)
 }
 
 // Activate spork
 func activateGovernanceStep0(t *testing.T, z mock.MockZenon) {
-	activateGovernance(z)
+	activateGovernance(t, z)
 	z.InsertMomentumsTo(10)
+
+	previousType1ActionVotingPeriod := constants.Type1ActionVotingPeriod
+	previousType2ActionVotingPeriod := constants.Type2ActionVotingPeriod
+	previousType1ActionAcceptanceThreshold := constants.Type1ActionAcceptanceThreshold
+	previousType2ActionAcceptanceThreshold := constants.Type2ActionAcceptanceThreshold
 
 	constants.Type1ActionVotingPeriod = 15 * 60   // 15 minutes
 	constants.Type2ActionVotingPeriod = 8 * 60    // 8 minutes
 	constants.Type1ActionAcceptanceThreshold = 40 // 40%
 	constants.Type2ActionAcceptanceThreshold = 25 // 25%
+
+	t.Cleanup(func() {
+		constants.Type1ActionVotingPeriod = previousType1ActionVotingPeriod
+		constants.Type2ActionVotingPeriod = previousType2ActionVotingPeriod
+		constants.Type1ActionAcceptanceThreshold = previousType1ActionAcceptanceThreshold
+		constants.Type2ActionAcceptanceThreshold = previousType2ActionAcceptanceThreshold
+	})
 
 	governanceApi := embedded.NewGovernanceApi(z)
 	actionsList, err := governanceApi.GetAllActions(0, 10)

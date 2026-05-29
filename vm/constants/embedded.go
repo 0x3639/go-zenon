@@ -44,6 +44,7 @@ var (
 	Type2ActionAcceptanceThreshold uint32 = 50
 	Type1ActionVotingPeriod               = 45 * PhaseTimeUnit
 	Type2ActionVotingPeriod               = 30 * PhaseTimeUnit
+	GovernanceActionDataMaxLength         = MaxDataLength
 
 	/// ==== Pillar constants ===
 
