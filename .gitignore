@@ -8,6 +8,10 @@
 
 build/
 
+# Local test/build artifacts may include absolute machine paths.
+.gocache/
+test-results/
+
 # IDE
 .vscode
 .idea/
