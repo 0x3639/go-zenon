@@ -9,6 +9,9 @@
 build/
 /devnet-keygen
 .gocache/
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode

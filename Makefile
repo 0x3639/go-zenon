@@ -1,6 +1,8 @@
 .PHONY: all clean znnd devnet-keys devnet-up devnet-down
 
 GO ?= latest
+DEVNET_PROJECT ?= znnd-devnet
+COMPOSE ?= COMPOSE_PROJECT_NAME=$(DEVNET_PROJECT) docker compose
 
 ifeq ($(OS),Windows_NT) 
     detected_OS := Windows
@@ -44,7 +46,7 @@ devnet-keys:
 	go run ./cmd/devnet-keygen $(if $(FORCE),--force,)
 
 devnet-up:
-	docker compose up -d --build
+	$(COMPOSE) up -d --build
 
 devnet-down:
-	docker compose down -v
+	$(COMPOSE) down -v

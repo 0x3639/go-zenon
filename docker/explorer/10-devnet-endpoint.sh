@@ -3,9 +3,26 @@ set -eu
 
 endpoint="${EXPLORER_DEFAULT_ENDPOINT:-http://localhost:35997}"
 
+case "$endpoint" in
+  http://*|https://*) ;;
+  *)
+    echo "EXPLORER_DEFAULT_ENDPOINT must start with http:// or https://" >&2
+    exit 1
+    ;;
+esac
+
+case "$endpoint" in
+  *[[:cntrl:]]*)
+    echo "EXPLORER_DEFAULT_ENDPOINT must not contain control characters" >&2
+    exit 1
+    ;;
+esac
+
+endpoint_json=$(printf '%s' "$endpoint" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
 cat > /usr/share/nginx/html/devnet-endpoint.js <<EOF
 (function () {
-  var endpoint = "${endpoint}";
+  var endpoint = "${endpoint_json}";
   try {
     var nodes = JSON.parse(localStorage.getItem("nodes") || "[]");
     if (!Array.isArray(nodes)) {
