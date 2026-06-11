@@ -17,7 +17,7 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
-// PillarApi implements the embedded.pillar JSON-RPC namespace, which
+// PillarApi implements the "embedded.pillar" JSON-RPC namespace, which
 // reads the state of the pillar embedded contract (registrations,
 // delegations, deposits, rewards) as of the frontier momentum. Voting
 // weights and momentum-production statistics come from a consensus

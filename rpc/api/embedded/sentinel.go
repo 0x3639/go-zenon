@@ -12,7 +12,7 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
-// SentinelApi implements the embedded.sentinel JSON-RPC namespace,
+// SentinelApi implements the "embedded.sentinel" JSON-RPC namespace,
 // which reads the state of the sentinel embedded contract
 // (registrations, deposits, rewards) as of the frontier momentum.
 // Every exported method is served as

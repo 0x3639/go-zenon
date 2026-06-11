@@ -300,7 +300,7 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 // GetPillarVotes returns the votes the named pillar has cast on the
 // given project or phase ids, as of the frontier momentum, one result
 // per requested hash in the same order. A hash the pillar has not voted
-// on yields null instead of an error; vote values are 0 for yes, 1 for
+// on yields a nil entry instead of an error; vote values are 0 for yes, 1 for
 // no and 2 for abstain.
 //
 // JSON-RPC: embedded.accelerator.getPillarVotes

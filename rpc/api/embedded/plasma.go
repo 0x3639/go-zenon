@@ -19,7 +19,7 @@ import (
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
-// PlasmaApi implements the embedded.plasma JSON-RPC namespace, which
+// PlasmaApi implements the "embedded.plasma" JSON-RPC namespace, which
 // reads plasma state derived from fused QSR: per-address plasma totals,
 // the fusion entries stored in the plasma embedded contract, and the
 // proof-of-work difficulty needed when fused plasma does not cover a
