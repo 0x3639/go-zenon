@@ -2,8 +2,17 @@
 # check-comment-only.sh BASE_REF
 # Verifies every .go file changed since BASE_REF differs only in comments:
 # both versions are parsed, comments dropped, pretty-printed, and compared.
+#
+# Notes:
+# - Because both sides are canonicalized (pretty-printed) before comparing,
+#   gofmt-style formatting-only changes also pass. This is accepted.
+# - Compiler/build directive lines (//go:build, // +build, //go:generate,
+#   //go:linkname, ...) are comments to the Go parser, so they are checked
+#   explicitly with a separate textual comparison and may NOT change.
 set -euo pipefail
 BASE="${1:?usage: check-comment-only.sh BASE_REF}"
+git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null || { echo "FATAL: bad BASE_REF: $BASE" >&2; exit 2; }
+BASE="$(git merge-base "$BASE" HEAD)"
 cd "$(git rev-parse --show-toplevel)"
 
 TMP="$(mktemp -d)"
@@ -47,11 +56,17 @@ fail=0
 while IFS= read -r f; do
 	[[ "$f" == *.go ]] || continue
 	git show "$BASE:$f" > "$TMP/old.go" 2>/dev/null || { echo "NEW FILE (not allowed in docs PR): $f"; fail=1; continue; }
+	[[ -f "$f" ]] || { echo "DELETED FILE (not allowed in docs PR): $f"; fail=1; continue; }
 	"$STRIP" "$TMP/old.go" > "$TMP/old.stripped" || { echo "PARSE FAIL (base): $f"; fail=1; continue; }
 	"$STRIP" "$f"          > "$TMP/new.stripped" || { echo "PARSE FAIL (head): $f"; fail=1; continue; }
 	if ! diff -q "$TMP/old.stripped" "$TMP/new.stripped" > /dev/null; then
 		echo "NON-COMMENT CHANGE: $f"
-		diff "$TMP/old.stripped" "$TMP/new.stripped" | head -10
+		diff "$TMP/old.stripped" "$TMP/new.stripped" | head -10 || true
+		fail=1
+	fi
+	if ! diff <(grep -hE '^[[:space:]]*//(go:|[[:space:]]*\+build)' "$TMP/old.go" || true) \
+	          <(grep -hE '^[[:space:]]*//(go:|[[:space:]]*\+build)' "$f" || true) > /dev/null; then
+		echo "DIRECTIVE CHANGE (build/compiler directives are not comments for this gate): $f"
 		fail=1
 	fi
 done < <(git diff --name-only "$BASE" -- '*.go')
