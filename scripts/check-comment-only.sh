@@ -4,8 +4,12 @@
 # both versions are parsed, comments dropped, pretty-printed, and compared.
 #
 # Notes:
-# - Because both sides are canonicalized (pretty-printed) before comparing,
-#   gofmt-style formatting-only changes also pass. This is accepted.
+# - Because both sides are canonicalized (printed comment-free in raw mode,
+#   blank lines dropped) before comparing, gofmt-style formatting-only
+#   changes also pass. This is accepted. Raw mode + blank-line filtering is
+#   required: position-faithful printing would render comment-induced line
+#   gaps and tabwriter realignment as phantom diffs, falsely rejecting
+#   legitimate comment insertions between adjacent declarations.
 # - Compiler/build directive lines (//go:build, // +build, //go:generate,
 #   //go:linkname, ...) are comments to the Go parser, so they are checked
 #   explicitly with a separate textual comparison and may NOT change.
@@ -42,7 +46,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := (&printer.Config{Mode: printer.TabIndent, Tabwidth: 8}).Fprint(os.Stdout, fset, f); err != nil {
+	if err := (&printer.Config{Mode: printer.RawFormat}).Fprint(os.Stdout, fset, f); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -57,8 +61,10 @@ while IFS= read -r f; do
 	[[ "$f" == *.go ]] || continue
 	git show "$BASE:$f" > "$TMP/old.go" 2>/dev/null || { echo "NEW FILE (not allowed in docs PR): $f"; fail=1; continue; }
 	[[ -f "$f" ]] || { echo "DELETED FILE (not allowed in docs PR): $f"; fail=1; continue; }
-	"$STRIP" "$TMP/old.go" > "$TMP/old.stripped" || { echo "PARSE FAIL (base): $f"; fail=1; continue; }
-	"$STRIP" "$f"          > "$TMP/new.stripped" || { echo "PARSE FAIL (head): $f"; fail=1; continue; }
+	{ "$STRIP" "$TMP/old.go" | grep -v '^[[:space:]]*$' > "$TMP/old.stripped"; } 2>/dev/null || true
+	[[ -s "$TMP/old.stripped" ]] || { echo "PARSE FAIL (base): $f"; fail=1; continue; }
+	{ "$STRIP" "$f" | grep -v '^[[:space:]]*$' > "$TMP/new.stripped"; } 2>/dev/null || true
+	[[ -s "$TMP/new.stripped" ]] || { echo "PARSE FAIL (head): $f"; fail=1; continue; }
 	if ! diff -q "$TMP/old.stripped" "$TMP/new.stripped" > /dev/null; then
 		echo "NON-COMMENT CHANGE: $f"
 		diff "$TMP/old.stripped" "$TMP/new.stripped" | head -10 || true
