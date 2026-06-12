@@ -4,8 +4,10 @@
 // embedded.Method with three calls: GetPlasma quotes the plasma cost
 // of the call from the constants.PlasmaTable tiers; ValidateSendBlock
 // statically checks a user's send block, unpacking and re-packing
-// block.Data so only canonical encodings reach the chain and
-// checking the sent token and amount; ReceiveBlock executes the
+// block.Data so only canonical encodings reach the chain and, where
+// the method requires it, checking the sent token and amount (some
+// methods — AddPhase, UpdatePhase, the liquidity Fund and BurnZnn —
+// place no token or amount restriction); ReceiveBlock executes the
 // method against the contract's state when the VM auto-generates the
 // contract-receive block.
 //
