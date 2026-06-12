@@ -175,3 +175,31 @@ Verify against current code before fixing; line numbers will drift.
     panics NewGenesis mid-build is reported as valid. Suggested fix
     (from Layer-3 PR review): make the recover path return
     ErrInvalidGenesisConfig.
+
+# Layer-4 additions (2026-06-12, vm-core packages)
+
+34. **`vm/supervisor.go` (`GenerateAutoReceive`) — verifier called on a
+    nil block**: the internal error from generateEmbeddedReceive is
+    checked only AFTER `s.verifier.AccountBlock(block)`; on an internal
+    error block is nil and the verifier dereferences it — nil-pointer
+    panic, and unlike the Apply* paths this method has no recover.
+
+35. **`vm/plasma.go` (`AvailablePlasma`) — unit-mismatched cap**:
+    compares computed plasma against MaxFussedAmountForAccountBig (a
+    QSR amount, 5e11) and would return that amount as plasma.
+    Unreachable today (max real plasma ~10.5e6) but wrong if hit.
+    Also note the constant's "Fussed" spelling.
+
+36. **`vm/supervisor.go` (`packBlock`) — dead double-sign**: two
+    identical consecutive `if signFunc != nil` blocks; the first sign
+    pass is discarded work (harmless since ChangesHash is not part of
+    the account-block hash, so both signatures are identical).
+
+37. **`vm/abi/error.go:101,104` — error messages garbled**:
+    errArrayOffsetOverflow swaps its offset/len format arguments;
+    errInsufficientLength formats a []byte with %d instead of its
+    length. Also "varible" typo at :40.
+
+38. **`vm/vm_context/lifecycle.go` (`Done`) — does not nil the
+    accountStoreSnapshot** (unlike Reset); latent with today's
+    single-window usage.
