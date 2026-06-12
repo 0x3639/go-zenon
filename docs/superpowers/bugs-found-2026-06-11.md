@@ -166,3 +166,12 @@ Verify against current code before fixing; line numbers will drift.
     unexported `producer` field; `nom.AccountBlockHeaderComparer`
     is a non-strict (<=) comparer, safe only because headers are
     unique.
+
+33. **`chain/genesis/config.go` (`ReadGenesisConfigFromFile`) — panic
+    during state construction yields (nil, nil), and the caller
+    treats it as success**: the deferred recover only logs; with
+    err == nil, node/config.go:132-134 prints "Loaded a valid genesis
+    config" and proceeds with a nil genesis. A genesis file that
+    panics NewGenesis mid-build is reported as valid. Suggested fix
+    (from Layer-3 PR review): make the recover path return
+    ErrInvalidGenesisConfig.
