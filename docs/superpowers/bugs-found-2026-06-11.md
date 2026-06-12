@@ -127,3 +127,42 @@ Verify against current code before fixing; line numbers will drift.
 
 25. **`common/db/versioned_db.go` — truncated error message**
     `"can't find previous for "` (identifier never formatted in).
+
+# Layer-3 additions (2026-06-12, chain packages)
+
+26. **`chain/momentum/ledger_store.go:66` — swallowed `Apply` error**:
+    `if err := ...Apply(patch); err != nil { return nil }` returns nil
+    instead of err while applying an account-block patch during
+    momentum insertion. A failed state write would be silently
+    ignored. Same pattern at :96 (`setBlockConfirmationHeight`).
+    **Highest-severity finding of the docs effort so far.**
+
+27. **`chain/momentum/embedded.go` — `ComputePillarDelegations`
+    discards errors** from `getAllDelegations()` and
+    `GetActivePillars()` (`, _ :=`), silently producing empty
+    delegation sets on storage errors.
+
+28. **`chain/genesis/account_block.go:192` — `entry.Save` error
+    ignored** in genesisSporkContractConfig; every other Save in the
+    file is wrapped in `common.DealWithErr`.
+
+29. **`chain/genesis/shared_tests.go` — `checkAccountBalance` passes
+    vacuously** when the address has no GenesisBlocks entry at all,
+    even when non-zero amounts are required.
+
+30. **`chain/account_pool.go` (canRollback) — "previous mismatch"
+    branch reuses the "missing previous" error string**; misleading
+    diagnostics.
+
+31. **`chain/account/mailbox` — `GetUnreceivedAccountBlockHashes`
+    with atMost == 0 underflows** to effectively unlimited (only
+    caller passes 500). Also `mailbox.go:20` unreachable return after
+    panic (pre-existing vet finding).
+
+32. **Dead code observations**: `momentumStore.SetFrontier` /
+    `accountStore.SetFrontier` and the mailbox's permanent
+    `unreceivedBlockPrefix` index have no readers anywhere
+    (write-only); `nom.AccountBlockMarshal` carries a vestigial
+    unexported `producer` field; `nom.AccountBlockHeaderComparer`
+    is a non-strict (<=) comparer, safe only because headers are
+    unique.
