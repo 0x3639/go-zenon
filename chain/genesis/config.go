@@ -30,9 +30,11 @@ func MakeEmbeddedGenesisConfig() (store.Genesis, error) {
 // ReadGenesisConfigFromFile decodes a GenesisConfig from the JSON
 // file at genesisFile, validates it with CheckGenesis and builds the
 // genesis state from it. An empty path returns (nil, nil) so the
-// caller can fall back to the embedded genesis. Any failure is also
-// logged at Crit level before the corresponding Err* sentinel is
-// returned.
+// caller can fall back to the embedded genesis. Explicit open,
+// decode and validation failures are logged at Crit level and return
+// the corresponding Err* sentinel; a panic while building the state
+// (inside NewGenesis) is recovered and logged, but the function then
+// returns (nil, nil) — indistinguishable from the empty-path case.
 func ReadGenesisConfigFromFile(genesisFile string) (store.Genesis, error) {
 	defer func() {
 		if err := recover(); err != nil {

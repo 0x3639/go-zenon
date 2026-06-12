@@ -5,7 +5,9 @@ import "github.com/pkg/errors"
 // The Err* sentinels report why a genesis config could not be
 // loaded; ReadGenesisConfigFromFile returns all of them except
 // ErrNoEmbeddedGenesis, which only MakeEmbeddedGenesisConfig returns.
-// The node treats any of them as fatal at startup.
+// The node treats any of them as fatal at startup. Not every failure
+// produces a sentinel: a panic during state construction is recovered
+// and logged but yields (nil, nil) (see ReadGenesisConfigFromFile).
 var (
 	// ErrInvalidGenesisPath signals that the genesis file could not
 	// be opened.

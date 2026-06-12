@@ -60,8 +60,10 @@ func newGenesisAccountBlocks(cfg *GenesisConfig) chain.AccountPool {
 // wrap finalizes one genesis account block from the contract storage
 // already written into context: it applies the address's BalanceList
 // from GenesisBlocks (if any), then packs the accumulated changes
-// into an unsigned height-1 block of nom.BlockTypeGenesisReceive
-// whose hash commits to the db.Patch via ChangesHash.
+// into an unsigned height-1 block of nom.BlockTypeGenesisReceive that
+// records the patch's hash in ChangesHash. Account-block hashes do
+// not cover ChangesHash; it is the enclosing genesis momentum that
+// commits to the full state patch.
 func wrap(cfg *GenesisConfig, context vm_context.AccountVmContext) *nom.AccountBlockTransaction {
 	address := *context.Address()
 	block := &nom.AccountBlock{

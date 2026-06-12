@@ -8,8 +8,8 @@ import (
 )
 
 // AccountBlockHeaderRawLen is the length of one serialized account
-// header (types.AccountHeader.Bytes): 20 address bytes, 32 hash bytes
-// and 8 height bytes — 60 in total.
+// header (types.AccountHeader.Bytes), laid out as 20 address bytes,
+// 8 big-endian height bytes, then 32 hash bytes — 60 in total.
 const AccountBlockHeaderRawLen = types.AddressSize + types.HashSize + 8 // (+8 from height)
 
 // MomentumContent is the list of account headers a momentum confirms.
