@@ -95,10 +95,15 @@ func (s *Supervisor) newMomentumContext(momentum *nom.Momentum) vm_context.Momen
 
 // ApplyBlock verifies and executes a fully-formed account block
 // received from outside (RPC publish, chain bridge) and returns the
-// transaction pairing it with the state patch it produces. The block
-// is not modified or signed; its fields, including ChangesHash, must
-// already be set by the author. ContractSend blocks are rejected —
-// they only exist as descendants of a ContractReceive.
+// transaction pairing it with the state patch it produces. The VM
+// never signs the block and leaves the author's hashed and signature
+// fields alone, but it does populate the plasma accounting fields
+// (TotalPlasma from PoW plus fused plasma, BasePlasma from the
+// block's cost) during execution. ChangesHash is validated only for
+// ContractReceive blocks, whose regenerated counterpart must match;
+// for user blocks it is recorded as authored, not checked against
+// the produced patch. ContractSend blocks are rejected — they only
+// exist as descendants of a ContractReceive.
 func (s *Supervisor) ApplyBlock(block *nom.AccountBlock) (*nom.AccountBlockTransaction, error) {
 	if block.BlockType == nom.BlockTypeContractSend {
 		return nil, errors.Errorf("can't apply BlockTypeContractSend")
