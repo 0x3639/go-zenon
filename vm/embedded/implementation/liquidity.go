@@ -1398,9 +1398,10 @@ func (p *ProposeAdministratorLiquidity) ValidateSendBlock(block *nom.AccountBloc
 // previous one. The administrator must be the zero address
 // (constants.ErrNotEmergency otherwise) and the sender a guardian,
 // else constants.ErrNotGuardian. Once a proposed address gathers the
-// votes of a strict majority of guardians it becomes the new
-// administrator and all votes are reset. No descendant blocks are
-// emitted.
+// votes of a strict majority of guardian slots it becomes the new
+// administrator and all votes are reset; as with the bridge's
+// machinery, a duplicated guardian address still casts one vote but
+// widens the majority threshold. No descendant blocks are emitted.
 func (p *ProposeAdministratorLiquidity) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err

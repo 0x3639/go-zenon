@@ -324,9 +324,10 @@ func HashByNetworkClass(data []byte, networkClass uint32) ([]byte, error) {
 // GetWrapTokenRequestMessage builds the digest the TSS key signs for
 // a wrap request: the go-ethereum ABI encoding of the network class,
 // chain id, the destination network's bridge contract address, the
-// request id, the destination address, the token address and the
-// amount minus the fee — what the destination network releases —
-// hashed by HashByNetworkClass for the request's network class. The
+// request id (its 32 bytes as a uint256), the destination address,
+// the token address and the amount minus the fee — what the
+// destination network releases — hashed by HashByNetworkClass for
+// the request's network class. The
 // id makes every message unique and the contract address binds
 // signatures to one deployment, so none can be replayed elsewhere.
 func GetWrapTokenRequestMessage(request *definition.WrapTokenRequest, contractAddress *ecommon.Address) ([]byte, error) {
@@ -1185,11 +1186,12 @@ func (p *HaltMethod) ValidateSendBlock(block *nom.AccountBlock) error {
 // ReceiveBlock sets the Halted flag. Halting twice fails with
 // constants.ErrBridgeHalted; no other readiness gate applies. When
 // the sender is not the administrator, the signature must verify
-// against the TSS key over GetBasicMethodMessage built from the
-// method name, the current TssNonce, definition.NoMClass and the
-// momentum chain identifier (constants.ErrInvalidECDSASignature
-// otherwise), and the nonce is incremented so the signature cannot
-// be replayed. No descendant blocks are emitted.
+// against the TSS key over GetBasicMethodMessage — encoding, in
+// order, the method name, definition.NoMClass, the momentum chain
+// identifier and the current TssNonce
+// (constants.ErrInvalidECDSASignature otherwise) — and the nonce is
+// incremented so the signature cannot be replayed. No descendant
+// blocks are emitted.
 func (p *HaltMethod) ReceiveBlock(context vm_context.AccountVmContext, sendBlock *nom.AccountBlock) ([]*nom.AccountBlock, error) {
 	if err := p.ValidateSendBlock(sendBlock); err != nil {
 		return nil, err
