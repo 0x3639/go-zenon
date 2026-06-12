@@ -203,3 +203,12 @@ Verify against current code before fixing; line numbers will drift.
 38. **`vm/vm_context/lifecycle.go` (`Done`) — does not nil the
     accountStoreSnapshot** (unlike Reset); latent with today's
     single-window usage.
+
+39. **User-block `ChangesHash` is never validated** (observation from
+    Layer-4 PR review follow-up): verifier/account_block.go has no
+    ChangesHash check, and vm only compares it on the regenerated
+    ContractReceive path. An externally published user block can carry
+    an arbitrary ChangesHash that is stored and served over RPC as-is.
+    State integrity is still protected by the momentum-level
+    ChangesHash (which is validated and covered by the momentum hash);
+    the per-block field is informational/garbage-prone for user blocks.
