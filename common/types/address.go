@@ -7,11 +7,12 @@
 // weights used by consensus (PillarDelegation), and the registry of
 // protocol upgrades implemented by this build (ImplementedSpork).
 //
-// Each type carries both a protobuf codec (Proto/DeProto pairs, used
-// for storage and the wire) and text-based JSON marshalling (bech32
-// strings for addresses and token standards, bare lowercase hex for
-// hashes). The package also declares the well-known addresses of the
-// embedded contracts and the well-known ZNN and QSR token standards.
+// The identifier types carry both a protobuf codec (Proto/DeProto
+// pairs, used for storage and the wire) and text-based JSON
+// marshalling (bech32 strings for addresses and token standards, bare
+// lowercase hex for hashes). The package also declares the well-known
+// addresses of the embedded contracts and the well-known ZNN and QSR
+// token standards.
 package types
 
 import (

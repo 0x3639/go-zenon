@@ -11,8 +11,9 @@
 // HTLC hash locks.
 //
 // All three helpers hash the plain concatenation of their arguments,
-// with no length prefixes or domain separation: Hash(a, b) equals
-// Hash(ab). Callers that hash multiple variable-length items must
+// with no length prefixes or domain separation: hashing a then b
+// equals hashing their concatenation. Callers that hash multiple
+// variable-length items must
 // ensure unambiguous encodings themselves.
 package crypto
 

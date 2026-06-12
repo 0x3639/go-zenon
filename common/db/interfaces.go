@@ -101,7 +101,8 @@ type StorageIterator interface {
 // Apply replays a Patch onto the store. Changes exports the writes
 // accumulated by this instance (since its creation or snapshot) as a
 // Patch; it is supported only by memory-backed instances, including
-// snapshot overlays. Snapshot returns a copy-on-write view: writes to
+// snapshot overlays — other flavours panic. Snapshot returns a
+// copy-on-write view: writes to
 // the returned DB land in a fresh in-memory layer and never reach the
 // receiver.
 type DB interface {
