@@ -8,13 +8,15 @@
 // these definitions, and the RPC APIs in rpc/api/embedded read
 // contract state exclusively through the getters defined here.
 //
-// Storage conventions: every value lives in the owning contract's
+// Storage conventions: values live in the owning contract's
 // key-value storage under a key built from a one-byte prefix followed
 // by the bytes identifying the entry (an address, a hash, an epoch
-// number or a name). Contract-specific prefixes count up from 1,
-// while the prefixes of the shared ABICommon variables start at 128,
-// so both sets coexist in one contract's key space without
-// colliding. Token amounts are big.Int values in the token's
+// number or a name). Contract-specific prefixes count up from 1
+// (except the accelerator's, which start at 12 — see accelerator.go —
+// and the swap contract, which stores its entries under bare hashes
+// with no prefix), while the prefixes of the shared ABICommon
+// variables start at 128, so both sets coexist in one contract's key
+// space without colliding. Token amounts are big.Int values in the token's
 // smallest units, timestamps are unix seconds, heights count
 // momentums and epochs count daily reward periods; multi-byte epoch
 // numbers are encoded little-endian inside keys. Save methods either
