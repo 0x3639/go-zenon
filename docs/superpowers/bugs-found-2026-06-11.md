@@ -97,3 +97,33 @@ Verify against current code before fixing; line numbers will drift.
 10. **`rpc/api/stats.go` — `OsInfo` silently ignores gopsutil errors**
     (fields stay zero, method never errors). Possibly intentional;
     callers cannot distinguish "zero" from "unavailable".
+
+# Layer-2 additions (2026-06-12, common packages)
+
+20. **`common/ticker.go` — `ToTick` on a time before startTime** converts
+    a negative int64 to uint64 (astronomical tick number instead of an
+    error); a sub-second interval is a divide-by-zero panic
+    (`uint64(interval.Seconds())` == 0).
+
+21. **`common/task.go` — `t.finish()` is not deferred**: if a task's
+    action panics, `Finished()`/`Wait()` never resolve (moot today only
+    because the unrecovered panic kills the process).
+
+22. **`common/types/address.go` (`DeProtoAddress`) — panic message cites
+    `HashSize` (32) while checking `AddressSize` (20)**; misleading
+    diagnostics for malformed AddressProto payloads. Also cosmetic:
+    `SetBytes` error string has a double space.
+
+23. **`common/db/versioned_db.go` — `ldbManager.Add` silently returns
+    nil** when the transaction doesn't build on the frontier, while
+    `memdbManager.Add` returns an error; asymmetric failure modes.
+
+24. **`common/db` — empty values conflate with deletion tombstones**:
+    `enableDeleteDB.Put(key, []byte{})` stores exactly the tombstone
+    byte; through a historical view a key rolled back to absent returns
+    `([]byte{}, nil)` and `Has` → true instead of ErrNotFound, while
+    iterators correctly skip it. Latent inconsistency if any caller ever
+    stores empty values.
+
+25. **`common/db/versioned_db.go` — truncated error message**
+    `"can't find previous for "` (identifier never formatted in).
