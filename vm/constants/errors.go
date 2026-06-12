@@ -251,8 +251,8 @@ var (
 	// is not in emergency mode.
 	ErrNotEmergency = errors.New("bridge not in emergency")
 	// ErrInvalidGuardians rejects a guardian set that is too small
-	// (fewer than MinGuardians), contains duplicates or is otherwise
-	// malformed.
+	// (fewer than MinGuardians). Duplicate addresses are not checked
+	// and are stored as given.
 	ErrInvalidGuardians = errors.New("invalid guardians")
 	// ErrSecurityNotInitialized rejects security-dependent calls
 	// before the contract's security info (guardians, delays) has
