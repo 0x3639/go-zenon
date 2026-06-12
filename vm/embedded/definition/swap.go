@@ -43,11 +43,13 @@ type ParamRetrieveAssets struct {
 	Signature string
 }
 
-// SwapAssets is one unclaimed legacy swap balance: the ZNN and QSR
-// (smallest units) still claimable by the legacy key whose key-id
-// SHA-256 is KeyIdHash. The stored amounts never decay in place; the
-// implementation discounts them by the elapsed decay ticks
-// (the constants.SwapAssetDecay* schedule) when reading and
+// SwapAssets is one stored legacy swap balance: the ZNN and QSR
+// (smallest units) attributed to the legacy key whose key-id SHA-256
+// is KeyIdHash. Claiming does not delete the entry — RetrieveAssets
+// zeroes the amounts and saves the row back, so already-claimed
+// entries persist with zero balances. The stored amounts never decay
+// in place; the implementation discounts them by the elapsed decay
+// ticks (the constants.SwapAssetDecay* schedule) when reading and
 // claiming. Unlike every other entry in this package, the key is the
 // bare 32-byte KeyIdHash with no prefix byte, so the entries occupy
 // the contract's whole key space.
@@ -89,9 +91,10 @@ func parseSwapAssets(data, key []byte) (*SwapAssets, error) {
 	}
 }
 
-// GetSwapAssetsByKeyIdHash returns the unclaimed balance of
-// keyIdHash, or constants.ErrDataNonExistent if there is none. The
-// amounts are the stored, undecayed values.
+// GetSwapAssetsByKeyIdHash returns the stored balance of keyIdHash,
+// or constants.ErrDataNonExistent if there is none. The amounts are
+// the stored, undecayed values; an already-claimed entry is returned
+// with zero amounts rather than an error.
 func GetSwapAssetsByKeyIdHash(context db.DB, keyIdHash types.Hash) (*SwapAssets, error) {
 	key := getSwapAssetsKey(keyIdHash)
 	if data, err := context.Get(key); err != nil {
@@ -101,7 +104,8 @@ func GetSwapAssetsByKeyIdHash(context db.DB, keyIdHash types.Hash) (*SwapAssets,
 	}
 }
 
-// GetSwapAssets returns every unclaimed balance, in key-id-hash byte
+// GetSwapAssets returns every stored balance — including
+// already-claimed entries with zero amounts — in key-id-hash byte
 // order, by iterating the contract's entire key space (the entries
 // have no prefix byte).
 func GetSwapAssets(context db.DB) ([]*SwapAssets, error) {
