@@ -146,6 +146,7 @@ type GenesisBlocksConfig struct {
 
 // GenesisBlockConfig assigns Address its initial balance per ZTS
 // token, realized as a height-1 BlockTypeGenesisReceive block.
+// Amounts are in the token's base units (10^8 per ZNN or QSR).
 type GenesisBlockConfig struct {
 	Address     types.Address
 	BalanceList map[types.ZenonTokenStandard]*big.Int

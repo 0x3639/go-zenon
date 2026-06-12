@@ -3,9 +3,9 @@ package genesis
 import "github.com/pkg/errors"
 
 // The Err* sentinels report why a genesis config could not be
-// loaded; ReadGenesisConfigFromFile returns the first four and
-// MakeEmbeddedGenesisConfig the last. The node treats any of them as
-// fatal at startup.
+// loaded; ReadGenesisConfigFromFile returns all of them except
+// ErrNoEmbeddedGenesis, which only MakeEmbeddedGenesisConfig returns.
+// The node treats any of them as fatal at startup.
 var (
 	// ErrInvalidGenesisPath signals that the genesis file could not
 	// be opened.

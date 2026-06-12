@@ -182,10 +182,10 @@ func CheckTokenTotalSupply(g *GenesisConfig) error {
 	return nil
 }
 
-// CheckGenesisCheckSum ensures that the hash of the account blocks
-// don't change during the build: it fabricates the full genesis
-// state from g and compares the resulting momentum hash against
-// expected, pinning the deterministic construction.
+// CheckGenesisCheckSum ensures the genesis construction is
+// reproducible across builds: it fabricates the full genesis state
+// from g and compares the resulting momentum hash against expected,
+// pinning the deterministic construction.
 func CheckGenesisCheckSum(g *GenesisConfig, expected types.Hash) error {
 	genesis := NewGenesis(g)
 	checkSum := genesis.GetGenesisMomentum().Hash
