@@ -235,3 +235,55 @@ Verify against current code before fixing; line numbers will drift.
     checking the address error; `Phase.ToProjectMarshal` marshals a
     phase despite the name; `definition.SetTokenPairParam` is
     unreferenced by the implementation.
+
+# Layer-6 additions (2026-06-12, vm/embedded/implementation)
+
+43. **`vm/embedded/implementation/liquidity.go`
+    (`updateLiquidityRewards`) — epoch emission silently skipped under
+    backlog**: the MaxEpochsPerUpdate cap counts BLOCKS (2 per epoch,
+    so effective cap 10 epochs) and is checked AFTER
+    checkAndPerformUpdateEpoch has already advanced and persisted the
+    epoch marker — the capping iteration's mint blocks are never
+    emitted, losing that epoch's emission. Reachable only via the
+    legacy pre-spork update with 10+ epochs of backlog.
+
+44. **Duplicate guardian addresses widen the emergency-recovery
+    threshold**: neither bridge nor liquidity NominateGuardians
+    rejects duplicates; a duplicated address still casts one vote
+    (the proposal loop breaks at the first matching slot) but the
+    majority threshold counts slots (len/2), so duplicates make
+    administrator recovery harder and can deadlock it (e.g. 6 slots /
+    3 unique guardians → 4 votes needed from 3 possible voters).
+
+45. **`vm/embedded/implementation/accelerator.go` — AddPhase and
+    UpdatePhase validate neither Amount nor TokenStandard**; tokens
+    sent along with these calls are silently kept by the contract
+    (every other non-donation method enforces zero-amount).
+
+46. **`vm/embedded/implementation/accelerator.go` — Save/Delete
+    errors discarded throughout** (~12 call sites) where other
+    contracts wrap with common.DealWithErr; a silent DB failure
+    would diverge state.
+
+47. **`common.Big0` aliasing**: stake.go and swap.go store the shared
+    common.Big0 pointer into entries that are then packed
+    (stakeInfo.Amount, deposit.Znn/Qsr, RewardDeposit.Znn); latent
+    hazard if any future code mutates those big.Ints in place.
+
+48. **`vm/embedded/implementation/pillars.go` — reward computation
+    debt**: computeDetailedPillarReward ignores the GetPillarsList
+    error; a dead never-written `distributed` map is sorted and
+    iterated for debug output; computePillarRewardForEpoch reads
+    detail.Pillars[name].Weight before its !ok guard (latent panic);
+    checkPillarPercentages compares uint8 < 0 (always false).
+
+49. **`vm/embedded/implementation/liquidity.go`
+    (`SetAdditionalReward`) — missing CheckSecurityInitialized**
+    unlike SetTokenTuple/ChangeAdministrator/Emergency; with security
+    uninitialized its time challenge runs with the default MinSoftDelay.
+
+50. **`vm/embedded/implementation/accelerator.go` — voting-window
+    edge**: a project whose votes reach the threshold only after the
+    14-day window, with no update run inside the window, transitions
+    to Closed without its votes ever being tallied; the "passed
+    voting period" log fires while the window is still open.
