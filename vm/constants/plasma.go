@@ -68,7 +68,8 @@ const (
 	// that yields one unit of plasma.
 	PoWDifficultyPerPlasma = 1500
 
-	// MaxDataLength defines limit of account-block data to 16Kb.
+	// MaxDataLength (16 KiB) is the largest Data payload an account
+	// block may carry; larger payloads are rejected outright.
 	MaxDataLength = 1024 * 16
 
 	// MaxPlasmaForAccountBlock defines max available plasma for an

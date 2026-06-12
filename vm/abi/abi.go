@@ -113,9 +113,9 @@ func (abi ABIContract) PackVariablePanic(name string, args ...interface{}) []byt
 // UnpackMethod decodes the call data of the named method into v, a
 // pointer to a struct whose fields match the method's inputs (paired
 // by capitalised name or an abi:"name" struct tag), or a pointer to
-// the bare value for single-input methods. It fails if input is no longer
-// than the 4-byte selector, or if the selector does not resolve to
-// the named method.
+// the bare value for single-input methods. It fails if input is
+// 4 bytes or shorter, or if the selector does not resolve to the
+// named method.
 func (abi ABIContract) UnpackMethod(v interface{}, name string, input []byte) (err error) {
 	if len(input) <= 4 {
 		return errEmptyInput

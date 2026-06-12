@@ -3,8 +3,8 @@ package constants
 import "github.com/pkg/errors"
 
 var (
-	// ErrVmRunPanic is what the supervisor turns a panic raised
-	// during block execution into after recovering it.
+	// ErrVmRunPanic replaces any panic the supervisor recovers
+	// during block execution.
 	ErrVmRunPanic = errors.New("supervisor - VM panic")
 
 	// === Common ===
