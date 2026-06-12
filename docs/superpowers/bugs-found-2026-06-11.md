@@ -212,3 +212,26 @@ Verify against current code before fixing; line numbers will drift.
     State integrity is still protected by the momentum-level
     ChangesHash (which is validated and covered by the momentum hash);
     the per-block field is informational/garbage-prone for user blocks.
+
+# Layer-5 additions (2026-06-12, vm/embedded/definition)
+
+40. **`vm/embedded/definition/accelerator.go` — project/phase storage
+    prefixes are bytes 12/13, not the intended-looking 1/2**: the
+    `_ byte = iota` sits in a const block with eleven preceding specs,
+    so iota starts at 11. Harmless (writers and readers share the
+    constants) but surprising for raw storage inspection; verified
+    empirically. Worth a dedicated const block if ever touched.
+
+41. **`vm/embedded/definition/swap.go` (`GetSwapAssets`) — an
+    empty-valued key aborts the entire listing** with
+    ErrDataNonExistent instead of being skipped (same pattern exists
+    in pillars' GetLegacyPillarList). Latent: swap entries are never
+    stored empty today.
+
+42. **Observations**: `GetAllPillarVotes` scans the whole pillarVote
+    prefix and filters by id in memory although the key layout
+    supports a per-id prefix scan (inefficiency);
+    `unmarshalRewardDepositHistoryEntryKey` reads epoch bytes before
+    checking the address error; `Phase.ToProjectMarshal` marshals a
+    phase despite the name; `definition.SetTokenPairParam` is
+    unreferenced by the implementation.
