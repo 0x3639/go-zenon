@@ -36,7 +36,7 @@ type ElectionAlgorithm interface {
 // comes from math/rand generators seeded with the proof momentum's
 // height. With the delegations sorted by descending weight:
 //
-//   - if there are at most NodeCount pillars, the whole set is
+//   - if there are fewer than NodeCount pillars, the whole set is
 //     repeated in a fixed pseudo-random order until all slots are
 //     filled;
 //   - otherwise NodeCount - RandCount slots go to pillars drawn from
