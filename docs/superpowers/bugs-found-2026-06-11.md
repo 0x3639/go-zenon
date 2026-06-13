@@ -304,3 +304,27 @@ Verify against current code before fixing; line numbers will drift.
     (exceptedBlockNum) — kept for compatibility, worth an alias if
     the API is ever versioned; `Point.LeftAppend`'s error message
     renders ranges as [x,y) while the semantics are (prev, end].
+
+# Layer-9 additions (2026-06-13, node shell)
+
+54. **`wallet/keystore.go` (`DeriveForFullPath`) — returned path is
+    always empty**: the named return `path` is never assigned, so it
+    returns "" alongside the (correct) key and error. `DeriveForIndexPath`
+    inherits this.
+
+55. **`wallet/keystore.go` (`FindAddress`) — ignores the configurable
+    MaxSearchIndex**: it bounds the search by the package const
+    `maxSearchIndex` (128), not the `Manager`'s `Config.MaxSearchIndex`,
+    so the config knob has no effect on address search.
+
+56. **`wallet/manager.go` (`Lock` / `IsUnlocked`) — IsUnlocked stays
+    true after Lock**: Lock sets `decrypted[path] = nil` instead of
+    deleting the entry, and IsUnlocked tests key presence, so it keeps
+    reporting unlocked after a Lock (and GetKeyStore would then return
+    a nil store with a nil error). Docs updated to describe the actual
+    behavior; bug left for a fix branch.
+
+57. **Cosmetic error-string typos** (verifier/pillar): pillar/errors.go
+    "finish time time"; verifier/account_block.go "from-block-hash is
+    nor provided"; verifier/errors.go ErrMTimestampNotIncreasing "is is
+    lower".
