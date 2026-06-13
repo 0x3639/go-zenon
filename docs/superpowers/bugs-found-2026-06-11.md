@@ -349,4 +349,11 @@ Verify against current code before fixing; line numbers will drift.
     no-op (the prior global value is lost). A later test in the same
     process that relies on the real clock or the default epoch duration
     sees the leftover state. Capture both globals before overriding,
-    and restore common.Clock in Stop.
+    and restore common.Clock in Stop. THIRD instance of the same
+    pattern (added 2026-06-13): the logger-handler snapshot is taken
+    AFTER ChainLogger/SupervisorLogger are silenced (and ConsensusLogger
+    is silenced without being in AllLoggers at all), so Stop restores
+    those loggers to their already-silenced handler and the silencing
+    leaks across tests; only PillarLogger, reconfigured after the
+    snapshot, is correctly restored. Snapshot every logger's handler
+    before silencing any, and add ConsensusLogger to AllLoggers.
