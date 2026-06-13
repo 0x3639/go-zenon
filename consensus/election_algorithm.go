@@ -87,10 +87,11 @@ func (ea *electionAlgorithm) shuffleOrder(producers []*types.PillarDelegation, c
 	return result
 }
 
-// filterByWeight sorts the delegations by descending weight and
-// splits them into the NodeCount highest-weighted (groupA) and the
-// remainder (groupB); with NodeCount pillars or fewer, all of them
-// form groupA.
+// filterByWeight splits the delegations into the NodeCount
+// highest-weighted (groupA) and the remainder (groupB), sorting by
+// descending weight only when a split is needed; with NodeCount
+// pillars or fewer, the slice is returned unsorted as groupA
+// (filterRandom sorts groupA again before use either way).
 func (ea *electionAlgorithm) filterByWeight(context *AlgorithmConfig) (groupA []*types.PillarDelegation, groupB []*types.PillarDelegation) {
 	if len(context.delegations) <= int(ea.group.NodeCount) {
 		return context.delegations, groupB
