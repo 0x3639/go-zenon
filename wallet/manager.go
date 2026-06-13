@@ -180,8 +180,10 @@ func (m *Manager) Unlock(path, password string) error {
 }
 
 // Lock locks the key store at path: it zeroes the decrypted secrets and
-// drops the manager's reference to them. It is a no-op when the store is
-// not currently unlocked.
+// sets the manager's reference to nil. It is a no-op when the store is
+// not currently unlocked. Note that the map entry itself is left in
+// place (set to nil rather than deleted), which is why IsUnlocked keeps
+// reporting true after a Lock.
 func (m *Manager) Lock(path string) {
 	path = m.MakePathAbsolut(path)
 	if ks, ok := m.decrypted[path]; ok {
@@ -190,9 +192,11 @@ func (m *Manager) Lock(path string) {
 	}
 }
 
-// IsUnlocked reports whether the key store at path is currently
-// unlocked. It returns ErrKeyStoreNotFound when no key file is known for
-// the path.
+// IsUnlocked reports whether the key store at path has an entry in the
+// decrypted map. Because Lock nils that entry rather than removing it,
+// this returns true once the store has been unlocked even after a
+// subsequent Lock. It returns ErrKeyStoreNotFound when no key file is
+// known for the path.
 func (m *Manager) IsUnlocked(path string) (bool, error) {
 	path = m.MakePathAbsolut(path)
 	if _, ok := m.encrypted[path]; !ok {
