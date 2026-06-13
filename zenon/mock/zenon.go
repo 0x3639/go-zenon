@@ -38,9 +38,13 @@ storage
 balance`
 )
 
-// AllLoggers lists every package logger the mock node manages: their
-// handlers are captured at construction and restored on Stop so that
-// silencing them does not leak across tests.
+// AllLoggers lists the package loggers whose handlers the mock node
+// snapshots at construction and restores on Stop. The snapshot is
+// imperfect: ChainLogger and SupervisorLogger (and ConsensusLogger,
+// which is not even in this list) are silenced before the snapshot is
+// taken, so the handler restored for them is the already-silenced one
+// and the silencing persists across tests. PillarLogger is
+// reconfigured after the snapshot, so it alone is correctly restored.
 var AllLoggers = []common.Logger{
 	common.ZenonLogger,
 	common.ChainLogger,
