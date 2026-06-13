@@ -231,7 +231,7 @@ func (compound *compoundPoints) generatePointFromLower(tick uint64, endBlock *no
 		}
 	}
 
-	// Divide weight by lowerMultiplier
+	// Divide each weight by the number of lower points present.
 	result.TotalWeight.Set(big.NewInt(0))
 	bigRate := big.NewInt(numPresent)
 	for _, p := range result.Pillars {

@@ -136,7 +136,8 @@ func (ea *electionAlgorithm) filterRandom(groupA, groupB []*types.PillarDelegati
 		result = append(result, groupA[topIndex[index]])
 	}
 
-	// Insert unselected pillars in groupB for a second chance at being selected.
+	// Insert unselected pillars in groupB for a second chance at
+	// being selected.
 	for index := topTotal; index < total; index += 1 {
 		groupB = append(groupB, groupA[topIndex[index]])
 	}
