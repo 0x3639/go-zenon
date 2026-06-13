@@ -43,11 +43,11 @@ func errResp(code errCode, format string, v ...interface{}) error {
 // requests from the chain and feeding inbound momentums to the
 // downloader or fetcher and account blocks to the bridge's pool.
 //
-// Two background loops complete the picture: the syncer triggers a
-// downloader run against the best peer on new connections and every
-// few seconds (so the node downloads whenever a peer advertises a
-// higher frontier), and the txsync loop sends pending account blocks
-// to each newly connected peer.
+// Two background loops complete the picture: the syncer, on new
+// connections and every few seconds, runs the downloader against the
+// best peer once at least minPeers are connected, and only downloads
+// when that peer advertises a higher frontier; the txsync loop sends
+// pending account blocks to each newly connected peer.
 type ProtocolManager struct {
 	minPeers       int
 	protVer, netId int
