@@ -48,10 +48,13 @@ func keyStoreFromEntropy(entropy []byte) (*KeyStore, error) {
 	return ks, nil
 }
 
-// Zero wipes the secret material from the key store, clearing the
-// entropy, seed, and mnemonic and resetting the base address. It is
-// called when a wallet is locked or the manager stops so secrets do not
-// linger in memory.
+// Zero drops the key store's references to its secret material — the
+// entropy and seed slices are set to nil, the mnemonic to "" and the
+// base address reset — and is called when a wallet is locked or the
+// manager stops. Note this only makes the secrets eligible for garbage
+// collection; it does not overwrite the underlying entropy or seed
+// bytes, and the discarded string cannot be scrubbed, so the material
+// may persist in memory until it is collected.
 func (ks *KeyStore) Zero() {
 	ks.Entropy = nil
 	ks.Seed = nil

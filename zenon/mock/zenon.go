@@ -381,14 +381,18 @@ func (zenon *mockZenon) Broadcaster() protocol.Broadcaster {
 
 // NewMockZenon builds and starts a mock node for the test t using the
 // default consensus epoch duration. The node's data lives in t's temp
-// directory and its loggers and clock are restored on Stop.
+// directory and its logger handlers are restored on Stop. Note that
+// common.Clock is replaced with a mock clock and is NOT restored on
+// Stop, so it stays pointed at this node's (stopped) chain afterwards.
 func NewMockZenon(t common.T) MockZenon {
 	return newMockZenon(t, consensus.EpochDuration)
 }
 
 // NewMockZenonWithCustomEpochDuration is NewMockZenon with the
-// consensus epoch duration overridden to epochDuration for the
-// lifetime of the node; Stop restores the previous value.
+// consensus.EpochDuration global overridden to epochDuration for the
+// lifetime of the node. Stop assigns the value it captured at
+// construction, but because that capture happens after the override,
+// the override is in practice not rolled back to the prior value.
 func NewMockZenonWithCustomEpochDuration(t common.T, epochDuration time.Duration) MockZenon {
 	return newMockZenon(t, epochDuration)
 }

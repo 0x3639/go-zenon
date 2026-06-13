@@ -7,10 +7,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// The exported cli flags define znnd's command-line surface. Each maps to a
-// node.Config field; AllFlags lists every flag registered on the app, and
-// applyFlagsToConfig copies any set flag onto the config, overriding the
-// config file.
+// The exported cli flags define znnd's command-line surface. AllFlags
+// lists every flag registered on the app. Most map to a node.Config
+// field, which applyFlagsToConfig copies onto the config when set,
+// overriding the config file; the exceptions are ConfigFileFlag, which
+// selects the config file itself, and the pprof flags, which are
+// handled in beforeAction rather than copied into node.Config.
 var (
 
 	// pprof

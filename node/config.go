@@ -85,7 +85,9 @@ type Config struct {
 // MakePathsAbsolute resolves the data, wallet and genesis paths to
 // absolute form in place, defaulting the data path to DefaultDataDir
 // and the wallet path to the wallet subdirectory of the data path
-// when unset, and expanding a leading "~" to the home directory.
+// when unset. A leading "~" is expanded to the home directory for the
+// wallet and genesis paths only; the data path is resolved with
+// filepath.Abs without tilde expansion.
 func (c *Config) MakePathsAbsolute() error {
 	if c.DataPath == "" {
 		c.DataPath = DefaultDataDir()
