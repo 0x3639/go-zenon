@@ -328,3 +328,25 @@ Verify against current code before fixing; line numbers will drift.
     "finish time time"; verifier/account_block.go "from-block-hash is
     nor provided"; verifier/errors.go ErrMTimestampNotIncreasing "is is
     lower".
+
+# Layer-9 PR-review additions (2026-06-13)
+
+58. **`wallet/keystore.go` (`KeyStore.Zero`) — does not actually wipe
+    secrets**: it sets Entropy/Seed to nil and Mnemonic to "", which
+    only drops references. The underlying entropy and seed byte arrays
+    are never overwritten and the mnemonic string cannot be scrubbed by
+    reassignment, so the secret material persists in memory until GC.
+    A method named Zero implies in-place wiping. Security weakness:
+    overwrite the byte slices before niling, and accept the string
+    limitation (or keep the mnemonic only as bytes).
+
+59. **`zenon/mock/zenon.go` — Stop does not restore global state it
+    overwrote** (test-pollution hazard): common.Clock is replaced with
+    a mockClock and never restored, so after a mock node Stops the
+    global clock still points at the stopped chain; and
+    initialEpochDuration is captured AFTER newMockZenon sets
+    consensus.EpochDuration to the custom value, so Stop's restore is a
+    no-op (the prior global value is lost). A later test in the same
+    process that relies on the real clock or the default epoch duration
+    sees the leftover state. Capture both globals before overriding,
+    and restore common.Clock in Stop.
