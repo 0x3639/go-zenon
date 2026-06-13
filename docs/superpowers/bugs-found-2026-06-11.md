@@ -287,3 +287,20 @@ Verify against current code before fixing; line numbers will drift.
     14-day window, with no update run inside the window, transitions
     to Closed without its votes ever being tallied; the "passed
     voting period" log fires while the window is still open.
+
+# Layer-7 additions (2026-06-12, consensus)
+
+51. **`consensus/chain_ticker.go` — mismatch error prints the wrong
+    block's hash**: the comparison is against the LAST block's hash
+    but the message reports blocks[0].Hash as "got".
+
+52. **`consensus/api.go` (`GetPillarDelegationsByEpoch`) — panics via
+    common.DealWithErr on TickMultiplier failure** where sibling
+    paths in the same method return errors; unreachable today (both
+    tickers share the genesis anchor) but inconsistent.
+
+53. **Observations**: `consensus/api/pillar_stats.go` bakes the
+    "ExceptedBlockNum" misspelling into the JSON wire field
+    (exceptedBlockNum) — kept for compatibility, worth an alias if
+    the API is ever versioned; `Point.LeftAppend`'s error message
+    renders ranges as [x,y) while the semantics are (prev, end].
