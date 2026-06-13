@@ -7,10 +7,15 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// The exported cli flags define znnd's command-line surface. Each maps to a
+// node.Config field; AllFlags lists every flag registered on the app, and
+// applyFlagsToConfig copies any set flag onto the config, overriding the
+// config file.
 var (
 
 	// pprof
 
+	// PprofFlag enables the pprof HTTP server for runtime profiling.
 	PprofFlag = &cli.BoolFlag{
 		Name:  "pprof",
 		Usage: "Enable the pprof HTTP server",
