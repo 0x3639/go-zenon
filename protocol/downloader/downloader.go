@@ -38,10 +38,17 @@ const (
 var (
 	log = common.DownloaderLogger
 
-	MinHashFetch  = 512 // Minimum amount of hashes to not consider a peer stalling
-	MaxHashFetch  = 512 // Amount of hashes to be fetched per retrieval request
-	MaxBlockFetch = 128 // Amount of blocks to be fetched per retrieval request
+	// MinHashFetch is the minimum number of hashes a peer must
+	// deliver in one batch to not be considered stalling.
+	MinHashFetch = 512
 
+	// MaxHashFetch is the number of hashes requested per retrieval
+	// request; peers must not be asked for (or answered with) more.
+	MaxHashFetch = 512
+
+	// MaxBlockFetch is the maximum number of momentums requested
+	// from (and served to) a peer per retrieval request.
+	MaxBlockFetch   = 128
 	hashTTL         = 5 * time.Second  // Time it takes for a hash request to time out
 	blockSoftTTL    = 3 * time.Second  // Request completion threshold for increasing or decreasing a peer's bandwidth
 	blockHardTTL    = 3 * blockSoftTTL // Maximum time allowance before a block request is considered expired
@@ -101,6 +108,22 @@ type crossCheck struct {
 	parent types.Hash
 }
 
+// Downloader performs bulk momentum synchronisation against a single
+// remote peer at a time. A run (Synchronise) first locates the common
+// ancestor of the local and remote chains — by comparing the most
+// recent hashes and binary-searching when none match — and then runs
+// two concurrent loops: one fetching batches of hashes forward from
+// the ancestor and scheduling them in the queue, the other requesting
+// the queued momentums, spreading the load over every registered peer
+// and throttling by capacity. Completed momentums are taken from the
+// queue in order and handed to the chain insert callback. Peers that
+// stall, deliver garbage or serve an invalid chain are dropped
+// through the peer drop callback.
+//
+// Only one run can be active at a time; concurrent Synchronise calls
+// return immediately. The protocol manager owns the peer registry
+// (RegisterPeer, UnregisterPeer) and triggers runs from its syncer
+// loop.
 type Downloader struct {
 	queue  *queue                     // Scheduler for selecting the hashes to download
 	peers  *peerSet                   // Set of active peers from which download can proceed
@@ -707,17 +730,17 @@ func (d *Downloader) fetchBlocks(from uint64) error {
 // process takes blocks from the queue and tries to import them into the chain.
 //
 // The algorithmic flow is as follows:
-//  - The `processing` flag is swapped to 1 to ensure singleton access
-//  - The current `cancel` channel is retrieved to detect sync abortions
-//  - Blocks are iteratively taken from the cache and inserted into the chain
-//  - When the cache becomes empty, insertion stops
-//  - The `processing` flag is swapped back to 0
-//  - A post-exit check is made whether new blocks became available
-//     - This step is important: it handles a potential race condition between
-//       checking for no more work, and releasing the processing "mutex". In
-//       between these state changes, a block may have arrived, but a processing
-//       attempt denied, so we need to re-enter to ensure the block isn't left
-//       to idle in the cache.
+//   - The `processing` flag is swapped to 1 to ensure singleton access
+//   - The current `cancel` channel is retrieved to detect sync abortions
+//   - Blocks are iteratively taken from the cache and inserted into the chain
+//   - When the cache becomes empty, insertion stops
+//   - The `processing` flag is swapped back to 0
+//   - A post-exit check is made whether new blocks became available
+//   - This step is important: it handles a potential race condition between
+//     checking for no more work, and releasing the processing "mutex". In
+//     between these state changes, a block may have arrived, but a processing
+//     attempt denied, so we need to re-enter to ensure the block isn't left
+//     to idle in the cache.
 func (d *Downloader) process() {
 	// Make sure only one goroutine is ever allowed to process blocks at once
 	if !atomic.CompareAndSwapInt32(&d.processing, 0, 1) {

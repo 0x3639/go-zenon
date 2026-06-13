@@ -51,8 +51,12 @@ func (self *peerError) Error() string {
 	return self.message
 }
 
+// DiscReason explains why a peer is being disconnected. The reason is
+// sent to the remote side in the disconnect message, so the numeric
+// values are fixed by the devp2p wire protocol.
 type DiscReason uint
 
+// The devp2p disconnect reasons.
 const (
 	DiscRequested DiscReason = iota
 	DiscNetworkError
