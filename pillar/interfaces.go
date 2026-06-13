@@ -7,11 +7,11 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
-// Manager is the node's block producer. It runs the producer lifecycle
-// (Init, Start, Stop), listens for consensus ProducerEvents via the embedded
-// EventListener, and produces a momentum when an event names its coinbase
-// pillar. The coinbase key is supplied through SetCoinBase and reported by
-// GetCoinBase.
+// Manager is the node's block producer. It runs the producer
+// lifecycle (Init, Start, Stop), listens for consensus ProducerEvents
+// via the embedded EventListener, and produces a momentum when an
+// event names its coinbase pillar. The coinbase key is supplied
+// through SetCoinBase and reported by GetCoinBase.
 type Manager interface {
 	// Init prepares the producer's worker before it starts listening.
 	Init() error

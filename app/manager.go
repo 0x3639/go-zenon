@@ -21,9 +21,9 @@ type Manager struct {
 	node *node.Node
 }
 
-// NewNodeManager builds the node configuration from ctx and constructs the
-// node, returning a Manager ready to Start. It returns an error if the config
-// cannot be built or the node cannot be created.
+// NewNodeManager builds the node configuration from ctx and
+// constructs the node, returning a Manager ready to Start. It returns
+// an error if the config cannot be built or the node cannot be created.
 func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	// make config
 	nodeConfig, err := MakeConfig(ctx)
@@ -45,10 +45,10 @@ func NewNodeManager(ctx *cli.Context) (*Manager, error) {
 	}, nil
 }
 
-// Start starts the node and blocks until it stops. It reports the configured
-// producer (pillar) address, installs a SIGINT/SIGTERM handler that triggers
-// a graceful Stop, and waits for the node to finish. If the node fails to
-// start it logs and exits the process.
+// Start starts the node and blocks until it stops. It reports the
+// configured producer (pillar) address, installs a SIGINT/SIGTERM
+// handler that triggers a graceful Stop, and waits for the node to
+// finish. If the node fails to start it logs and exits the process.
 func (nodeManager *Manager) Start() error {
 	// Start up the node
 	log.Info("starting znnd")
@@ -93,8 +93,8 @@ func (nodeManager *Manager) Start() error {
 	return nil
 }
 
-// Stop shuts the node down gracefully, logging any failure. It always returns
-// nil so that callers can treat shutdown as best-effort.
+// Stop shuts the node down gracefully, logging any failure. It always
+// returns nil so that callers can treat shutdown as best-effort.
 func (nodeManager *Manager) Stop() error {
 	log.Warn("Stopping znnd ...")
 

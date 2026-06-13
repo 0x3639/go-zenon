@@ -135,10 +135,10 @@ func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlock
 	}).all()
 }
 
-// NewAccountBlockVerifier returns an AccountBlockVerifier that resolves the
-// account and momentum stores it needs from chain. The consensus argument is
-// retained for symmetry with the momentum verifier and to support future
-// account-level consensus checks.
+// NewAccountBlockVerifier returns an AccountBlockVerifier that
+// resolves the account and momentum stores it needs from chain. The
+// consensus argument is retained for symmetry with the momentum
+// verifier and to support future account-level consensus checks.
 func NewAccountBlockVerifier(chain chain.Chain, consensus consensus.Consensus) AccountBlockVerifier {
 	return &accountVerifier{
 		chain:     chain,
