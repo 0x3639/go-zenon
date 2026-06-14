@@ -1,9 +1,15 @@
-# Bugs found during the Layer-1 godoc pass (2026-06-11)
+# Bugs found during the godoc review (catalogue started 2026-06-11)
 
-Found while reading `rpc/api/...` line-by-line to author godoc comments.
+Found while reading the code line-by-line to author godoc comments across
+the full godoc review. Entries were added incrementally across the layer
+passes (Layer-1 through Layer-9, plus the later node-shell review), so they
+span several packages — not just `rpc/api/...` where the catalogue began.
 **None of these are fixed** — the godoc branch is comment-only by policy.
-Each entry cites the code as of `docs/godoc-rpc-api` (master 667a69d).
-Verify against current code before fixing; line numbers will drift.
+Line references were captured against whichever branch snapshot was current
+when each entry was added (the earliest cite `docs/godoc-rpc-api`, master
+667a69d; later entries cite their own layer's snapshot), so they may point
+at different commits. Verify against current code before fixing; line
+numbers will drift.
 
 ## Likely real bugs
 
