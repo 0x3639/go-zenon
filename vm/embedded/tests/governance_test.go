@@ -49,8 +49,9 @@ func activateGovernance(t *testing.T, z mock.MockZenon) {
 	z.InsertNewMomentum()
 
 	sporkAPI := embedded.NewSporkApi(z)
-	sporkList, _ := sporkAPI.GetAll(0, 10)
-	id := sporkList.List[0].Id
+	sporkList, err := sporkAPI.GetAll(0, 10)
+	common.FailIfErr(t, err)
+	id := findSpork(t, sporkList, "spork-governance").Id
 
 	z.InsertSendBlock(&nom.AccountBlock{
 		Address:   g.Spork.Address,
@@ -208,6 +209,32 @@ func assertSpork(t *testing.T, sporks *embedded.SporkList, name, description str
 	}
 }
 
+func findGovernanceAction(t *testing.T, actions *embedded.ActionList, name string) *embedded.Action {
+	t.Helper()
+
+	for _, action := range actions.List {
+		if action.Name == name {
+			return action
+		}
+	}
+
+	t.Fatalf("expected governance action %q to exist", name)
+	return nil
+}
+
+func findTimeChallenge(t *testing.T, challenges *embedded.TimeChallengesList, methodName string) *definition.TimeChallengeInfo {
+	t.Helper()
+
+	for _, challenge := range challenges.List {
+		if challenge.MethodName == methodName {
+			return challenge
+		}
+	}
+
+	t.Fatalf("expected time challenge %q to exist", methodName)
+	return nil
+}
+
 func overrideType1GovernanceVotingPeriods(t *testing.T, periods []int64) {
 	t.Helper()
 
@@ -217,6 +244,55 @@ func overrideType1GovernanceVotingPeriods(t *testing.T, periods []int64) {
 	t.Cleanup(func() {
 		constants.Type1ActionVotingPeriods = previous
 	})
+}
+
+func callContractAndInsert(t *testing.T, z mock.MockZenon, block *nom.AccountBlock, expected error) {
+	t.Helper()
+
+	expect := z.CallContract(block)
+	insertMomentums(z, 2)
+	expect.Error(t, expected)
+}
+
+func proposeVoteAndExecuteGovernanceAction(t *testing.T, z mock.MockZenon, name, description string, destination types.Address, data []byte) *embedded.Action {
+	t.Helper()
+
+	dataString := base64.StdEncoding.EncodeToString(data)
+	callContractAndInsert(t, z, proposeAction(g.User1.Address, name, description, "https://qwerty.com", destination, dataString), nil)
+
+	governanceApi := embedded.NewGovernanceApi(z)
+	actions, err := governanceApi.GetAllActions(0, 100)
+	common.FailIfErr(t, err)
+	action := findGovernanceAction(t, actions, name)
+
+	voters := []struct {
+		address types.Address
+		name    string
+	}{
+		{g.Pillar1.Address, g.Pillar1Name},
+		{g.Pillar2.Address, g.Pillar2Name},
+		{g.Pillar3.Address, g.Pillar3Name},
+		{g.Pillar4.Address, g.Pillar4Name},
+	}
+	for _, voter := range voters {
+		callContractAndInsert(t, z, voteByName(voter.address, voter.name, action.CurrentVoteId, definition.VoteYes), nil)
+	}
+
+	callContractAndInsert(t, z, executeAction(g.User1.Address, action.Id), nil)
+	action, err = governanceApi.GetActionById(action.Id)
+	common.FailIfErr(t, err)
+	return action
+}
+
+func assertBridgeAdministrator(t *testing.T, z mock.MockZenon, expected types.Address) {
+	t.Helper()
+
+	bridgeAPI := embedded.NewBridgeApi(z)
+	bridgeInfo, err := bridgeAPI.GetBridgeInfo()
+	common.FailIfErr(t, err)
+	if bridgeInfo.Administrator != expected {
+		t.Fatalf("expected bridge administrator %v, got %v", expected, bridgeInfo.Administrator)
+	}
 }
 
 // Activate spork
@@ -440,6 +516,8 @@ func activateGovernanceStep6(t *testing.T, z mock.MockZenon) {
 }
 
 func TestGovernance(t *testing.T) {
+	overrideType1GovernanceVotingPeriods(t, []int64{30, 30, 30, 30})
+
 	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
 	defer z.StopPanic()
 
@@ -475,6 +553,49 @@ func TestGovernanceRatchetAdvancesUnderVotedAction(t *testing.T) {
 		t.Fatalf("expected vote id to change after advancing round")
 	}
 	assertGovernanceAction(t, action, "create btc-bridge spork", constants.Type1Action, 1, constants.ActionStatusVoting, false, 0, 0, 0)
+}
+
+func TestGovernanceBridgeTimeChallengeRequiresSecondAction(t *testing.T) {
+	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
+	defer z.StopPanic()
+
+	activateBridgeStep2(t, z)
+	activateGovernanceStep0(t, z)
+
+	bridgeAPI := embedded.NewBridgeApi(z)
+	securityInfo, err := bridgeAPI.GetSecurityInfo()
+	common.FailIfErr(t, err)
+	newAdministrator := g.User4.Address
+	data := definition.ABIBridge.PackMethodPanic(definition.ChangeAdministratorMethodName, newAdministrator)
+
+	firstAction := proposeVoteAndExecuteGovernanceAction(t, z, "start bridge admin change", "start bridge administrator time challenge", types.BridgeContract, data)
+	assertGovernanceAction(t, firstAction, "start bridge admin change", constants.Type2Action, 0, constants.ActionStatusApproved, true, 4, 4, 0)
+	assertBridgeAdministrator(t, z, g.User5.Address)
+
+	timeChallenges, err := bridgeAPI.GetTimeChallengesInfo()
+	common.FailIfErr(t, err)
+	challenge := findTimeChallenge(t, timeChallenges, definition.ChangeAdministratorMethodName)
+	if challenge.ParamsHash.IsZero() {
+		t.Fatalf("expected first governance action to start bridge administrator time challenge")
+	}
+
+	frontierMomentum, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	common.FailIfErr(t, err)
+	z.InsertMomentumsTo(frontierMomentum.Height + securityInfo.AdministratorDelay + 2)
+
+	callContractAndInsert(t, z, executeAction(g.User1.Address, firstAction.Id), nil)
+	assertBridgeAdministrator(t, z, g.User5.Address)
+
+	secondAction := proposeVoteAndExecuteGovernanceAction(t, z, "complete bridge admin change", "complete bridge administrator time challenge", types.BridgeContract, data)
+	assertGovernanceAction(t, secondAction, "complete bridge admin change", constants.Type2Action, 0, constants.ActionStatusApproved, true, 4, 4, 0)
+	assertBridgeAdministrator(t, z, newAdministrator)
+
+	timeChallenges, err = bridgeAPI.GetTimeChallengesInfo()
+	common.FailIfErr(t, err)
+	challenge = findTimeChallenge(t, timeChallenges, definition.ChangeAdministratorMethodName)
+	if !challenge.ParamsHash.IsZero() {
+		t.Fatalf("expected second governance action to complete bridge administrator time challenge")
+	}
 }
 
 func proposeAction(user types.Address, name, description, url string, destination types.Address, data string) *nom.AccountBlock {

@@ -302,6 +302,10 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	if err != nil {
 		return nil, err
 	}
+	expired := action.RoundStartTimestamp+schedule.VotingPeriod < frontierMomentum.Timestamp.Unix()
+	if action.Type == constants.Type1Action && !expired && decision != actionVotePending {
+		return nil, nil
+	}
 	if decision == actionVoteRejected {
 		action.Status = constants.ActionStatusRejected
 		(&definition.VotableHash{Id: action.CurrentVoteId}).Delete(context.Storage())
@@ -310,7 +314,6 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 		return nil, nil
 	}
 	if decision != actionVoteApproved {
-		expired := action.RoundStartTimestamp+schedule.VotingPeriod < frontierMomentum.Timestamp.Unix()
 		if !expired {
 			return nil, nil
 		}

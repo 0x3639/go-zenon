@@ -46,12 +46,6 @@ var (
 	ActionStatusRejected   = uint8(2)
 	ActionStatusNoDecision = uint8(3)
 
-	// Deprecated: governance now uses the round schedules below.
-	Type1ActionAcceptanceThreshold uint32 = 66
-	Type2ActionAcceptanceThreshold uint32 = 50
-	Type1ActionVotingPeriod               = 45 * PhaseTimeUnit
-	Type2ActionVotingPeriod               = 30 * PhaseTimeUnit
-
 	Type1ActionActivePillarThresholds = []uint32{66, 55, 45, 40}
 	Type1ActionDirectionalThresholds  = []uint32{50, 55, 60, 66}
 	Type1ActionVotingPeriods          = []int64{45 * PhaseTimeUnit, 21 * PhaseTimeUnit, 21 * PhaseTimeUnit, 21 * PhaseTimeUnit}
