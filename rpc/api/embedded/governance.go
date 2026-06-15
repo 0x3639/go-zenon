@@ -48,7 +48,7 @@ func (a *GovernanceApi) GetActionById(id types.Hash) (*Action, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newGovernanceAction(context.Storage(), actionVariable, momentum.Timestamp.Unix())
+	return newGovernanceAction(context.Storage(), context.MomentumStore().ChainIdentifier(), actionVariable, momentum.Timestamp.Unix())
 }
 
 type ActionList struct {
@@ -82,7 +82,7 @@ func (a *GovernanceApi) GetAllActions(pageIndex, pageSize uint32) (*ActionList, 
 		return nil, err
 	}
 	for i := start; i < end; i++ {
-		action, err := newGovernanceAction(context.Storage(), actions[i], momentum.Timestamp.Unix())
+		action, err := newGovernanceAction(context.Storage(), context.MomentumStore().ChainIdentifier(), actions[i], momentum.Timestamp.Unix())
 		if err != nil {
 			return nil, err
 		}
@@ -93,8 +93,8 @@ func (a *GovernanceApi) GetAllActions(pageIndex, pageSize uint32) (*ActionList, 
 	return result, nil
 }
 
-func newGovernanceAction(storage db.DB, actionVariable *definition.ActionVariable, now int64) (*Action, error) {
-	schedule, err := constants.GovernanceActionSchedule(actionVariable.Type, actionVariable.Round)
+func newGovernanceAction(storage db.DB, chainIdentifier uint64, actionVariable *definition.ActionVariable, now int64) (*Action, error) {
+	schedule, err := constants.GovernanceActionScheduleForChain(chainIdentifier, actionVariable.Type, actionVariable.Round)
 	if err != nil {
 		return nil, err
 	}

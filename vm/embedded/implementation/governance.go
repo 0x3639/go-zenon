@@ -281,7 +281,7 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	if action.RoundStartTimestamp == 0 {
 		action.RoundStartTimestamp = action.CreationTimestamp
 	}
-	schedule, err := constants.GovernanceActionSchedule(action.Type, action.Round)
+	schedule, err := constants.GovernanceActionScheduleForChain(context.MomentumStore().ChainIdentifier(), action.Type, action.Round)
 	if err != nil {
 		return nil, err
 	}

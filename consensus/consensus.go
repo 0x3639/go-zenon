@@ -52,11 +52,12 @@ func (cs *consensus) FixedPillarReader(identifier types.HashHeight) api.PillarRe
 // NewConsensus instantiates a new consensus object
 func NewConsensus(db db.DB, chain chain.Chain, testing bool) Consensus {
 	genesisTimestamp := chain.GetGenesisMomentum().Timestamp
+	config := constants.ConsensusConfigForChain(chain.ChainIdentifier())
 	epochTicker := common.NewTicker(*genesisTimestamp, EpochDuration)
-	cacheSize := 7 * 24 * 60 * 60 / (constants.ConsensusConfig.BlockTime * int64(constants.ConsensusConfig.NodeCount))
+	cacheSize := 7 * 24 * 60 * 60 / (config.BlockTime * int64(config.NodeCount))
 
 	dbCache := storage.NewConsensusDB(db, int(cacheSize), int(cacheSize))
-	electionManager := newElectionManager(chain, dbCache)
+	electionManager := newElectionManager(chain, dbCache, config)
 
 	return &consensus{
 		log:             common.ConsensusLogger,

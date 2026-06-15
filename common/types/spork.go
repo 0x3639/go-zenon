@@ -14,6 +14,8 @@ var (
 	}
 )
 
+const DevnetChainIdentifier uint64 = 69
+
 type ImplementedSpork struct {
 	SporkId Hash
 }

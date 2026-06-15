@@ -85,10 +85,10 @@ func (z *zenon) Start() error {
 	if err := z.subscribe.Start(); err != nil {
 		return err
 	}
+	z.protocol.Start()
 	if err := z.pillar.Start(); err != nil {
 		return err
 	}
-	z.protocol.Start()
 
 	return nil
 }

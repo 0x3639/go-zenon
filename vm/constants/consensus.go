@@ -18,4 +18,17 @@ var (
 		RandCount:   15,
 		CountingZTS: types.ZnnTokenStandard,
 	}
+	DevnetConsensusConfig = &Consensus{
+		BlockTime:   10,
+		NodeCount:   1,
+		RandCount:   0,
+		CountingZTS: types.ZnnTokenStandard,
+	}
 )
+
+func ConsensusConfigForChain(chainIdentifier uint64) *Consensus {
+	if chainIdentifier == types.DevnetChainIdentifier {
+		return DevnetConsensusConfig
+	}
+	return ConsensusConfig
+}

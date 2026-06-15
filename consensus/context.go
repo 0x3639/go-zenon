@@ -13,8 +13,11 @@ type Context struct {
 	GenesisTime time.Time
 }
 
-func NewConsensusContext(genesisTime time.Time) *Context {
+func NewConsensusContext(genesisTime time.Time, configs ...*constants.Consensus) *Context {
 	config := constants.ConsensusConfig
+	if len(configs) > 0 && configs[0] != nil {
+		config = configs[0]
+	}
 	context := &Context{
 		Consensus:   *config,
 		GenesisTime: genesisTime,

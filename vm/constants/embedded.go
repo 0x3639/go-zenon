@@ -54,6 +54,7 @@ var (
 	Type2ActionVotingPeriods          = []int64{30 * PhaseTimeUnit, 14 * PhaseTimeUnit, 14 * PhaseTimeUnit, 14 * PhaseTimeUnit}
 
 	GovernanceActionDataMaxLength = MaxDataLength
+	DevnetGovernanceVotingPeriod  = int64(15)
 
 	/// ==== Pillar constants ===
 
@@ -204,6 +205,20 @@ func GovernanceActionSchedule(actionType, round uint8) (*GovernanceActionRoundSc
 		DirectionalThreshold:  directionalThresholds[index],
 		VotingPeriod:          votingPeriods[index],
 	}, nil
+}
+
+func GovernanceActionScheduleForChain(chainIdentifier uint64, actionType, round uint8) (*GovernanceActionRoundSchedule, error) {
+	schedule, err := GovernanceActionSchedule(actionType, round)
+	if err != nil {
+		return nil, err
+	}
+	if chainIdentifier != types.DevnetChainIdentifier {
+		return schedule, nil
+	}
+
+	devnetSchedule := *schedule
+	devnetSchedule.VotingPeriod = DevnetGovernanceVotingPeriod
+	return &devnetSchedule, nil
 }
 
 func GovernanceActionMaxRound(actionType uint8) (uint8, error) {

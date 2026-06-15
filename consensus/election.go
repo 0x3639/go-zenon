@@ -10,6 +10,7 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/consensus/storage"
+	"github.com/zenon-network/go-zenon/vm/constants"
 )
 
 var (
@@ -211,8 +212,8 @@ func (em *electionManager) DeleteMomentum(*nom.DetailedMomentum) {
 	return
 }
 
-func newElectionManager(chain chain.Chain, db *storage.DB) *electionManager {
-	context := NewConsensusContext(*chain.GetGenesisMomentum().Timestamp)
+func newElectionManager(chain chain.Chain, db *storage.DB, config *constants.Consensus) *electionManager {
+	context := NewConsensusContext(*chain.GetGenesisMomentum().Timestamp, config)
 	return &electionManager{
 		Context: *context,
 		chain:   chain,

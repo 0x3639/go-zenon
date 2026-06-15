@@ -1,0 +1,35 @@
+{
+    "DataPath": "/root/.znn",
+    "GenesisFile": "/root/.znn/genesis.json",
+    "LogLevel": "info",
+    "Name": "devnet-observer",
+    "Net": {
+        "ListenHost": "0.0.0.0",
+        "ListenPort": 35995,
+        "MinConnectedPeers": 2,
+        "MinPeers": 2,
+        "Seeders": [
+            "enode://91125cf1d9986023f41a5ba5b7d171956834873fdf2b3c825208522a7a581d3f56aa9c24d2008d606ec703ab6e23234d506152f9c4094d6732718e408cf76442@172.30.0.10:35995",
+            "enode://fa238035d186ce937cfca2585419d755b8136266adea99ad25efed764074e43bf5c62f1e9f859059bd96d4e762c1b96cd1934010af0d8ac59e8fb7a8284b2b58@172.30.0.11:35995"
+        ]
+    },
+    "RPC": {
+        "EnableHTTP": true,
+        "EnableWS": true,
+        "Endpoints": [],
+        "HTTPCors": [
+            "*"
+        ],
+        "HTTPHost": "0.0.0.0",
+        "HTTPPort": 35997,
+        "HTTPVirtualHosts": [
+            "*"
+        ],
+        "WSHost": "0.0.0.0",
+        "WSOrigins": [
+            "*"
+        ],
+        "WSPort": 35998
+    },
+    "WalletPath": "/root/.znn/wallet"
+}
