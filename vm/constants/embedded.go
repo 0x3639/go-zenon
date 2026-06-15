@@ -38,13 +38,28 @@ var (
 
 	// === Governance ===
 
-	Type1Action                           = uint8(1)
-	Type2Action                           = uint8(2)
+	Type1Action = uint8(1)
+	Type2Action = uint8(2)
+
+	ActionStatusVoting     = uint8(0)
+	ActionStatusApproved   = uint8(1)
+	ActionStatusRejected   = uint8(2)
+	ActionStatusNoDecision = uint8(3)
+
+	// Deprecated: governance now uses the round schedules below.
 	Type1ActionAcceptanceThreshold uint32 = 66
 	Type2ActionAcceptanceThreshold uint32 = 50
 	Type1ActionVotingPeriod               = 45 * PhaseTimeUnit
 	Type2ActionVotingPeriod               = 30 * PhaseTimeUnit
-	GovernanceActionDataMaxLength         = MaxDataLength
+
+	Type1ActionActivePillarThresholds = []uint32{66, 55, 45, 40}
+	Type1ActionDirectionalThresholds  = []uint32{50, 55, 60, 66}
+	Type1ActionVotingPeriods          = []int64{45 * PhaseTimeUnit, 21 * PhaseTimeUnit, 21 * PhaseTimeUnit, 21 * PhaseTimeUnit}
+	Type2ActionActivePillarThresholds = []uint32{50, 40, 33, 25}
+	Type2ActionDirectionalThresholds  = []uint32{50, 55, 60, 66}
+	Type2ActionVotingPeriods          = []int64{30 * PhaseTimeUnit, 14 * PhaseTimeUnit, 14 * PhaseTimeUnit, 14 * PhaseTimeUnit}
+
+	GovernanceActionDataMaxLength = MaxDataLength
 
 	/// ==== Pillar constants ===
 
@@ -158,6 +173,55 @@ var (
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 	}
 )
+
+type GovernanceActionRoundSchedule struct {
+	ActivePillarThreshold uint32
+	DirectionalThreshold  uint32
+	VotingPeriod          int64
+}
+
+func GovernanceActionSchedule(actionType, round uint8) (*GovernanceActionRoundSchedule, error) {
+	var (
+		activeThresholds      []uint32
+		directionalThresholds []uint32
+		votingPeriods         []int64
+	)
+
+	switch actionType {
+	case Type1Action:
+		activeThresholds = Type1ActionActivePillarThresholds
+		directionalThresholds = Type1ActionDirectionalThresholds
+		votingPeriods = Type1ActionVotingPeriods
+	case Type2Action:
+		activeThresholds = Type2ActionActivePillarThresholds
+		directionalThresholds = Type2ActionDirectionalThresholds
+		votingPeriods = Type2ActionVotingPeriods
+	default:
+		return nil, ErrUnkownActionType
+	}
+
+	index := int(round)
+	if index >= len(activeThresholds) || index >= len(directionalThresholds) || index >= len(votingPeriods) {
+		return nil, ErrInvalidActionRound
+	}
+
+	return &GovernanceActionRoundSchedule{
+		ActivePillarThreshold: activeThresholds[index],
+		DirectionalThreshold:  directionalThresholds[index],
+		VotingPeriod:          votingPeriods[index],
+	}, nil
+}
+
+func GovernanceActionMaxRound(actionType uint8) (uint8, error) {
+	switch actionType {
+	case Type1Action:
+		return uint8(len(Type1ActionVotingPeriods) - 1), nil
+	case Type2Action:
+		return uint8(len(Type2ActionVotingPeriods) - 1), nil
+	default:
+		return 0, ErrUnkownActionType
+	}
+}
 
 func NetworkZnnRewardPerEpoch(epoch uint64) int64 {
 	tick := int(epoch / RewardTickDurationInEpochs)

@@ -1,12 +1,13 @@
 package definition
 
 import (
+	"strings"
+
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/db"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/vm/abi"
 	"github.com/zenon-network/go-zenon/vm/constants"
-	"strings"
 )
 
 const (
@@ -43,6 +44,10 @@ const (
 			{"name":"data","type":"string"},
 			{"name":"creationTimestamp","type":"int64"},
 			{"name":"type","type":"uint8"},
+			{"name":"round","type":"uint8"},
+			{"name":"currentVoteId","type":"hash"},
+			{"name":"roundStartTimestamp","type":"int64"},
+			{"name":"status","type":"uint8"},
 			{"name":"executed","type":"bool"}
 		]}
 	]`
@@ -60,16 +65,20 @@ var (
 )
 
 type ActionVariable struct {
-	Id                types.Hash
-	Owner             types.Address
-	Name              string
-	Description       string
-	Url               string
-	Destination       types.Address
-	Data              string
-	CreationTimestamp int64
-	Type              uint8
-	Executed          bool
+	Id                  types.Hash
+	Owner               types.Address
+	Name                string
+	Description         string
+	Url                 string
+	Destination         types.Address
+	Data                string
+	CreationTimestamp   int64
+	Type                uint8
+	Round               uint8
+	CurrentVoteId       types.Hash
+	RoundStartTimestamp int64
+	Status              uint8
+	Executed            bool
 }
 
 func (action *ActionVariable) Save(context db.DB) {
@@ -84,6 +93,10 @@ func (action *ActionVariable) Save(context db.DB) {
 			action.Data,
 			action.CreationTimestamp,
 			action.Type,
+			action.Round,
+			action.CurrentVoteId,
+			action.RoundStartTimestamp,
+			action.Status,
 			action.Executed,
 		)))
 }
@@ -92,6 +105,13 @@ func (action *ActionVariable) Delete(context db.DB) {
 }
 func (action *ActionVariable) Key() []byte {
 	return common.JoinBytes(actionKeyPrefix, action.Id.Bytes())
+}
+
+func ActionVoteId(id types.Hash, round uint8) types.Hash {
+	if round == 0 {
+		return id
+	}
+	return types.NewHash(common.JoinBytes([]byte("governance-action-round"), id.Bytes(), []byte{round}))
 }
 
 func parseAction(data, key []byte) (*ActionVariable, error) {

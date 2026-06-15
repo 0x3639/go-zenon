@@ -17,6 +17,12 @@ var (
 	governanceURLPattern = regexp.MustCompile("^([Hh][Tt][Tt][Pp][Ss]?://)?[a-zA-Z0-9]{2,60}\\.[a-zA-Z]{1,63}([-a-zA-Z0-9()@:%_+.~#?&/=]{0,100})$")
 )
 
+const (
+	actionVotePending uint8 = iota
+	actionVoteApproved
+	actionVoteRejected
+)
+
 type ProposeActionMethod struct {
 	MethodName string
 }
@@ -206,6 +212,10 @@ func (p *ProposeActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	proposedAction.Id = sendBlock.Hash
 	proposedAction.Owner = sendBlock.Address
 	proposedAction.CreationTimestamp = frontierMomentum.Timestamp.Unix()
+	proposedAction.Round = 0
+	proposedAction.CurrentVoteId = definition.ActionVoteId(proposedAction.Id, proposedAction.Round)
+	proposedAction.RoundStartTimestamp = proposedAction.CreationTimestamp
+	proposedAction.Status = constants.ActionStatusVoting
 	proposedAction.Executed = false
 	// Only account-blocks to spork are considered type1 for now
 	if proposedAction.Destination.String() == types.SporkContract.String() {
@@ -217,7 +227,7 @@ func (p *ProposeActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	proposedAction.Save(context.Storage())
 
 	// Add hash to votable hashes
-	(&definition.VotableHash{Id: sendBlock.Hash}).Save(context.Storage())
+	(&definition.VotableHash{Id: proposedAction.CurrentVoteId}).Save(context.Storage())
 
 	governanceLog.Debug("successfully created action proposal", "action", proposedAction)
 	return nil, nil
@@ -265,18 +275,21 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 		return nil, err
 	}
 
-	expirationTime := action.CreationTimestamp
-	if action.Type == constants.Type1Action {
-		expirationTime += constants.Type1ActionVotingPeriod
-	} else if action.Type == constants.Type2Action {
-		expirationTime += constants.Type2ActionVotingPeriod
-	} else {
-		return nil, constants.ErrUnkownActionType
+	if action.CurrentVoteId.IsZero() {
+		action.CurrentVoteId = definition.ActionVoteId(action.Id, action.Round)
+	}
+	if action.RoundStartTimestamp == 0 {
+		action.RoundStartTimestamp = action.CreationTimestamp
+	}
+	schedule, err := constants.GovernanceActionSchedule(action.Type, action.Round)
+	if err != nil {
+		return nil, err
 	}
 
-	expired := expirationTime < frontierMomentum.Timestamp.Unix()
-	if action.Executed || expired {
-		governanceLog.Debug("action-executed-or-expired", "executedValue", action.Executed, "expiredValue", expired)
+	if action.Executed || action.Status == constants.ActionStatusApproved ||
+		action.Status == constants.ActionStatusRejected ||
+		action.Status == constants.ActionStatusNoDecision {
+		governanceLog.Debug("action-terminal", "executed", action.Executed, "status", action.Status)
 		return nil, nil
 	}
 
@@ -285,8 +298,42 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 		return nil, err
 	}
 	numPillars := uint32(len(pillarList))
-	ok := checkActionVotes(context, action.Id, numPillars, action.Type)
-	if !ok {
+	decision, err := checkActionVotes(context, action.CurrentVoteId, numPillars, action.Type, action.Round)
+	if err != nil {
+		return nil, err
+	}
+	if decision == actionVoteRejected {
+		action.Status = constants.ActionStatusRejected
+		(&definition.VotableHash{Id: action.CurrentVoteId}).Delete(context.Storage())
+		action.Save(context.Storage())
+		governanceLog.Debug("action rejected by voting", "action-id", action.Id, "round", action.Round)
+		return nil, nil
+	}
+	if decision != actionVoteApproved {
+		expired := action.RoundStartTimestamp+schedule.VotingPeriod < frontierMomentum.Timestamp.Unix()
+		if !expired {
+			return nil, nil
+		}
+
+		maxRound, err := constants.GovernanceActionMaxRound(action.Type)
+		if err != nil {
+			return nil, err
+		}
+		(&definition.VotableHash{Id: action.CurrentVoteId}).Delete(context.Storage())
+		if action.Round >= maxRound {
+			action.Status = constants.ActionStatusNoDecision
+			action.Save(context.Storage())
+			governanceLog.Debug("action closed without decision", "action-id", action.Id, "round", action.Round)
+			return nil, nil
+		}
+
+		action.Round += 1
+		action.CurrentVoteId = definition.ActionVoteId(action.Id, action.Round)
+		action.RoundStartTimestamp = frontierMomentum.Timestamp.Unix()
+		action.Status = constants.ActionStatusVoting
+		action.Save(context.Storage())
+		(&definition.VotableHash{Id: action.CurrentVoteId}).Save(context.Storage())
+		governanceLog.Debug("action advanced to next voting round", "action-id", action.Id, "round", action.Round, "vote-id", action.CurrentVoteId)
 		return nil, nil
 	}
 
@@ -296,10 +343,12 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 		return nil, constants.ErrInvalidB64Decode
 	}
 
+	action.Status = constants.ActionStatusApproved
 	action.Executed = true
+	(&definition.VotableHash{Id: action.CurrentVoteId}).Delete(context.Storage())
 	action.Save(context.Storage())
 
-	governanceLog.Debug("action passed voting and is being executed", "action-id", action.Id, "passed-votes", ok)
+	governanceLog.Debug("action passed voting and is being executed", "action-id", action.Id, "round", action.Round)
 	return []*nom.AccountBlock{
 		{
 			Address:       types.GovernanceContract,
@@ -312,24 +361,36 @@ func (p *ExecuteActionMethod) ReceiveBlock(context vm_context.AccountVmContext, 
 	}, nil
 }
 
-func checkActionVotes(context vm_context.AccountVmContext, id types.Hash, numPillars uint32, actionType uint8) bool {
+func checkActionVotes(context vm_context.AccountVmContext, id types.Hash, numPillars uint32, actionType, round uint8) (uint8, error) {
 	breakdown := definition.GetVoteBreakdown(context.Storage(), id)
-
-	ok := true
-	// Test majority
-	if breakdown.Yes <= breakdown.No {
-		ok = false
-	}
-	threshold := constants.Type1ActionAcceptanceThreshold
-	if actionType == uint8(2) {
-		threshold = constants.Type2ActionAcceptanceThreshold
+	status, err := checkActionVoteBreakdown(breakdown, numPillars, actionType, round)
+	if err != nil {
+		return actionVotePending, err
 	}
 
-	// Test enough yes votes
-	if breakdown.Yes*100 <= numPillars*threshold {
-		ok = false
+	governanceLog.Debug("check action votes", "votes", breakdown, "round", round, "status", status)
+	return status, nil
+}
+
+func checkActionVoteBreakdown(breakdown *definition.VoteBreakdown, numPillars uint32, actionType, round uint8) (uint8, error) {
+	schedule, err := constants.GovernanceActionSchedule(actionType, round)
+	if err != nil {
+		return actionVotePending, err
 	}
 
-	governanceLog.Debug("check action votes", "votes", breakdown, "status", ok)
-	return ok
+	directionalVotes := breakdown.Yes + breakdown.No
+	enoughDirectionalVotes := directionalVotes*100 > numPillars*schedule.ActivePillarThreshold
+	approved := enoughDirectionalVotes &&
+		breakdown.Yes*100 > directionalVotes*schedule.DirectionalThreshold
+	rejected := enoughDirectionalVotes &&
+		breakdown.No*100 > directionalVotes*schedule.DirectionalThreshold
+
+	status := actionVotePending
+	if approved {
+		status = actionVoteApproved
+	} else if rejected {
+		status = actionVoteRejected
+	}
+
+	return status, nil
 }

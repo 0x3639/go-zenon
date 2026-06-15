@@ -68,23 +68,6 @@ func activateGovernanceStep0(t *testing.T, z mock.MockZenon) {
 	activateGovernance(t, z)
 	z.InsertMomentumsTo(10)
 
-	previousType1ActionVotingPeriod := constants.Type1ActionVotingPeriod
-	previousType2ActionVotingPeriod := constants.Type2ActionVotingPeriod
-	previousType1ActionAcceptanceThreshold := constants.Type1ActionAcceptanceThreshold
-	previousType2ActionAcceptanceThreshold := constants.Type2ActionAcceptanceThreshold
-
-	constants.Type1ActionVotingPeriod = 15 * 60   // 15 minutes
-	constants.Type2ActionVotingPeriod = 8 * 60    // 8 minutes
-	constants.Type1ActionAcceptanceThreshold = 40 // 40%
-	constants.Type2ActionAcceptanceThreshold = 25 // 25%
-
-	t.Cleanup(func() {
-		constants.Type1ActionVotingPeriod = previousType1ActionVotingPeriod
-		constants.Type2ActionVotingPeriod = previousType2ActionVotingPeriod
-		constants.Type1ActionAcceptanceThreshold = previousType1ActionAcceptanceThreshold
-		constants.Type2ActionAcceptanceThreshold = previousType2ActionAcceptanceThreshold
-	})
-
 	governanceApi := embedded.NewGovernanceApi(z)
 	actionsList, err := governanceApi.GetAllActions(0, 10)
 
@@ -153,6 +136,89 @@ func activateGovernanceStep0(t *testing.T, z mock.MockZenon) {
 	z.InsertNewMomentum()
 }
 
+func assertGovernanceAction(t *testing.T, action *embedded.Action, name string, actionType, round, status uint8, executed bool, total, yes, no uint32) {
+	t.Helper()
+
+	if action.Name != name {
+		t.Fatalf("expected action %q, got %q", name, action.Name)
+	}
+	if action.Type != actionType {
+		t.Fatalf("expected action type %v, got %v", actionType, action.Type)
+	}
+	if action.Round != round {
+		t.Fatalf("expected round %v, got %v", round, action.Round)
+	}
+	expectedVoteId := definition.ActionVoteId(action.Id, round)
+	if action.CurrentVoteId != expectedVoteId {
+		t.Fatalf("expected current vote id %v, got %v", expectedVoteId, action.CurrentVoteId)
+	}
+	if action.RoundStartTimestamp == 0 {
+		t.Fatalf("expected round start timestamp to be set")
+	}
+	if action.Status != status {
+		t.Fatalf("expected status %v, got %v", status, action.Status)
+	}
+	if action.Executed != executed {
+		t.Fatalf("expected executed %v, got %v", executed, action.Executed)
+	}
+	schedule, err := constants.GovernanceActionSchedule(actionType, round)
+	common.FailIfErr(t, err)
+	if action.ActivePillarThreshold != schedule.ActivePillarThreshold {
+		t.Fatalf("expected active pillar threshold %v, got %v", schedule.ActivePillarThreshold, action.ActivePillarThreshold)
+	}
+	if action.DirectionalThreshold != schedule.DirectionalThreshold {
+		t.Fatalf("expected directional threshold %v, got %v", schedule.DirectionalThreshold, action.DirectionalThreshold)
+	}
+	if action.VotingPeriod != schedule.VotingPeriod {
+		t.Fatalf("expected voting period %v, got %v", schedule.VotingPeriod, action.VotingPeriod)
+	}
+	if action.Votes.Id != action.CurrentVoteId {
+		t.Fatalf("expected vote breakdown id %v, got %v", action.CurrentVoteId, action.Votes.Id)
+	}
+	if action.Votes.Total != total || action.Votes.Yes != yes || action.Votes.No != no {
+		t.Fatalf("expected votes total=%v yes=%v no=%v, got total=%v yes=%v no=%v", total, yes, no, action.Votes.Total, action.Votes.Yes, action.Votes.No)
+	}
+}
+
+func findSpork(t *testing.T, sporks *embedded.SporkList, name string) *definition.Spork {
+	t.Helper()
+
+	for _, spork := range sporks.List {
+		if spork.Name == name {
+			return spork
+		}
+	}
+
+	t.Fatalf("expected spork %q to exist", name)
+	return nil
+}
+
+func assertSpork(t *testing.T, sporks *embedded.SporkList, name, description string, activated bool, enforcementHeight uint64) {
+	t.Helper()
+
+	spork := findSpork(t, sporks, name)
+	if spork.Description != description {
+		t.Fatalf("expected spork %q description %q, got %q", name, description, spork.Description)
+	}
+	if spork.Activated != activated {
+		t.Fatalf("expected spork %q activated=%v, got %v", name, activated, spork.Activated)
+	}
+	if spork.EnforcementHeight != enforcementHeight {
+		t.Fatalf("expected spork %q enforcement height %v, got %v", name, enforcementHeight, spork.EnforcementHeight)
+	}
+}
+
+func overrideType1GovernanceVotingPeriods(t *testing.T, periods []int64) {
+	t.Helper()
+
+	previous := append([]int64(nil), constants.Type1ActionVotingPeriods...)
+	constants.Type1ActionVotingPeriods = append([]int64(nil), periods...)
+
+	t.Cleanup(func() {
+		constants.Type1ActionVotingPeriods = previous
+	})
+}
+
 // Activate spork
 // Propose action to create a spork
 func activateGovernanceStep1(t *testing.T, z mock.MockZenon) {
@@ -175,31 +241,11 @@ func activateGovernanceStep1(t *testing.T, z mock.MockZenon) {
 
 	governanceApi := embedded.NewGovernanceApi(z)
 	actionsList, err := governanceApi.GetAllActions(0, 10)
-	common.Json(actionsList, err).Equals(t, `
-{
-	"count": 1,
-	"list": [
-		{
-			"Id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "create btc-bridge spork",
-			"Description": "this spork will implement bitcoin bridge logic",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA==",
-			"CreationTimestamp": 1000000280,
-			"Type": 1,
-			"Executed": false,
-			"Expired": false,
-			"Votes": {
-				"id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-				"total": 0,
-				"yes": 0,
-				"no": 0
-			}
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if actionsList.Count != 1 || len(actionsList.List) != 1 {
+		t.Fatalf("expected one governance action, got count=%v len=%v", actionsList.Count, len(actionsList.List))
+	}
+	assertGovernanceAction(t, actionsList.List[0], name, constants.Type1Action, 0, constants.ActionStatusVoting, false, 0, 0, 0)
 }
 
 // Activate spork
@@ -228,31 +274,11 @@ func activateGovernanceStep2(t *testing.T, z mock.MockZenon) {
 	insertMomentums(z, 2)
 
 	actionsList, err = governanceApi.GetAllActions(0, 10)
-	common.Json(actionsList, err).Equals(t, `
-{
-	"count": 1,
-	"list": [
-		{
-			"Id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "create btc-bridge spork",
-			"Description": "this spork will implement bitcoin bridge logic",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA==",
-			"CreationTimestamp": 1000000280,
-			"Type": 1,
-			"Executed": false,
-			"Expired": false,
-			"Votes": {
-				"id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-				"total": 6,
-				"yes": 4,
-				"no": 2
-			}
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if actionsList.Count != 1 || len(actionsList.List) != 1 {
+		t.Fatalf("expected one governance action, got count=%v len=%v", actionsList.Count, len(actionsList.List))
+	}
+	assertGovernanceAction(t, actionsList.List[0], "create btc-bridge spork", constants.Type1Action, 0, constants.ActionStatusVoting, false, 6, 4, 2)
 }
 
 // Activate spork
@@ -273,50 +299,18 @@ func activateGovernanceStep3(t *testing.T, z mock.MockZenon) {
 
 	// Action should be executed
 	action, err := governanceApi.GetActionById(id)
-	common.Json(action, err).Equals(t, `
-{
-	"Id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-	"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-	"Name": "create btc-bridge spork",
-	"Description": "this spork will implement bitcoin bridge logic",
-	"Url": "https://qwerty.com",
-	"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-	"Data": "tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA==",
-	"CreationTimestamp": 1000000280,
-	"Type": 1,
-	"Executed": true,
-	"Expired": false,
-	"Votes": {
-		"id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-		"total": 6,
-		"yes": 4,
-		"no": 2
-	}
-}`)
+	common.FailIfErr(t, err)
+	assertGovernanceAction(t, action, "create btc-bridge spork", constants.Type1Action, 0, constants.ActionStatusApproved, true, 6, 4, 2)
 
 	// The spork should be created
 	sporkApi := embedded.NewSporkApi(z)
 	allSporks, err := sporkApi.GetAll(0, 10)
-	common.Json(allSporks, err).Equals(t, `
-{
-	"count": 2,
-	"list": [
-		{
-			"id": "195163e46afd3afd1e08aeb0119e4f74a59ccb1424f7f565052690cc90d36731",
-			"name": "btc-bridge",
-			"description": "btc-bridge logic",
-			"activated": false,
-			"enforcementHeight": 0
-		},
-		{
-			"id": "3f45018ade795af67983e5616e42ed2e88e600afb1da73f4a2b406e74344eee6",
-			"name": "spork-governance",
-			"description": "activate spork for governance",
-			"activated": true,
-			"enforcementHeight": 9
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if allSporks.Count != 2 || len(allSporks.List) != 2 {
+		t.Fatalf("expected two sporks, got count=%v len=%v", allSporks.Count, len(allSporks.List))
+	}
+	assertSpork(t, allSporks, "btc-bridge", "btc-bridge logic", false, 0)
+	assertSpork(t, allSporks, "spork-governance", "activate spork for governance", true, 9)
 }
 
 // Activate spork
@@ -353,50 +347,12 @@ func activateGovernanceStep4(t *testing.T, z mock.MockZenon) {
 
 	governanceApi := embedded.NewGovernanceApi(z)
 	actionsList, err := governanceApi.GetAllActions(0, 10)
-	common.Json(actionsList, err).Equals(t, `
-{
-	"count": 2,
-	"list": [
-		{
-			"Id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "create btc-bridge spork",
-			"Description": "this spork will implement bitcoin bridge logic",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA==",
-			"CreationTimestamp": 1000000280,
-			"Type": 1,
-			"Executed": true,
-			"Expired": false,
-			"Votes": {
-				"id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-				"total": 6,
-				"yes": 4,
-				"no": 2
-			}
-		},
-		{
-			"Id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "activate btc-bridge spork",
-			"Description": "this action will activate the btc-spork",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "JcVOlhlRY+Rq/Tr9HgiusBGeT3SlnMsUJPf1ZQUmkMyQ02cx",
-			"CreationTimestamp": 1000000740,
-			"Type": 1,
-			"Executed": false,
-			"Expired": false,
-			"Votes": {
-				"id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-				"total": 0,
-				"yes": 0,
-				"no": 0
-			}
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if actionsList.Count != 2 || len(actionsList.List) != 2 {
+		t.Fatalf("expected two governance actions, got count=%v len=%v", actionsList.Count, len(actionsList.List))
+	}
+	assertGovernanceAction(t, actionsList.List[0], "create btc-bridge spork", constants.Type1Action, 0, constants.ActionStatusApproved, true, 6, 4, 2)
+	assertGovernanceAction(t, actionsList.List[1], name, constants.Type1Action, 0, constants.ActionStatusVoting, false, 0, 0, 0)
 }
 
 // Activate spork
@@ -434,50 +390,12 @@ func activateGovernanceStep5(t *testing.T, z mock.MockZenon) {
 	insertMomentums(z, 2)
 
 	actionsList, err = governanceApi.GetAllActions(0, 10)
-	common.Json(actionsList, err).Equals(t, `
-{
-	"count": 2,
-	"list": [
-		{
-			"Id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "create btc-bridge spork",
-			"Description": "this spork will implement bitcoin bridge logic",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA==",
-			"CreationTimestamp": 1000000280,
-			"Type": 1,
-			"Executed": true,
-			"Expired": false,
-			"Votes": {
-				"id": "22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147",
-				"total": 6,
-				"yes": 4,
-				"no": 2
-			}
-		},
-		{
-			"Id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-			"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-			"Name": "activate btc-bridge spork",
-			"Description": "this action will activate the btc-spork",
-			"Url": "https://qwerty.com",
-			"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-			"Data": "JcVOlhlRY+Rq/Tr9HgiusBGeT3SlnMsUJPf1ZQUmkMyQ02cx",
-			"CreationTimestamp": 1000000740,
-			"Type": 1,
-			"Executed": false,
-			"Expired": false,
-			"Votes": {
-				"id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-				"total": 6,
-				"yes": 5,
-				"no": 1
-			}
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if actionsList.Count != 2 || len(actionsList.List) != 2 {
+		t.Fatalf("expected two governance actions, got count=%v len=%v", actionsList.Count, len(actionsList.List))
+	}
+	assertGovernanceAction(t, actionsList.List[0], "create btc-bridge spork", constants.Type1Action, 0, constants.ActionStatusApproved, true, 6, 4, 2)
+	assertGovernanceAction(t, actionsList.List[1], actionName, constants.Type1Action, 0, constants.ActionStatusVoting, false, 6, 5, 1)
 }
 
 // Activate spork
@@ -507,84 +425,56 @@ func activateGovernanceStep6(t *testing.T, z mock.MockZenon) {
 
 	// Action should be executed
 	action, err := governanceApi.GetActionById(actionId)
-	common.Json(action, err).Equals(t, `
-{
-	"Id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-	"Owner": "z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz",
-	"Name": "activate btc-bridge spork",
-	"Description": "this action will activate the btc-spork",
-	"Url": "https://qwerty.com",
-	"Destination": "z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48",
-	"Data": "JcVOlhlRY+Rq/Tr9HgiusBGeT3SlnMsUJPf1ZQUmkMyQ02cx",
-	"CreationTimestamp": 1000000740,
-	"Type": 1,
-	"Executed": true,
-	"Expired": false,
-	"Votes": {
-		"id": "674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809",
-		"total": 6,
-		"yes": 5,
-		"no": 1
-	}
-}`)
+	common.FailIfErr(t, err)
+	assertGovernanceAction(t, action, actionName, constants.Type1Action, 0, constants.ActionStatusApproved, true, 6, 5, 1)
 
 	// The spork should be created
 	sporkApi := embedded.NewSporkApi(z)
 	allSporks, err := sporkApi.GetAll(0, 10)
-	common.Json(allSporks, err).Equals(t, `
-{
-	"count": 2,
-	"list": [
-		{
-			"id": "195163e46afd3afd1e08aeb0119e4f74a59ccb1424f7f565052690cc90d36731",
-			"name": "btc-bridge",
-			"description": "btc-bridge logic",
-			"activated": true,
-			"enforcementHeight": 116
-		},
-		{
-			"id": "3f45018ade795af67983e5616e42ed2e88e600afb1da73f4a2b406e74344eee6",
-			"name": "spork-governance",
-			"description": "activate spork for governance",
-			"activated": true,
-			"enforcementHeight": 9
-		}
-	]
-}`)
+	common.FailIfErr(t, err)
+	if allSporks.Count != 2 || len(allSporks.List) != 2 {
+		t.Fatalf("expected two sporks, got count=%v len=%v", allSporks.Count, len(allSporks.List))
+	}
+	assertSpork(t, allSporks, "btc-bridge", "btc-bridge logic", true, 116)
+	assertSpork(t, allSporks, "spork-governance", "activate spork for governance", true, 9)
 }
 
 func TestGovernance(t *testing.T) {
 	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
 	defer z.StopPanic()
-	defer z.SaveLogs(common.EmbeddedLogger).Equals(t, `
-t=2001-09-09T01:46:50+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:3f45018ade795af67983e5616e42ed2e88e600afb1da73f4a2b406e74344eee6 Name:spork-governance Description:activate spork for governance Activated:false EnforcementHeight:0}"
-t=2001-09-09T01:47:00+0000 lvl=dbug msg=activated module=embedded contract=spork spork="&{Id:3f45018ade795af67983e5616e42ed2e88e600afb1da73f4a2b406e74344eee6 Name:spork-governance Description:activate spork for governance Activated:true EnforcementHeight:9}"
-t=2001-09-09T01:48:40+0000 lvl=dbug msg="burned ZTS" module=embedded contract=token token="&{Owner:z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62 TokenName:QuasarCoin TokenSymbol:QSR TokenDomain:zenon.network TotalSupply:+165550000000000 MaxSupply:+4611686018427387903 Decimals:8 IsMintable:true IsBurnable:true IsUtility:true TokenStandard:zts1qsrxxxxxxxxxxxxxmrhjll}" burned-amount=15000000000000
-t=2001-09-09T01:49:00+0000 lvl=dbug msg="burned ZTS" module=embedded contract=token token="&{Owner:z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62 TokenName:QuasarCoin TokenSymbol:QSR TokenDomain:zenon.network TotalSupply:+149550000000000 MaxSupply:+4611686018427387903 Decimals:8 IsMintable:true IsBurnable:true IsUtility:true TokenStandard:zts1qsrxxxxxxxxxxxxxmrhjll}" burned-amount=16000000000000
-t=2001-09-09T01:49:40+0000 lvl=dbug msg="burned ZTS" module=embedded contract=token token="&{Owner:z1qxemdeddedxstakexxxxxxxxxxxxxxxxjv8v62 TokenName:QuasarCoin TokenSymbol:QSR TokenDomain:zenon.network TotalSupply:+132550000000000 MaxSupply:+4611686018427387903 Decimals:8 IsMintable:true IsBurnable:true IsUtility:true TokenStandard:zts1qsrxxxxxxxxxxxxxmrhjll}" burned-amount=17000000000000
-t=2001-09-09T01:51:20+0000 lvl=dbug msg="successfully created action proposal" module=embedded contract=governance action="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Owner:z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz Name:create btc-bridge spork Description:this spork will implement bitcoin bridge logic Url:https://qwerty.com Destination:z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48 Data:tgLjEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACmJ0Yy1icmlkZ2UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBidGMtYnJpZGdlIGxvZ2ljAAAAAAAAAAAAAAAAAAAAAA== CreationTimestamp:1000000280 Type:1 Executed:false}"
-t=2001-09-09T01:53:20+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-1 Vote:0}"
-t=2001-09-09T01:53:40+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-cool Vote:0}"
-t=2001-09-09T01:54:00+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-znn Vote:0}"
-t=2001-09-09T01:54:20+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-wewe Vote:1}"
-t=2001-09-09T01:54:40+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-zumba Vote:1}"
-t=2001-09-09T01:55:00+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Name:TEST-pillar-6-quasar Vote:0}"
-t=2001-09-09T01:57:00+0000 lvl=dbug msg="check action votes" module=embedded contract=governance votes="&{Id:22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 Total:6 Yes:4 No:2}" status=true
-t=2001-09-09T01:57:00+0000 lvl=dbug msg="action passed voting and is being executed" module=embedded contract=governance action-id=22545375297973875f2fd10b3c4fa46789ed2256b29865accc75b76e73c4b147 passed-votes=true
-t=2001-09-09T01:57:10+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:195163e46afd3afd1e08aeb0119e4f74a59ccb1424f7f565052690cc90d36731 Name:btc-bridge Description:btc-bridge logic Activated:false EnforcementHeight:0}"
-t=2001-09-09T01:59:00+0000 lvl=dbug msg="successfully created action proposal" module=embedded contract=governance action="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Owner:z1qzal6c5s9rjnnxd2z7dvdhjxpmmj4fmw56a0mz Name:activate btc-bridge spork Description:this action will activate the btc-spork Url:https://qwerty.com Destination:z1qxemdeddedxsp0rkxxxxxxxxxxxxxxxx956u48 Data:JcVOlhlRY+Rq/Tr9HgiusBGeT3SlnMsUJPf1ZQUmkMyQ02cx CreationTimestamp:1000000740 Type:1 Executed:false}"
-t=2001-09-09T02:01:00+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-1 Vote:0}"
-t=2001-09-09T02:01:20+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-cool Vote:0}"
-t=2001-09-09T02:01:40+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-znn Vote:0}"
-t=2001-09-09T02:02:00+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-wewe Vote:1}"
-t=2001-09-09T02:02:20+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-zumba Vote:0}"
-t=2001-09-09T02:02:40+0000 lvl=dbug msg="voted for hash" module=embedded contract=common pillar-vote="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Name:TEST-pillar-6-quasar Vote:0}"
-t=2001-09-09T02:04:40+0000 lvl=dbug msg="check action votes" module=embedded contract=governance votes="&{Id:674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 Total:6 Yes:5 No:1}" status=true
-t=2001-09-09T02:04:40+0000 lvl=dbug msg="action passed voting and is being executed" module=embedded contract=governance action-id=674b3cac7a52b70cc78da2780c3f7234715e42b1c6971f7f92345d09f5f90809 passed-votes=true
-t=2001-09-09T02:04:50+0000 lvl=dbug msg=activated module=embedded contract=spork spork="&{Id:195163e46afd3afd1e08aeb0119e4f74a59ccb1424f7f565052690cc90d36731 Name:btc-bridge Description:btc-bridge logic Activated:true EnforcementHeight:116}"
-`)
 
 	activateGovernanceStep6(t, z)
+}
+
+func TestGovernanceRatchetAdvancesUnderVotedAction(t *testing.T) {
+	overrideType1GovernanceVotingPeriods(t, []int64{30, 30, 30, 30})
+
+	z := mock.NewMockZenonWithCustomEpochDuration(t, time.Hour)
+	defer z.StopPanic()
+
+	activateGovernanceStep1(t, z)
+
+	governanceApi := embedded.NewGovernanceApi(z)
+	actionsList, err := governanceApi.GetAllActions(0, 10)
+	common.FailIfErr(t, err)
+	if actionsList.Count != 1 || len(actionsList.List) != 1 {
+		t.Fatalf("expected one governance action, got count=%v len=%v", actionsList.Count, len(actionsList.List))
+	}
+
+	action := actionsList.List[0]
+	round0VoteId := action.CurrentVoteId
+
+	insertMomentums(z, 2)
+	expect := z.CallContract(executeAction(g.User1.Address, action.Id))
+	insertMomentums(z, 2)
+	expect.Error(t, nil)
+
+	action, err = governanceApi.GetActionById(action.Id)
+	common.FailIfErr(t, err)
+	if action.CurrentVoteId == round0VoteId {
+		t.Fatalf("expected vote id to change after advancing round")
+	}
+	assertGovernanceAction(t, action, "create btc-bridge spork", constants.Type1Action, 1, constants.ActionStatusVoting, false, 0, 0, 0)
 }
 
 func proposeAction(user types.Address, name, description, url string, destination types.Address, data string) *nom.AccountBlock {

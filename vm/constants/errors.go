@@ -104,5 +104,6 @@ var (
 
 	// Governance
 
-	ErrUnkownActionType = errors.New("unknown action type")
+	ErrUnkownActionType   = errors.New("unknown action type")
+	ErrInvalidActionRound = errors.New("invalid action round")
 )

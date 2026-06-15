@@ -149,3 +149,61 @@ func TestCheckActionStaticRejectsOversizedActionData(t *testing.T) {
 		t.Fatalf("expected ErrForbiddenParam, got %v", err)
 	}
 }
+
+func TestCheckActionVoteBreakdownRatchetThresholds(t *testing.T) {
+	tests := []struct {
+		name      string
+		breakdown *definition.VoteBreakdown
+		round     uint8
+		expected  uint8
+	}{
+		{
+			name: "low turnout does not pass initial round",
+			breakdown: &definition.VoteBreakdown{
+				Yes: 30,
+				No:  2,
+			},
+			round:    0,
+			expected: actionVotePending,
+		},
+		{
+			name: "strong yes majority passes final low-turnout round",
+			breakdown: &definition.VoteBreakdown{
+				Yes: 30,
+				No:  2,
+			},
+			round:    3,
+			expected: actionVoteApproved,
+		},
+		{
+			name: "strong no majority rejects final low-turnout round",
+			breakdown: &definition.VoteBreakdown{
+				Yes: 2,
+				No:  30,
+			},
+			round:    3,
+			expected: actionVoteRejected,
+		},
+		{
+			name: "thin majority stays pending in final low-turnout round",
+			breakdown: &definition.VoteBreakdown{
+				Yes: 14,
+				No:  12,
+			},
+			round:    3,
+			expected: actionVotePending,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual, err := checkActionVoteBreakdown(tt.breakdown, 100, constants.Type2Action, tt.round)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if actual != tt.expected {
+				t.Fatalf("expected %v, got %v", tt.expected, actual)
+			}
+		})
+	}
+}

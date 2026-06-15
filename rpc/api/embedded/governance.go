@@ -4,6 +4,7 @@ import (
 	"github.com/inconshreveable/log15"
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/common"
+	"github.com/zenon-network/go-zenon/common/db"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/rpc/api"
 	"github.com/zenon-network/go-zenon/vm/constants"
@@ -25,8 +26,11 @@ func NewGovernanceApi(z zenon.Zenon) *GovernanceApi {
 
 type Action struct {
 	*definition.ActionVariable
-	Expired bool                      `json:"Expired"`
-	Votes   *definition.VoteBreakdown `json:"Votes"`
+	Expired               bool                      `json:"Expired"`
+	ActivePillarThreshold uint32                    `json:"ActivePillarThreshold"`
+	DirectionalThreshold  uint32                    `json:"DirectionalThreshold"`
+	VotingPeriod          int64                     `json:"VotingPeriod"`
+	Votes                 *definition.VoteBreakdown `json:"Votes"`
 }
 
 func (a *GovernanceApi) GetActionById(id types.Hash) (*Action, error) {
@@ -40,30 +44,11 @@ func (a *GovernanceApi) GetActionById(id types.Hash) (*Action, error) {
 		return nil, err
 	}
 
-	expired := false
-	expireTimestamp := actionVariable.CreationTimestamp
-	if actionVariable.Type == constants.Type1Action {
-		expireTimestamp += constants.Type1ActionVotingPeriod
-	} else if actionVariable.Type == constants.Type2Action {
-		expireTimestamp += constants.Type2ActionVotingPeriod
-	} else {
-		// todo just return the action?
-		return nil, constants.ErrUnkownActionType
-	}
 	momentum, err := context.GetFrontierMomentum()
 	if err != nil {
 		return nil, err
 	}
-	if expireTimestamp < momentum.Timestamp.Unix() {
-		expired = true
-	}
-	action := &Action{
-		ActionVariable: actionVariable,
-		Expired:        expired,
-		Votes:          definition.GetVoteBreakdown(context.Storage(), id),
-	}
-
-	return action, nil
+	return newGovernanceAction(context.Storage(), actionVariable, momentum.Timestamp.Unix())
 }
 
 type ActionList struct {
@@ -97,28 +82,40 @@ func (a *GovernanceApi) GetAllActions(pageIndex, pageSize uint32) (*ActionList, 
 		return nil, err
 	}
 	for i := start; i < end; i++ {
-		expired := false
-		expireTimestamp := actions[i].CreationTimestamp
-		if actions[i].Type == constants.Type1Action {
-			expireTimestamp += constants.Type1ActionVotingPeriod
-		} else if actions[i].Type == constants.Type2Action {
-			expireTimestamp += constants.Type2ActionVotingPeriod
-		} else {
-			// todo just return the action?
-			return nil, constants.ErrUnkownActionType
-		}
-
-		if expireTimestamp < momentum.Timestamp.Unix() {
-			expired = true
-		}
-		action := &Action{
-			ActionVariable: actions[i],
-			Expired:        expired,
-			Votes:          definition.GetVoteBreakdown(context.Storage(), actions[i].Id),
+		action, err := newGovernanceAction(context.Storage(), actions[i], momentum.Timestamp.Unix())
+		if err != nil {
+			return nil, err
 		}
 
 		result.List = append(result.List, action)
 	}
 
 	return result, nil
+}
+
+func newGovernanceAction(storage db.DB, actionVariable *definition.ActionVariable, now int64) (*Action, error) {
+	schedule, err := constants.GovernanceActionSchedule(actionVariable.Type, actionVariable.Round)
+	if err != nil {
+		return nil, err
+	}
+
+	voteId := actionVariable.CurrentVoteId
+	if voteId.IsZero() {
+		voteId = definition.ActionVoteId(actionVariable.Id, actionVariable.Round)
+		actionVariable.CurrentVoteId = voteId
+	}
+	roundStart := actionVariable.RoundStartTimestamp
+	if roundStart == 0 {
+		roundStart = actionVariable.CreationTimestamp
+		actionVariable.RoundStartTimestamp = roundStart
+	}
+
+	return &Action{
+		ActionVariable:        actionVariable,
+		Expired:               roundStart+schedule.VotingPeriod < now,
+		ActivePillarThreshold: schedule.ActivePillarThreshold,
+		DirectionalThreshold:  schedule.DirectionalThreshold,
+		VotingPeriod:          schedule.VotingPeriod,
+		Votes:                 definition.GetVoteBreakdown(storage, voteId),
+	}, nil
 }
