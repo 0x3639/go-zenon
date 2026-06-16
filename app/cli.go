@@ -37,8 +37,11 @@ func Run() {
 	}
 }
 
-// Stop stops the running node Manager and reports a clean shutdown.
-// It panics via DealWithErr if no Manager was started.
+// Stop stops the running node Manager and reports a clean shutdown. It
+// must be called after Run has initialised nodeManager; otherwise it
+// panics on the nil nodeManager dereference, before DealWithErr is ever
+// reached. (Manager.Stop currently always returns nil, so the
+// DealWithErr call here never triggers a panic of its own.)
 func Stop() {
 	err := nodeManager.Stop()
 	common.DealWithErr(err)

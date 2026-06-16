@@ -110,9 +110,13 @@ type crossCheck struct {
 
 // Downloader performs bulk momentum synchronisation against a single
 // remote peer at a time. A run (Synchronise) first locates the common
-// ancestor of the local and remote chains — by comparing the most
-// recent hashes and binary-searching when none match — and then runs
-// two concurrent loops: one fetching batches of hashes forward from
+// ancestor of the local and remote chains by scanning the most recent
+// hashes for a match. (findAncestor also holds a binary-search fallback
+// for the long-fork case where no recent hash matches, but it is
+// currently unreachable: its guard condition is inverted, so a no-match
+// scan returns genesis instead of searching — see findAncestor.) It
+// then runs two concurrent loops: one fetching batches of hashes
+// forward from
 // the ancestor and scheduling them in the queue, the other requesting
 // the queued momentums, spreading the load over every registered peer
 // and throttling by capacity. Completed momentums are taken from the
@@ -396,6 +400,11 @@ func (d *Downloader) Terminate() {
 // on the correct chain, checking the top N blocks should already get us a match.
 // In the rare scenario when we ended up on a long soft fork (i.e. none of the
 // head blocks match), we do a binary search to find the common ancestor.
+//
+// NOTE: the binary-search branch is currently dead code. The guard after the
+// head scan tests hash.IsZero() instead of !hash.IsZero(), so a successful
+// top-N match falls through into the search while a no-match (the case the
+// search exists for) returns genesis. Left for a fix branch.
 func (d *Downloader) findAncestor(p *peer) (uint64, error) {
 	log.Info("looking for common ancestor", "peer", p)
 

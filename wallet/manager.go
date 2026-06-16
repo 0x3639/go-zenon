@@ -79,7 +79,10 @@ func (m *Manager) Start() error {
 // Stop zeroes every unlocked key store and drops the manager's
 // references to all known key files. As described on KeyStore.Zero,
 // this releases the secrets for garbage collection rather than
-// overwriting them in place.
+// overwriting them in place. Note that Lock leaves a nil entry in the
+// decrypted map (see Lock) and Stop calls Zero without a nil check, so
+// calling Stop after Lock has been used on any store panics on the nil
+// entry rather than zeroing the remaining stores.
 func (m *Manager) Stop() {
 	for _, ks := range m.decrypted {
 		ks.Zero()
