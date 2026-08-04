@@ -1118,6 +1118,11 @@ func (p *ChangeTssECDSAPubKeyMethod) ValidateSendBlock(block *nom.AccountBlock) 
 	if len(pubKey) != constants.CompressedECDSAPubKeyLength {
 		return constants.ErrInvalidCompressedECDSAPubKeyLength
 	}
+	// The correct length does not imply the bytes resolve to a point on the
+	// secp256k1 curve, so resolve it here rather than leaving it to consumers.
+	if X, Y := secp256k1.DecompressPubkey(pubKey); X == nil || Y == nil {
+		return constants.ErrInvalidCompressedECDSAPubKey
+	}
 
 	if block.Amount.Sign() != 0 {
 		return constants.ErrInvalidTokenOrAmount
@@ -1153,6 +1158,11 @@ func (p *ChangeTssECDSAPubKeyMethod) ReceiveBlock(context vm_context.AccountVmCo
 	pubKey, _ := base64.StdEncoding.DecodeString(param.PubKey)
 
 	X, Y := secp256k1.DecompressPubkey(pubKey)
+	// ValidateSendBlock already covers this; repeated so the result does not
+	// depend on the caller having checked.
+	if X == nil || Y == nil {
+		return nil, constants.ErrInvalidCompressedECDSAPubKey
+	}
 	dPubKeyBytes := make([]byte, 1)
 	dPubKeyBytes[0] = 4
 	dPubKeyBytes = append(dPubKeyBytes, X.Bytes()...)
