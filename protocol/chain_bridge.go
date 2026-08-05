@@ -157,6 +157,12 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 		if err != nil {
 			return 0, err
 		}
+		// The height comes from the peer-supplied batch, so it need not name a
+		// momentum we hold. An unknown height reports as (nil, nil) here.
+		if target == nil {
+			log.Error("can't link momentums to insert", "reason", "no local momentum below head")
+			return 0, errors.Errorf("can't link momentums to insert. No local momentum at height %v", head.Height-1)
+		}
 		if target.Identifier() != head.Previous() {
 			log.Error("can't link momentums to insert", "first")
 			return 0, errors.Errorf("can't link momentums to insert. First momentum Prev is %v but he have %v", head.Previous(), target.Identifier())
