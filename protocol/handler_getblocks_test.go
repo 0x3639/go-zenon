@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -83,6 +84,14 @@ type getBlocksResult struct {
 // was written and what it carried.
 func serveGetBlocks(t *testing.T, chain *lookupCountingChain, hashes []types.Hash) (getBlocksResult, error) {
 	t.Helper()
+	return serveGetBlocksPayload(t, chain, hashes)
+}
+
+// serveGetBlocksPayload is serveGetBlocks for an arbitrary RLP-encodable
+// payload, so a test can put something on the wire that is not a well-formed
+// list of hashes.
+func serveGetBlocksPayload(t *testing.T, chain *lookupCountingChain, payload interface{}) (getBlocksResult, error) {
+	t.Helper()
 
 	app, net := p2p.MsgPipe()
 	defer func() { _ = app.Close() }()
@@ -96,7 +105,7 @@ func serveGetBlocks(t *testing.T, chain *lookupCountingChain, hashes []types.Has
 	// separate goroutines so neither can wait on the other.
 	sendErr := make(chan error, 1)
 	go func() {
-		sendErr <- p2p.Send(app, GetBlocksMsg, hashes)
+		sendErr <- p2p.Send(app, GetBlocksMsg, payload)
 	}()
 
 	done := make(chan getBlocksResult, 1)
@@ -270,6 +279,109 @@ func TestHandleGetBlocks_EmptyRequestIsAnswered(t *testing.T) {
 	}
 }
 
+// A peer on an earlier release does not split its requests. Its oversized
+// request is still answered when the reply cap of MaxBlockFetch found blocks
+// is reached within the first MaxBlocksRequest hashes, since that ends the
+// loop before the request bound is checked; otherwise the request is dropped.
+func TestHandleGetBlocks_UnsplitLegacyRequest(t *testing.T) {
+	const legacyBatch = MaxBlocksRequest + 44
+
+	t.Run("enough hits before the bound is answered", func(t *testing.T) {
+		known, knownHashes := knownBlocks(downloader.MaxBlockFetch)
+		chain := &lookupCountingChain{known: known}
+		hashes := append(knownHashes, unknownHashes(legacyBatch-len(knownHashes))...)
+
+		result, err := serveGetBlocks(t, chain, hashes)
+		if err != nil {
+			t.Fatalf("handleMsg: %v", err)
+		}
+		if !result.answered || len(result.blocks) != downloader.MaxBlockFetch {
+			t.Fatalf("answered=%v with %d blocks, want %d blocks", result.answered, len(result.blocks), downloader.MaxBlockFetch)
+		}
+		if chain.lookups != downloader.MaxBlockFetch {
+			t.Fatalf("%d lookups, want %d", chain.lookups, downloader.MaxBlockFetch)
+		}
+	})
+
+	t.Run("last allowed hit completes the reply", func(t *testing.T) {
+		// The MaxBlockFetch-th hit is the MaxBlocksRequest-th hash: the reply
+		// cap ends the loop on the same iteration the request bound would
+		// trip on the next one.
+		known, knownHashes := knownBlocks(downloader.MaxBlockFetch)
+		chain := &lookupCountingChain{known: known}
+		hashes := append(unknownHashes(MaxBlocksRequest-downloader.MaxBlockFetch), knownHashes...)
+		hashes = append(hashes, unknownHashes(legacyBatch-len(hashes))...)
+
+		result, err := serveGetBlocks(t, chain, hashes)
+		if err != nil {
+			t.Fatalf("handleMsg: %v", err)
+		}
+		if !result.answered || len(result.blocks) != downloader.MaxBlockFetch {
+			t.Fatalf("answered=%v with %d blocks, want %d blocks", result.answered, len(result.blocks), downloader.MaxBlockFetch)
+		}
+		if chain.lookups != MaxBlocksRequest {
+			t.Fatalf("%d lookups, want exactly %d", chain.lookups, MaxBlocksRequest)
+		}
+	})
+
+	t.Run("too few hits before the bound is dropped", func(t *testing.T) {
+		known, knownHashes := knownBlocks(downloader.MaxBlockFetch - 1)
+		chain := &lookupCountingChain{known: known}
+		hashes := append(knownHashes, unknownHashes(legacyBatch-len(knownHashes))...)
+
+		result, err := serveGetBlocks(t, chain, hashes)
+		if err == nil {
+			t.Fatal("handleMsg accepted the request")
+		}
+		if !strings.Contains(err.Error(), errCode(ErrMsgTooLarge).String()) {
+			t.Fatalf("error %q does not report %q", err, errCode(ErrMsgTooLarge).String())
+		}
+		if result.answered {
+			t.Fatal("a rejected request was answered")
+		}
+		if chain.lookups != MaxBlocksRequest {
+			t.Fatalf("%d lookups, want exactly %d", chain.lookups, MaxBlocksRequest)
+		}
+	})
+}
+
+// A payload that is not a list of 32-byte hashes is a decode error: the
+// handler stops at the malformed element, looks nothing further up, and does
+// not answer.
+func TestHandleGetBlocks_MalformedPayloadIsRejected(t *testing.T) {
+	valid := unknownHashes(1)[0]
+	cases := []struct {
+		name          string
+		payload       interface{}
+		lookupsBefore int  // hashes that decode before the malformed element
+		decodeErr     bool // reported as ErrDecode (a bad outer list is a raw rlp error)
+	}{
+		{"not a list", "not-a-list", 0, false},
+		{"short hash", [][]byte{valid[:], valid[:31]}, 1, true},
+		{"long hash", [][]byte{valid[:], append(valid[:], 0)}, 1, true},
+		{"nested list", []interface{}{valid[:], []interface{}{valid[:]}}, 1, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			chain := &lookupCountingChain{}
+
+			result, err := serveGetBlocksPayload(t, chain, tc.payload)
+			if err == nil {
+				t.Fatal("handleMsg accepted the payload")
+			}
+			if tc.decodeErr && !strings.Contains(err.Error(), errCode(ErrDecode).String()) {
+				t.Fatalf("error %q does not report %q", err, errCode(ErrDecode).String())
+			}
+			if result.answered {
+				t.Fatal("a rejected request was answered")
+			}
+			if chain.lookups != tc.lookupsBefore {
+				t.Fatalf("%d lookups, want %d", chain.lookups, tc.lookupsBefore)
+			}
+		})
+	}
+}
+
 // readGetBlocksRequests reads GetBlocksMsg frames from rw until the pipe
 // closes and returns the hash list carried by each.
 func readGetBlocksRequests(t *testing.T, rw p2p.MsgReadWriter) <-chan [][]types.Hash {
@@ -300,7 +412,7 @@ func readGetBlocksRequests(t *testing.T, rw p2p.MsgReadWriter) <-chan [][]types.
 // its callers hand it, no single request on the wire may name more than
 // MaxBlocksRequest hashes, or the remote side drops us.
 func TestRequestBlocks_SplitsBatchesLargerThanMaxBlocksRequest(t *testing.T) {
-	for _, count := range []int{1, MaxBlocksRequest, MaxBlocksRequest + 1, 2*MaxBlocksRequest + 5} {
+	for _, count := range []int{0, 1, MaxBlocksRequest, MaxBlocksRequest + 1, 2 * MaxBlocksRequest, 2*MaxBlocksRequest + 5} {
 		app, net := p2p.MsgPipe()
 		p := &peer{rw: net, id: "test-peer"}
 		hashes := unknownHashes(count)
@@ -311,10 +423,23 @@ func TestRequestBlocks_SplitsBatchesLargerThanMaxBlocksRequest(t *testing.T) {
 		}
 		_ = app.Close()
 
+		frames := <-requests
+		// Every frame is full except the last, so the frame count is fixed by
+		// the batch size. An empty batch is one empty frame, as before.
+		wantFrames := (count + MaxBlocksRequest - 1) / MaxBlocksRequest
+		if count == 0 {
+			wantFrames = 1
+		}
+		if len(frames) != wantFrames {
+			t.Fatalf("%d hashes: %d frames on the wire, want %d", count, len(frames), wantFrames)
+		}
 		var sent []types.Hash
-		for i, request := range <-requests {
-			if len(request) == 0 || len(request) > MaxBlocksRequest {
-				t.Fatalf("%d hashes: request %d names %d hashes, want 1..%d", count, i, len(request), MaxBlocksRequest)
+		for i, request := range frames {
+			if len(request) > MaxBlocksRequest {
+				t.Fatalf("%d hashes: request %d names %d hashes, want at most %d", count, i, len(request), MaxBlocksRequest)
+			}
+			if i < len(frames)-1 && len(request) != MaxBlocksRequest {
+				t.Fatalf("%d hashes: request %d names %d hashes, want a full %d", count, i, len(request), MaxBlocksRequest)
 			}
 			sent = append(sent, request...)
 		}
@@ -326,5 +451,41 @@ func TestRequestBlocks_SplitsBatchesLargerThanMaxBlocksRequest(t *testing.T) {
 				t.Fatalf("%d hashes: hash %d differs or is out of order", count, i)
 			}
 		}
+	}
+}
+
+// failAfterWriter is a MsgReadWriter whose WriteMsg succeeds a fixed number of
+// times and then fails. It counts every attempt, successful or not.
+type failAfterWriter struct {
+	succeed  int
+	attempts int
+	err      error
+}
+
+func (w *failAfterWriter) ReadMsg() (p2p.Msg, error) { panic("not used by RequestBlocks") }
+
+func (w *failAfterWriter) WriteMsg(msg p2p.Msg) error {
+	w.attempts++
+	if w.attempts > w.succeed {
+		return w.err
+	}
+	return nil
+}
+
+// A write failure on a later chunk is returned to the caller and no further
+// chunks are attempted, so the caller sees the same error it would have seen
+// from an unsplit send.
+func TestRequestBlocks_StopsAtFirstFailedChunk(t *testing.T) {
+	wantErr := errors.New("connection reset")
+	rw := &failAfterWriter{succeed: 1, err: wantErr}
+	p := &peer{rw: rw, id: "test-peer"}
+
+	err := p.RequestBlocks(unknownHashes(3*MaxBlocksRequest + 1))
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("RequestBlocks returned %v, want %v", err, wantErr)
+	}
+	// One successful chunk, one failed chunk, and nothing after the failure.
+	if rw.attempts != 2 {
+		t.Fatalf("%d write attempts, want 2 (one success, one failure)", rw.attempts)
 	}
 }
