@@ -27,9 +27,16 @@ type testHarness struct {
 	droppedPeers chan string
 	broadcasts   chan *nom.DetailedMomentum
 	quit         chan struct{}
+	stopOnce     sync.Once
 }
 
 func newTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, insertChain chainInsertFn) *testHarness {
+	return newHookedTestHarness(getBlock, verifyBlock, insertChain, nil)
+}
+
+// newHookedTestHarness is newTestHarness with the fetcher's fetchingHook set
+// before the loop starts, so a test can observe when hashes begin fetching.
+func newHookedTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, insertChain chainInsertFn, fetchingHook func([]types.Hash)) *testHarness {
 	h := &testHarness{
 		droppedPeers: make(chan string, 10),
 		broadcasts:   make(chan *nom.DetailedMomentum, 10),
@@ -48,6 +55,7 @@ func newTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, inse
 		insertChain,
 		func(id string) { h.droppedPeers <- id },
 	)
+	h.f.fetchingHook = fetchingHook
 
 	go func() {
 		h.f.loop()
@@ -58,7 +66,7 @@ func newTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, inse
 }
 
 func (h *testHarness) stop() {
-	h.f.Stop()
+	h.stopOnce.Do(h.f.Stop)
 	<-h.quit
 }
 
@@ -378,4 +386,208 @@ func TestInsert_ParentUnknown_Aborts(t *testing.T) {
 	if insertCalled {
 		t.Error("insertChain should not be called when parent is unknown")
 	}
+}
+
+// The per-peer announce counter is the fetcher's only guard against a peer
+// filling its announced and fetching tables. The tests below drive whole
+// announce lifecycles through the real loop and then, with the loop stopped,
+// compare the counter with the entries it is supposed to count.
+
+// importedSet lets a test flip getBlock from "unknown" to "known" for chosen
+// hashes while the loop is running.
+type importedSet struct {
+	mu     sync.Mutex
+	blocks map[types.Hash]*nom.DetailedMomentum
+}
+
+func (s *importedSet) get(hash types.Hash) *nom.DetailedMomentum {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.blocks[hash]
+}
+
+func (s *importedSet) add(blocks []*nom.DetailedMomentum) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, b := range blocks {
+		s.blocks[b.Momentum.Hash] = b
+	}
+}
+
+// newAccountingHarness returns a harness whose chain knows only what the test
+// marks imported, a channel that receives each batch of hashes as it begins
+// fetching, and n distinct blocks to announce.
+func newAccountingHarness(n int) (*testHarness, *importedSet, <-chan []types.Hash, []*nom.DetailedMomentum) {
+	imported := &importedSet{blocks: make(map[types.Hash]*nom.DetailedMomentum)}
+	fetching := make(chan []types.Hash, 16)
+	h := newHookedTestHarness(
+		imported.get,
+		func(*nom.DetailedMomentum) error { return nil },
+		func([]*nom.DetailedMomentum) (int, error) { return 0, nil },
+		func(hashes []types.Hash) { fetching <- hashes },
+	)
+	blocks := make([]*nom.DetailedMomentum, n)
+	prev := types.Hash{}
+	for i := range blocks {
+		m := newTestMomentum(uint64(i+2), prev)
+		blocks[i] = &nom.DetailedMomentum{Momentum: m}
+		prev = m.Hash
+	}
+	return h, imported, fetching, blocks
+}
+
+// announceAll sends every block's hash to the fetcher on behalf of peer with a
+// request function that never delivers, and returns how many were accepted.
+func announceAll(t *testing.T, h *testHarness, peer string, blocks []*nom.DetailedMomentum) {
+	t.Helper()
+	for _, b := range blocks {
+		if err := h.f.Notify(peer, b.Momentum.Hash, time.Now(), func([]types.Hash) error { return nil }); err != nil {
+			t.Fatalf("Notify: %v", err)
+		}
+	}
+}
+
+// waitForFetching blocks until n hashes have been handed to a fetch request,
+// which happens after the loop has moved them into the fetching table.
+func waitForFetching(t *testing.T, fetching <-chan []types.Hash, n int) {
+	t.Helper()
+	deadline := time.After(10 * arriveTimeout)
+	for got := 0; got < n; {
+		select {
+		case hashes := <-fetching:
+			got += len(hashes)
+		case <-deadline:
+			t.Fatalf("only %d of %d hashes began fetching before the deadline", got, n)
+		}
+	}
+}
+
+// checkAccounting compares, on a stopped fetcher, each peer's counter with the
+// announced and fetching entries attributed to it, and fails on any negative
+// or stale counter.
+func checkAccounting(t *testing.T, f *Fetcher) {
+	t.Helper()
+	want := make(map[string]int)
+	for _, announces := range f.announced {
+		for _, a := range announces {
+			want[a.origin]++
+		}
+	}
+	for _, a := range f.fetching {
+		want[a.origin]++
+	}
+	for peer, count := range f.announces {
+		if count <= 0 {
+			t.Errorf("peer %q: counter %d is not positive", peer, count)
+		}
+		if count != want[peer] {
+			t.Errorf("peer %q: counter %d, but %d announced or fetching entries", peer, count, want[peer])
+		}
+	}
+	for peer, count := range want {
+		if _, ok := f.announces[peer]; !ok {
+			t.Errorf("peer %q: no counter, but %d announced or fetching entries", peer, count)
+		}
+	}
+}
+
+// A hash that is announced, fetched and then found imported at delivery must
+// leave the announcing peer's counter exactly where it started.
+func TestAnnounces_ExactThroughFetchAndCompletion(t *testing.T) {
+	h, imported, fetching, blocks := newAccountingHarness(8)
+	defer h.stop()
+
+	announceAll(t, h, "announcer", blocks)
+	waitForFetching(t, fetching, len(blocks))
+
+	// Delivery finds every block already imported, which is the completion
+	// path that does not go through the import queue.
+	imported.add(blocks)
+	if rest := h.f.Filter("deliverer", blocks); len(rest) != 0 {
+		t.Fatalf("%d explicitly fetched blocks were not consumed", len(rest))
+	}
+
+	h.stop()
+	if len(h.f.announced) != 0 || len(h.f.fetching) != 0 {
+		t.Fatalf("%d announced and %d fetching entries remain", len(h.f.announced), len(h.f.fetching))
+	}
+	checkAccounting(t, h.f)
+	if count, ok := h.f.announces["announcer"]; ok {
+		t.Fatalf("announcer's counter is %d after all its hashes completed, want no entry", count)
+	}
+}
+
+// A hash whose fetch times out must be forgotten with the same effect on the
+// counter as a completed one.
+func TestAnnounces_ExactThroughFetchTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out fetchTimeout")
+	}
+	h, _, fetching, blocks := newAccountingHarness(8)
+	defer h.stop()
+
+	announceAll(t, h, "announcer", blocks)
+	waitForFetching(t, fetching, len(blocks))
+	// Fetch age is measured from the announce, so by now every fetch is
+	// older than fetchTimeout.
+	time.Sleep(fetchTimeout + 250*time.Millisecond)
+
+	// Expired fetches are swept at the top of the loop, so nudge it with an
+	// empty delivery.
+	h.f.Filter("nobody", nil)
+
+	h.stop()
+	if len(h.f.fetching) != 0 {
+		t.Fatalf("%d fetching entries survived fetchTimeout", len(h.f.fetching))
+	}
+	checkAccounting(t, h.f)
+	if count, ok := h.f.announces["announcer"]; ok {
+		t.Fatalf("announcer's counter is %d after all its fetches timed out, want no entry", count)
+	}
+}
+
+// Hashes in the fetching table are still outstanding work for the peer that
+// announced them, so they count toward HashLimit.
+func TestAnnounces_FetchingCountsTowardHashLimit(t *testing.T) {
+	h, _, fetching, blocks := newAccountingHarness(HashLimit + 8)
+	defer h.stop()
+
+	announceAll(t, h, "announcer", blocks[:HashLimit])
+	waitForFetching(t, fetching, HashLimit)
+	announceAll(t, h, "announcer", blocks[HashLimit:])
+
+	h.stop()
+	if len(h.f.fetching) != HashLimit {
+		t.Fatalf("%d fetching entries, want %d", len(h.f.fetching), HashLimit)
+	}
+	if len(h.f.announced) != 0 {
+		t.Fatalf("%d announces accepted past HashLimit while %d hashes were fetching", len(h.f.announced), HashLimit)
+	}
+	checkAccounting(t, h.f)
+}
+
+// Repeated lifecycles must not widen the set of announces a peer may hold:
+// after a full batch completes, the next batch is still bounded by HashLimit.
+func TestAnnounces_LimitHoldsAcrossLifecycles(t *testing.T) {
+	h, imported, fetching, blocks := newAccountingHarness(2*HashLimit + 8)
+	defer h.stop()
+
+	for round := 0; round < 2; round++ {
+		batch := blocks[round*HashLimit : (round+1)*HashLimit]
+		announceAll(t, h, "announcer", batch)
+		waitForFetching(t, fetching, HashLimit)
+		imported.add(batch)
+		h.f.Filter("deliverer", batch)
+	}
+	announceAll(t, h, "announcer", blocks[2*HashLimit:])
+	announceAll(t, h, "announcer", blocks[:HashLimit]) // already imported hashes are still announces
+
+	h.stop()
+	// Some of the final announces may already have moved to fetching, or
+	// been dropped as known, if a timer fired meanwhile; the bound is on
+	// what the peer holds in total, not on the announced table alone.
+	if got := len(h.f.announced) + len(h.f.fetching); got > HashLimit {
+		t.Fatalf("%d announced or fetching entries held after two completed lifecycles, want at most %d", got, HashLimit)
+	}
+	checkAccounting(t, h.f)
 }

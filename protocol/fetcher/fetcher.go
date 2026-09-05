@@ -37,7 +37,7 @@ const (
 	fetchTimeout  = 5 * time.Second        // Maximum alloted time to return an explicitly requested block
 	maxUncleDist  = 7                      // Maximum allowed backward distance from the chain head
 	maxQueueDist  = 32                     // Maximum allowed distance from the chain head to queue
-	hashLimit     = 256                    // Maximum number of unique blocks a peer may have announced
+	HashLimit     = 256                    // Maximum number of unique blocks a peer may have announced; also the largest batch one fetch request names
 	blockLimit    = 64                     // Maximum number of unique blocks a per may have delivered
 )
 
@@ -267,8 +267,8 @@ func (f *Fetcher) loop() {
 		case notification := <-f.notify:
 			// A block was announced, make sure the peer isn't DOSing us
 			count := f.announces[notification.origin] + 1
-			if count > hashLimit {
-				log.Info("Peer exceeded outstanding announces", "peer", notification.origin, "hash-limit", hashLimit)
+			if count > HashLimit {
+				log.Info("Peer exceeded outstanding announces", "peer", notification.origin, "hash-limit", HashLimit)
 				break
 			}
 			// All is well, schedule the announce if block's not yet downloading
@@ -300,10 +300,15 @@ func (f *Fetcher) loop() {
 					announce := announces[rand.Intn(len(announces))]
 					f.forgetHash(hash)
 
-					// If the block still didn't arrive, queue for fetching
+					// If the block still didn't arrive, queue for fetching.
+					// The fetching entry is outstanding work for the chosen
+					// peer, so count it again: forgetHash just released the
+					// announce and will release this entry when the fetch
+					// completes or times out.
 					if f.getBlock(hash) == nil {
 						request[announce.origin] = append(request[announce.origin], hash)
 						f.fetching[hash] = announce
+						f.announces[announce.origin]++
 					}
 				}
 			}
@@ -468,10 +473,12 @@ func (f *Fetcher) insert(peer string, detailed *nom.DetailedMomentum) {
 // forgetHash removes all traces of a block announcement from the fetcher's
 // internal state.
 func (f *Fetcher) forgetHash(hash types.Hash) {
-	// Remove all pending announces and decrement DOS counters
+	// Remove all pending announces and decrement DOS counters. A counter
+	// that reaches zero is dropped rather than kept, so it can never sit
+	// below zero and grant a peer extra announces.
 	for _, announce := range f.announced[hash] {
 		f.announces[announce.origin]--
-		if f.announces[announce.origin] == 0 {
+		if f.announces[announce.origin] <= 0 {
 			delete(f.announces, announce.origin)
 		}
 	}
@@ -480,7 +487,7 @@ func (f *Fetcher) forgetHash(hash types.Hash) {
 	// Remove any pending fetches and decrement the DOS counters
 	if announce := f.fetching[hash]; announce != nil {
 		f.announces[announce.origin]--
-		if f.announces[announce.origin] == 0 {
+		if f.announces[announce.origin] <= 0 {
 			delete(f.announces, announce.origin)
 		}
 		delete(f.fetching, hash)
