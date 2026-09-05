@@ -123,6 +123,7 @@ type Fetcher struct {
 
 	// Testing hooks
 	fetchingHook func([]types.Hash)  // Method to call upon starting a block fetch
+	expiredHook  func([]types.Hash)  // Method to call after timed-out fetches are swept
 	importedHook func(*nom.Momentum) // Method to call upon successful block import
 
 	wg sync.WaitGroup
@@ -236,13 +237,23 @@ func (f *Fetcher) loop() {
 		// Clean up any expired block fetches. Expired entries still count
 		// against their peer's announce allowance, so the sweep must also
 		// run when nothing else wakes the loop: arm a timer for the oldest
-		// fetch so the allowance is released on time.
+		// surviving fetch so the allowance is released on time.
+		var expired []types.Hash
+		var oldest time.Time
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
 				f.forgetHash(hash)
+				expired = append(expired, hash)
+			} else if oldest.IsZero() || announce.time.Before(oldest) {
+				oldest = announce.time
 			}
 		}
-		f.rescheduleExpiry(expire)
+		if !oldest.IsZero() {
+			expire.Reset(fetchTimeout - time.Since(oldest))
+		}
+		if len(expired) > 0 && f.expiredHook != nil {
+			f.expiredHook(expired)
+		}
 		// Import any queued blocks that could potentially fit
 		height := f.chainHeight()
 		for !f.queue.Empty() {
@@ -403,23 +414,6 @@ func (f *Fetcher) reschedule(fetch *time.Timer) {
 		}
 	}
 	fetch.Reset(arriveTimeout - time.Since(earliest))
-}
-
-// rescheduleExpiry resets the expiry timer to the moment the oldest pending
-// fetch times out, so expired fetches are swept even while the loop is idle.
-func (f *Fetcher) rescheduleExpiry(expire *time.Timer) {
-	// Short circuit if no fetches are pending
-	if len(f.fetching) == 0 {
-		return
-	}
-	// Otherwise find the oldest fetch still waiting on a reply
-	earliest := time.Now()
-	for _, announce := range f.fetching {
-		if earliest.After(announce.time) {
-			earliest = announce.time
-		}
-	}
-	expire.Reset(fetchTimeout - time.Since(earliest))
 }
 
 // enqueue schedules a new future import operation, if the block to be imported

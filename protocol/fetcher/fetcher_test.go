@@ -31,12 +31,13 @@ type testHarness struct {
 }
 
 func newTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, insertChain chainInsertFn) *testHarness {
-	return newHookedTestHarness(getBlock, verifyBlock, insertChain, nil)
+	return newHookedTestHarness(getBlock, verifyBlock, insertChain, nil, nil)
 }
 
-// newHookedTestHarness is newTestHarness with the fetcher's fetchingHook set
-// before the loop starts, so a test can observe when hashes begin fetching.
-func newHookedTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, insertChain chainInsertFn, fetchingHook func([]types.Hash)) *testHarness {
+// newHookedTestHarness is newTestHarness with the fetcher's fetchingHook and
+// expiredHook set before the loop starts, so a test can observe when hashes
+// begin fetching and when timed-out fetches are swept.
+func newHookedTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn, insertChain chainInsertFn, fetchingHook, expiredHook func([]types.Hash)) *testHarness {
 	h := &testHarness{
 		droppedPeers: make(chan string, 10),
 		broadcasts:   make(chan *nom.DetailedMomentum, 10),
@@ -56,6 +57,7 @@ func newHookedTestHarness(getBlock blockRetrievalFn, verifyBlock blockVerifierFn
 		func(id string) { h.droppedPeers <- id },
 	)
 	h.f.fetchingHook = fetchingHook
+	h.f.expiredHook = expiredHook
 
 	go func() {
 		h.f.loop()
@@ -414,17 +416,27 @@ func (s *importedSet) add(blocks []*nom.DetailedMomentum) {
 	}
 }
 
+// accountingEvents carries the fetcher's test hooks: each batch of hashes as
+// it begins fetching, and each batch swept after timing out.
+type accountingEvents struct {
+	fetching chan []types.Hash
+	expired  chan []types.Hash
+}
+
 // newAccountingHarness returns a harness whose chain knows only what the test
-// marks imported, a channel that receives each batch of hashes as it begins
-// fetching, and n distinct blocks to announce.
-func newAccountingHarness(n int) (*testHarness, *importedSet, <-chan []types.Hash, []*nom.DetailedMomentum) {
+// marks imported, the hook events, and n distinct blocks to announce.
+func newAccountingHarness(n int) (*testHarness, *importedSet, *accountingEvents, []*nom.DetailedMomentum) {
 	imported := &importedSet{blocks: make(map[types.Hash]*nom.DetailedMomentum)}
-	fetching := make(chan []types.Hash, 16)
+	events := &accountingEvents{
+		fetching: make(chan []types.Hash, 16),
+		expired:  make(chan []types.Hash, 16),
+	}
 	h := newHookedTestHarness(
 		imported.get,
 		func(*nom.DetailedMomentum) error { return nil },
 		func([]*nom.DetailedMomentum) (int, error) { return 0, nil },
-		func(hashes []types.Hash) { fetching <- hashes },
+		func(hashes []types.Hash) { events.fetching <- hashes },
+		func(hashes []types.Hash) { events.expired <- hashes },
 	)
 	blocks := make([]*nom.DetailedMomentum, n)
 	prev := types.Hash{}
@@ -433,7 +445,7 @@ func newAccountingHarness(n int) (*testHarness, *importedSet, <-chan []types.Has
 		blocks[i] = &nom.DetailedMomentum{Momentum: m}
 		prev = m.Hash
 	}
-	return h, imported, fetching, blocks
+	return h, imported, events, blocks
 }
 
 // announceAll sends every block's hash to the fetcher on behalf of peer with a
@@ -447,19 +459,33 @@ func announceAll(t *testing.T, h *testHarness, peer string, blocks []*nom.Detail
 	}
 }
 
-// waitForFetching blocks until n hashes have been handed to a fetch request,
-// which happens after the loop has moved them into the fetching table.
-func waitForFetching(t *testing.T, fetching <-chan []types.Hash, n int) {
+// waitForHashes blocks until n hashes have been reported on events, or fails
+// the test once the deadline passes.
+func waitForHashes(t *testing.T, events <-chan []types.Hash, n int, deadline time.Duration, what string) {
 	t.Helper()
-	deadline := time.After(10 * arriveTimeout)
+	timeout := time.After(deadline)
 	for got := 0; got < n; {
 		select {
-		case hashes := <-fetching:
+		case hashes := <-events:
 			got += len(hashes)
-		case <-deadline:
-			t.Fatalf("only %d of %d hashes began fetching before the deadline", got, n)
+		case <-timeout:
+			t.Fatalf("only %d of %d hashes %s before the deadline", got, n, what)
 		}
 	}
+}
+
+// waitForFetching blocks until n hashes have been handed to a fetch request,
+// which happens after the loop has moved them into the fetching table.
+func waitForFetching(t *testing.T, events *accountingEvents, n int) {
+	t.Helper()
+	waitForHashes(t, events.fetching, n, 10*arriveTimeout, "began fetching")
+}
+
+// waitForExpiry blocks until n fetches have timed out and been swept, which
+// happens after the loop has removed them and released their allowance.
+func waitForExpiry(t *testing.T, events *accountingEvents, n int) {
+	t.Helper()
+	waitForHashes(t, events.expired, n, fetchTimeout+10*arriveTimeout, "expired")
 }
 
 // checkAccounting compares, on a stopped fetcher, each peer's counter with the
@@ -494,11 +520,11 @@ func checkAccounting(t *testing.T, f *Fetcher) {
 // A hash that is announced, fetched and then found imported at delivery must
 // leave the announcing peer's counter exactly where it started.
 func TestAnnounces_ExactThroughFetchAndCompletion(t *testing.T) {
-	h, imported, fetching, blocks := newAccountingHarness(8)
+	h, imported, events, blocks := newAccountingHarness(8)
 	defer h.stop()
 
 	announceAll(t, h, "announcer", blocks)
-	waitForFetching(t, fetching, len(blocks))
+	waitForFetching(t, events, len(blocks))
 
 	// Delivery finds every block already imported, which is the completion
 	// path that does not go through the import queue.
@@ -523,15 +549,14 @@ func TestAnnounces_ExactThroughFetchTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out fetchTimeout")
 	}
-	h, _, fetching, blocks := newAccountingHarness(8)
+	h, _, events, blocks := newAccountingHarness(8)
 	defer h.stop()
 
 	announceAll(t, h, "announcer", blocks)
-	waitForFetching(t, fetching, len(blocks))
-	// Fetch age is measured from the announce, so by now every fetch is
-	// older than fetchTimeout and the expiry timer has swept it without any
-	// other event waking the loop.
-	time.Sleep(fetchTimeout + 250*time.Millisecond)
+	waitForFetching(t, events, len(blocks))
+	// Nothing else wakes the loop from here on, so the sweep that reports
+	// these hashes ran off the expiry timer.
+	waitForExpiry(t, events, len(blocks))
 
 	h.stop()
 	if len(h.f.fetching) != 0 {
@@ -546,11 +571,11 @@ func TestAnnounces_ExactThroughFetchTimeout(t *testing.T) {
 // Hashes in the fetching table are still outstanding work for the peer that
 // announced them, so they count toward HashLimit.
 func TestAnnounces_FetchingCountsTowardHashLimit(t *testing.T) {
-	h, _, fetching, blocks := newAccountingHarness(HashLimit + 8)
+	h, _, events, blocks := newAccountingHarness(HashLimit + 8)
 	defer h.stop()
 
 	announceAll(t, h, "announcer", blocks[:HashLimit])
-	waitForFetching(t, fetching, HashLimit)
+	waitForFetching(t, events, HashLimit)
 	announceAll(t, h, "announcer", blocks[HashLimit:])
 
 	h.stop()
@@ -566,13 +591,13 @@ func TestAnnounces_FetchingCountsTowardHashLimit(t *testing.T) {
 // Repeated lifecycles must not widen the set of announces a peer may hold:
 // after a full batch completes, the next batch is still bounded by HashLimit.
 func TestAnnounces_LimitHoldsAcrossLifecycles(t *testing.T) {
-	h, imported, fetching, blocks := newAccountingHarness(2*HashLimit + 8)
+	h, imported, events, blocks := newAccountingHarness(2*HashLimit + 8)
 	defer h.stop()
 
 	for round := 0; round < 2; round++ {
 		batch := blocks[round*HashLimit : (round+1)*HashLimit]
 		announceAll(t, h, "announcer", batch)
-		waitForFetching(t, fetching, HashLimit)
+		waitForFetching(t, events, HashLimit)
 		imported.add(batch)
 		h.f.Filter("deliverer", batch)
 	}
@@ -595,14 +620,14 @@ func TestAnnounces_ExpiredFetchesFreeAllowanceBeforeNextAnnounce(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out fetchTimeout")
 	}
-	h, _, fetching, blocks := newAccountingHarness(HashLimit + 8)
+	h, _, events, blocks := newAccountingHarness(HashLimit + 8)
 	defer h.stop()
 
 	announceAll(t, h, "announcer", blocks[:HashLimit])
-	waitForFetching(t, fetching, HashLimit)
+	waitForFetching(t, events, HashLimit)
 	// Let every fetch expire with the loop otherwise idle: nothing else
 	// wakes it between here and the next announce.
-	time.Sleep(fetchTimeout + 250*time.Millisecond)
+	waitForExpiry(t, events, HashLimit)
 	announceAll(t, h, "announcer", blocks[HashLimit:])
 
 	h.stop()
