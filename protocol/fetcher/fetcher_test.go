@@ -529,12 +529,9 @@ func TestAnnounces_ExactThroughFetchTimeout(t *testing.T) {
 	announceAll(t, h, "announcer", blocks)
 	waitForFetching(t, fetching, len(blocks))
 	// Fetch age is measured from the announce, so by now every fetch is
-	// older than fetchTimeout.
+	// older than fetchTimeout and the expiry timer has swept it without any
+	// other event waking the loop.
 	time.Sleep(fetchTimeout + 250*time.Millisecond)
-
-	// Expired fetches are swept at the top of the loop, so nudge it with an
-	// empty delivery.
-	h.f.Filter("nobody", nil)
 
 	h.stop()
 	if len(h.f.fetching) != 0 {
@@ -588,6 +585,32 @@ func TestAnnounces_LimitHoldsAcrossLifecycles(t *testing.T) {
 	// what the peer holds in total, not on the announced table alone.
 	if got := len(h.f.announced) + len(h.f.fetching); got > HashLimit {
 		t.Fatalf("%d announced or fetching entries held after two completed lifecycles, want at most %d", got, HashLimit)
+	}
+	checkAccounting(t, h.f)
+}
+
+// Fetches that time out while the loop is idle must free the peer's
+// allowance before its next announce is judged, not after.
+func TestAnnounces_ExpiredFetchesFreeAllowanceBeforeNextAnnounce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out fetchTimeout")
+	}
+	h, _, fetching, blocks := newAccountingHarness(HashLimit + 8)
+	defer h.stop()
+
+	announceAll(t, h, "announcer", blocks[:HashLimit])
+	waitForFetching(t, fetching, HashLimit)
+	// Let every fetch expire with the loop otherwise idle: nothing else
+	// wakes it between here and the next announce.
+	time.Sleep(fetchTimeout + 250*time.Millisecond)
+	announceAll(t, h, "announcer", blocks[HashLimit:])
+
+	h.stop()
+	if len(h.f.fetching) != 0 {
+		t.Fatalf("%d fetching entries survived fetchTimeout", len(h.f.fetching))
+	}
+	if got := len(h.f.announced); got != 8 {
+		t.Fatalf("%d of 8 announces accepted after every fetch expired, want all 8", got)
 	}
 	checkAccounting(t, h.f)
 }

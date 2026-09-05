@@ -231,13 +231,18 @@ func (f *Fetcher) Filter(peer string, blocks []*nom.DetailedMomentum) []*nom.Det
 func (f *Fetcher) loop() {
 	// Iterate the block fetching until a quit is requested
 	fetch := time.NewTimer(0)
+	expire := time.NewTimer(0)
 	for {
-		// Clean up any expired block fetches
+		// Clean up any expired block fetches. Expired entries still count
+		// against their peer's announce allowance, so the sweep must also
+		// run when nothing else wakes the loop: arm a timer for the oldest
+		// fetch so the allowance is released on time.
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
 				f.forgetHash(hash)
 			}
 		}
+		f.rescheduleExpiry(expire)
 		// Import any queued blocks that could potentially fit
 		height := f.chainHeight()
 		for !f.queue.Empty() {
@@ -335,6 +340,10 @@ func (f *Fetcher) loop() {
 			// Schedule the next fetch if blocks are still pending
 			f.reschedule(fetch)
 
+		case <-expire.C:
+			// The oldest fetch has timed out; the sweep at the top of the
+			// loop removes it and releases the peer's allowance.
+
 		case req := <-f.filter:
 			// Blocks arrived, extract any explicit fetches, return all else
 			var blocks []*nom.DetailedMomentum
@@ -394,6 +403,23 @@ func (f *Fetcher) reschedule(fetch *time.Timer) {
 		}
 	}
 	fetch.Reset(arriveTimeout - time.Since(earliest))
+}
+
+// rescheduleExpiry resets the expiry timer to the moment the oldest pending
+// fetch times out, so expired fetches are swept even while the loop is idle.
+func (f *Fetcher) rescheduleExpiry(expire *time.Timer) {
+	// Short circuit if no fetches are pending
+	if len(f.fetching) == 0 {
+		return
+	}
+	// Otherwise find the oldest fetch still waiting on a reply
+	earliest := time.Now()
+	for _, announce := range f.fetching {
+		if earliest.After(announce.time) {
+			earliest = announce.time
+		}
+	}
+	expire.Reset(fetchTimeout - time.Since(earliest))
 }
 
 // enqueue schedules a new future import operation, if the block to be imported
