@@ -441,6 +441,11 @@ func newAccountingHarness(n int) (*testHarness, *importedSet, *accountingEvents,
 		func(hashes []types.Hash) { events.fetching <- hashes },
 		func(hashes []types.Hash) { events.expired <- hashes },
 	)
+	return h, imported, events, testBlocks(n)
+}
+
+// testBlocks returns n distinct chained blocks starting at height 2.
+func testBlocks(n int) []*nom.DetailedMomentum {
 	blocks := make([]*nom.DetailedMomentum, n)
 	prev := types.Hash{}
 	for i := range blocks {
@@ -448,7 +453,7 @@ func newAccountingHarness(n int) (*testHarness, *importedSet, *accountingEvents,
 		blocks[i] = &nom.DetailedMomentum{Momentum: m}
 		prev = m.Hash
 	}
-	return h, imported, events, blocks
+	return blocks
 }
 
 // announceAll sends every block's hash to the fetcher on behalf of peer with a
@@ -634,11 +639,98 @@ func TestAnnounces_ExpiredFetchesFreeAllowanceBeforeNextAnnounce(t *testing.T) {
 	announceAll(t, h, "announcer", blocks[HashLimit:])
 
 	h.stop()
-	if len(h.f.fetching) != 0 {
-		t.Fatalf("%d fetching entries survived fetchTimeout", len(h.f.fetching))
-	}
-	if got := len(h.f.announced); got != 8 {
-		t.Fatalf("%d of 8 announces accepted after every fetch expired, want all 8", got)
-	}
+	// The new announces may already have moved to fetching if a timer fired
+	// meanwhile, so check the exact set the peer holds across both tables.
+	expectHeld(t, h.f, blocks[HashLimit:], blocks[:HashLimit])
 	checkAccounting(t, h.f)
+}
+
+// expectHeld fails unless the fetcher holds exactly the want blocks, each in
+// announced or fetching, and none of the gone blocks.
+func expectHeld(t *testing.T, f *Fetcher, want, gone []*nom.DetailedMomentum) {
+	t.Helper()
+	held := func(hash types.Hash) bool {
+		_, announced := f.announced[hash]
+		_, fetching := f.fetching[hash]
+		return announced || fetching
+	}
+	for i, b := range want {
+		if !held(b.Momentum.Hash) {
+			t.Errorf("wanted block %d is neither announced nor fetching", i)
+		}
+	}
+	for i, b := range gone {
+		if held(b.Momentum.Hash) {
+			t.Errorf("block %d should be gone but is still announced or fetching", i)
+		}
+	}
+	if total := len(f.announced) + len(f.fetching); total != len(want) {
+		t.Errorf("%d announced or fetching entries, want %d", total, len(want))
+	}
+}
+
+// newIdleFetcher returns a fetcher whose loop is not running, for driving
+// the admission path directly with hand-built state.
+func newIdleFetcher() *Fetcher {
+	return New(
+		func(types.Hash) *nom.DetailedMomentum { return nil },
+		func(*nom.DetailedMomentum) error { return nil },
+		func(*nom.DetailedMomentum, bool) {},
+		func() uint64 { return 1 },
+		func([]*nom.DetailedMomentum) (int, error) { return 0, nil },
+		func(string) {},
+	)
+}
+
+// fillFetching puts HashLimit fetches from peer into the fetcher, all with
+// the given announce time, and charges the peer for them as the loop would.
+func fillFetching(f *Fetcher, peer string, blocks []*nom.DetailedMomentum, at time.Time) {
+	for _, b := range blocks {
+		f.fetching[b.Momentum.Hash] = &announce{hash: b.Momentum.Hash, time: at, origin: peer}
+	}
+	f.announces[peer] = len(blocks)
+	f.oldestFetch = at
+}
+
+// A peer at its limit whose fetches have timed out since the last sweep has
+// them released before its next announce is judged. This is the state
+// between the loop's sweep and its select when the timeout passes and a
+// notification wins the select ahead of the expiry timer.
+func TestReleaseExpired_FreesAllowanceOfTimedOutFetches(t *testing.T) {
+	blocks := testBlocks(HashLimit)
+	f := newIdleFetcher()
+	stale := time.Now().Add(-fetchTimeout - time.Second)
+	fillFetching(f, "announcer", blocks, stale)
+
+	f.releaseExpired("announcer")
+
+	expectHeld(t, f, nil, blocks)
+	checkAccounting(t, f)
+	if count := f.announces["announcer"]; count+1 > HashLimit {
+		t.Fatalf("announcer still charged %d after every fetch timed out, next announce would be refused", count)
+	}
+}
+
+// Live fetches are left alone: a peer at its limit stays refused, and a
+// peer under its limit never triggers a sweep.
+func TestReleaseExpired_LeavesLiveFetchesAlone(t *testing.T) {
+	blocks := testBlocks(HashLimit)
+	f := newIdleFetcher()
+	fillFetching(f, "announcer", blocks, time.Now())
+
+	f.releaseExpired("announcer")
+
+	expectHeld(t, f, blocks, nil)
+	checkAccounting(t, f)
+	if count := f.announces["announcer"]; count+1 <= HashLimit {
+		t.Fatalf("announcer charged %d with %d live fetches, next announce would be accepted", count, HashLimit)
+	}
+
+	// Under the limit with stale fetches: the sweep is not this peer's
+	// problem, and nothing is released on its behalf.
+	other := testBlocks(HashLimit / 2)
+	g := newIdleFetcher()
+	fillFetching(g, "quiet", other, time.Now().Add(-fetchTimeout-time.Second))
+	g.releaseExpired("quiet")
+	expectHeld(t, g, other, nil)
 }

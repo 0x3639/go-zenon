@@ -104,9 +104,10 @@ type Fetcher struct {
 	quit   chan struct{}
 
 	// Announce states
-	announces map[string]int             // Per peer announce counts to prevent memory exhaustion
-	announced map[types.Hash][]*announce // Announced blocks, scheduled for fetching
-	fetching  map[types.Hash]*announce   // Announced blocks, currently fetching
+	announces   map[string]int             // Per peer announce counts to prevent memory exhaustion
+	announced   map[types.Hash][]*announce // Announced blocks, scheduled for fetching
+	fetching    map[types.Hash]*announce   // Announced blocks, currently fetching
+	oldestFetch time.Time                  // Announce time of the oldest pending fetch as of the last sweep, zero when none
 
 	// Block cache
 	queue  *prque.Prque           // Queue containing the import operations (block number sorted)
@@ -238,23 +239,9 @@ func (f *Fetcher) loop() {
 		// against their peer's announce allowance, so the sweep must also
 		// run when nothing else wakes the loop: arm a timer for the oldest
 		// surviving fetch so the allowance is released on time.
-		var expired []types.Hash
-		var oldest time.Time
-		for hash, announce := range f.fetching {
-			if time.Since(announce.time) > fetchTimeout {
-				f.forgetHash(hash)
-				if f.expiredHook != nil {
-					expired = append(expired, hash)
-				}
-			} else if oldest.IsZero() || announce.time.Before(oldest) {
-				oldest = announce.time
-			}
-		}
-		if !oldest.IsZero() {
-			expire.Reset(fetchTimeout - time.Since(oldest))
-		}
-		if len(expired) > 0 {
-			f.expiredHook(expired)
+		f.sweepExpired()
+		if !f.oldestFetch.IsZero() {
+			expire.Reset(fetchTimeout - time.Since(f.oldestFetch))
 		}
 		// Import any queued blocks that could potentially fit
 		height := f.chainHeight()
@@ -283,7 +270,10 @@ func (f *Fetcher) loop() {
 			return
 
 		case notification := <-f.notify:
-			// A block was announced, make sure the peer isn't DOSing us
+			// A block was announced, make sure the peer isn't DOSing us.
+			// Release fetches that timed out since the last sweep first,
+			// so a peer at its limit is judged on live entries only.
+			f.releaseExpired(notification.origin)
 			count := f.announces[notification.origin] + 1
 			if count > HashLimit {
 				log.Info("Peer exceeded outstanding announces", "peer", notification.origin, "hash-limit", HashLimit)
@@ -400,6 +390,42 @@ func (f *Fetcher) loop() {
 			}
 		}
 	}
+}
+
+// sweepExpired forgets every pending fetch older than fetchTimeout, records
+// the announce time of the oldest survivor for the expiry timer and for
+// admission, and reports the expired hashes to the test hook.
+func (f *Fetcher) sweepExpired() {
+	var expired []types.Hash
+	f.oldestFetch = time.Time{}
+	for hash, announce := range f.fetching {
+		if time.Since(announce.time) > fetchTimeout {
+			f.forgetHash(hash)
+			if f.expiredHook != nil {
+				expired = append(expired, hash)
+			}
+		} else if f.oldestFetch.IsZero() || announce.time.Before(f.oldestFetch) {
+			f.oldestFetch = announce.time
+		}
+	}
+	if len(expired) > 0 {
+		f.expiredHook(expired)
+	}
+}
+
+// releaseExpired sweeps timed-out fetches when peer is at its announce
+// allowance and the oldest pending fetch has passed its timeout since the
+// last sweep. The sweep runs before the loop blocks in select, so when the
+// timeout passes while the loop is blocked and a notification is selected
+// ahead of the expiry timer, the peer would otherwise be judged against
+// fetches that have already timed out. The sweep only runs when something
+// has actually expired, and each fetch expires once, so a peer at its limit
+// cannot make refused announces cost repeated walks of the table.
+func (f *Fetcher) releaseExpired(peer string) {
+	if f.announces[peer] < HashLimit || f.oldestFetch.IsZero() || time.Since(f.oldestFetch) <= fetchTimeout {
+		return
+	}
+	f.sweepExpired()
 }
 
 // reschedule resets the specified fetch timer to the next announce timeout.
