@@ -24,6 +24,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -248,6 +249,11 @@ func (db *nodeDB) expirer() {
 
 // expireNodes iterates over the database and deletes all nodes that have not
 // been seen (i.e. received a pong from) for some alloted time.
+//
+// An identity is considered whenever any discovery field is stored for it,
+// not only when it has a node record: a ping that was never answered leaves
+// timing metadata alone, and those entries expire on the same terms as a
+// node record whose last pong is old.
 func (db *nodeDB) expireNodes() error {
 	threshold := time.Now().Add(-nodeDBNodeExpiration)
 
@@ -255,12 +261,21 @@ func (db *nodeDB) expireNodes() error {
 	it := db.lvl.NewIterator(nil, nil)
 	defer it.Release()
 
+	var (
+		lastID  NodeID
+		checked bool
+	)
 	for it.Next() {
-		// Skip the item if not a discovery node
+		// Skip the item if not a discovery field
 		id, field := splitKey(it.Key())
-		if field != nodeDBDiscoverRoot {
+		if !strings.HasPrefix(field, nodeDBDiscoverRoot) {
 			continue
 		}
+		// The fields of one identity are adjacent; decide it once
+		if checked && id == lastID {
+			continue
+		}
+		lastID, checked = id, true
 		// Skip the node if not expired yet (and not self)
 		if bytes.Compare(id[:], db.self[:]) != 0 {
 			if seen := db.lastPong(id); seen.After(threshold) {
