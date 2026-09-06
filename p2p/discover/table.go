@@ -61,10 +61,13 @@ type Table struct {
 	bondmu    sync.Mutex
 	bonding   map[NodeID]*bondproc
 	bondslots chan struct{} // limits total number of active bonding processes
-	// inboundBonds is a counting semaphore for bonds started by unsolicited
-	// pings; a slot is taken before the goroutine is started and released
-	// when it exits, so work is admitted before it is queued anywhere.
-	inboundBonds chan struct{}
+	// inbound holds the identities with a bond started by an unsolicited
+	// ping, whether waiting for a bonding slot or holding one. An identity
+	// is admitted before its goroutine starts and removed when it exits, so
+	// work is bounded before it is queued anywhere, and an identity that is
+	// already in flight is not admitted again: its pings coalesce onto the
+	// existing process instead of each taking a permit.
+	inbound map[NodeID]struct{}
 
 	nodeAddedHook func(*Node) // for testing
 
@@ -112,8 +115,7 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 		closing:   make(chan struct{}),
 		bonding:   make(map[NodeID]*bondproc),
 		bondslots: make(chan struct{}, maxBondingPingPongs),
-
-		inboundBonds: make(chan struct{}, maxInboundBonds),
+		inbound:   make(map[NodeID]struct{}),
 	}
 	for i := 0; i < cap(tab.bondslots); i++ {
 		tab.bondslots <- struct{}{}
@@ -439,6 +441,26 @@ func (tab *Table) bond(pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16
 		tab.db.updateFindFails(id, 0)
 	}
 	return node, result
+}
+
+// admitInbound reserves an inbound bonding permit for id. It reports false,
+// and reserves nothing, when the budget is full or a bond for id is already
+// in flight. The caller must return the permit with releaseInbound.
+func (tab *Table) admitInbound(id NodeID) bool {
+	tab.bondmu.Lock()
+	defer tab.bondmu.Unlock()
+	if _, busy := tab.inbound[id]; busy || len(tab.inbound) >= maxInboundBonds {
+		return false
+	}
+	tab.inbound[id] = struct{}{}
+	return true
+}
+
+// releaseInbound returns the permit reserved by admitInbound.
+func (tab *Table) releaseInbound(id NodeID) {
+	tab.bondmu.Lock()
+	delete(tab.inbound, id)
+	tab.bondmu.Unlock()
 }
 
 func (tab *Table) pingpong(w *bondproc, pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16) {
