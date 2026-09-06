@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/inconshreveable/log15"
 
@@ -36,12 +35,6 @@ const (
 	// server.
 	maxSubscriptions = 4096
 )
-
-// sweepInterval is how often the worker drops subscriptions whose client has
-// unsubscribed or disconnected. Broadcasts only visit subscriptions their
-// event matches, so without the sweep an address-filtered subscription
-// would stay installed until a block for that address arrives.
-var sweepInterval = 10 * time.Second
 
 var (
 	oneSingleton sync.Mutex
@@ -91,18 +84,24 @@ type Api struct {
 	stopped   chan struct{}
 
 	// live counts subscriptions that hold a slot of maxSubscriptions: those
-	// waiting in installCh plus those installed by the worker. Only subscribe
-	// increments it, serialized by stopLock, and only the worker's uninstall
-	// decrements it, so the check-then-increment in subscribe cannot
-	// overshoot.
+	// waiting in installCh plus those installed. Only subscribe increments
+	// it, serialized by stopLock, and only uninstall decrements it, under
+	// subsMu together with the map entry, so the check-then-increment in
+	// subscribe cannot overshoot and a slot is never released twice.
 	live atomic.Int64
 }
 type Server struct {
 	*Api
 
-	started       bool
-	acCh          chan []*AccountBlock
-	mCh           chan *Momentum
+	started bool
+	acCh    chan []*AccountBlock
+	mCh     chan *Momentum
+
+	// subsMu guards subscriptions. The worker installs entries and takes
+	// snapshots to broadcast to; each entry's watcher goroutine removes it
+	// when its client unsubscribes or disconnects, so capacity returns
+	// without waiting for the worker or for an event matching the entry.
+	subsMu        sync.Mutex
 	subscriptions map[SubscriptionType]map[rpc.ID]*Subscription
 
 	wg sync.WaitGroup
@@ -205,18 +204,16 @@ func (s *Server) work() {
 	defer common.RecoverStack()
 	log.Info("start event loop")
 	defer log.Info("stop event loop")
-	sweep := time.NewTicker(sweepInterval)
-	defer sweep.Stop()
 	for {
 		select {
 		case <-s.stopped:
 			log.Info("stopped")
+			s.subsMu.Lock()
 			s.subscriptions = nil
+			s.subsMu.Unlock()
 			return
 		case sub := <-s.installCh:
 			s.install(sub)
-		case <-sweep.C:
-			s.sweep()
 		case momentums := <-s.mCh:
 			s.broadcastMomentums(momentums)
 		case blocks := <-s.acCh:
@@ -232,9 +229,33 @@ type BroadcastStats struct {
 
 func (s *Server) install(subscription *Subscription) {
 	s.log.Info("install", "id", subscription.rpc.ID)
+	s.subsMu.Lock()
 	s.subscriptions[subscription.options.subscriptionType][subscription.rpc.ID] = subscription
+	s.subsMu.Unlock()
+	s.wg.Add(1)
+	go s.watch(subscription)
 }
+
+// watch removes the subscription as soon as its client unsubscribes or its
+// connection closes. It waits on the same signals Closed reports, but on
+// copies taken here: the worker owns subscription.notifier and clears it in
+// Closed, so the watcher never reads the field again. A client that went
+// away while the entry was still queued is removed right after install.
+func (s *Server) watch(subscription *Subscription) {
+	defer s.wg.Done()
+	rpcSub, notifier := subscription.rpc, subscription.notifier
+	select {
+	case <-s.stopped:
+		return
+	case <-rpcSub.Err():
+	case <-notifier.Closed():
+	}
+	s.uninstall(subscription)
+}
+
 func (s *Server) uninstall(subscription *Subscription) {
+	s.subsMu.Lock()
+	defer s.subsMu.Unlock()
 	installed := s.subscriptions[subscription.options.subscriptionType]
 	if _, ok := installed[subscription.rpc.ID]; !ok {
 		return
@@ -245,22 +266,18 @@ func (s *Server) uninstall(subscription *Subscription) {
 	s.live.Add(-1)
 }
 
-// sweep uninstalls every subscription whose client has unsubscribed or
-// disconnected, regardless of whether an event for it has arrived.
-func (s *Server) sweep() {
-	startTime := common.Clock.Now()
-	stats := &BroadcastStats{}
-	for _, installed := range s.subscriptions {
-		for _, subscription := range installed {
-			if subscription.Closed() {
-				stats.NumUninstalls += 1
-				s.uninstall(subscription)
-			}
-		}
+// installed returns the subscriptions of one type for the worker to
+// broadcast to. Notifications are network writes, so they must not run
+// under subsMu or a slow client would block every watcher's uninstall.
+func (s *Server) installed(subscriptionType SubscriptionType) []*Subscription {
+	s.subsMu.Lock()
+	defer s.subsMu.Unlock()
+	entries := s.subscriptions[subscriptionType]
+	snapshot := make([]*Subscription, 0, len(entries))
+	for _, subscription := range entries {
+		snapshot = append(snapshot, subscription)
 	}
-	if stats.NumUninstalls > 0 {
-		s.log.Info("finish sweeping subscriptions", "elapsed", common.Clock.Now().Sub(startTime), "stats", stats)
-	}
+	return snapshot
 }
 func (s *Server) broadcast(subscription *Subscription, data interface{}, stats *BroadcastStats) {
 	if subscription.Closed() {
@@ -278,7 +295,7 @@ func (s *Server) broadcastMomentums(momentum *Momentum) {
 	startTime := common.Clock.Now()
 	stats := &BroadcastStats{}
 
-	for _, f := range s.subscriptions[MomentumsSubscription] {
+	for _, f := range s.installed(MomentumsSubscription) {
 		s.broadcast(f, []interface{}{momentum}, stats)
 	}
 
@@ -306,15 +323,15 @@ func (s *Server) broadcastBlocks(blocks []*AccountBlock) {
 		}
 	}
 
-	for _, f := range s.subscriptions[AllAccountBlocksSubscription] {
+	for _, f := range s.installed(AllAccountBlocksSubscription) {
 		s.broadcast(f, blocks, stats)
 	}
-	for _, f := range s.subscriptions[AccountBlocksSubscriptionByAddress] {
+	for _, f := range s.installed(AccountBlocksSubscriptionByAddress) {
 		if blocks, ok := byAddress[f.options.address]; ok {
 			s.broadcast(f, blocks, stats)
 		}
 	}
-	for _, f := range s.subscriptions[UnreceivedAccountBlocksSubscriptionByAddress] {
+	for _, f := range s.installed(UnreceivedAccountBlocksSubscriptionByAddress) {
 		if blocks, ok := unreceivedByAddress[f.options.address]; ok {
 			s.broadcast(f, blocks, stats)
 		}
@@ -355,8 +372,9 @@ func (s *Api) subscribe(ctx context.Context, options *subscriptionOptions) (*rpc
 	// producers and the worker only drains, so once there is room the send
 	// below cannot block.
 	// The slot is claimed here, before the entry is handed to the worker, so
-	// the count covers queued and installed subscriptions alike; the worker
-	// returns it when it uninstalls the entry.
+	// the count covers queued and installed subscriptions alike; it is
+	// returned when the entry is uninstalled, which the entry's watcher does
+	// as soon as the client unsubscribes or disconnects.
 	if s.live.Load() >= maxSubscriptions {
 		return nil, ErrSubscriptionLimitReached
 	}

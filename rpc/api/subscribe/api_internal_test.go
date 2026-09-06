@@ -245,11 +245,8 @@ func TestUnsubscribeReturnsGlobalCapacity(t *testing.T) {
 // A connection that goes away without unsubscribing must return its
 // capacity even when no event ever matches its subscriptions: address
 // filtered subscriptions are only visited by broadcasts that carry a block
-// for that address, so the worker sweeps them on a timer.
+// for that address, so removal must not depend on a broadcast.
 func TestClosedConnectionsReturnGlobalCapacity(t *testing.T) {
-	old := sweepInterval
-	sweepInterval = 20 * time.Millisecond
-	defer func() { sweepInterval = old }()
 	_, rpcServer := startTestServer(t)
 
 	address := types.PillarContract
@@ -259,6 +256,40 @@ func TestClosedConnectionsReturnGlobalCapacity(t *testing.T) {
 	}
 	closeAll(clients)
 
+	client := waitForCapacity(t, rpcServer, "accountBlocksByAddress", address)
+	defer client.Close()
+}
+
+// A client that repeatedly subscribes and unsubscribes on one connection
+// stays within its own budget. Each unsubscribe must return the global slot
+// as well, without waiting for a matching event: closed entries must not
+// count against the global limit in the meantime.
+func TestUnsubscribeChurnDoesNotStarveGlobalCapacity(t *testing.T) {
+	_, rpcServer := startTestServer(t)
+
+	address := types.PillarContract
+	churner := rpc.DialInProc(rpcServer)
+	defer churner.Close()
+	const perRound = 64
+	for round := 0; round*perRound < maxSubscriptions; round++ {
+		subs := make([]*rpc.ClientSubscription, 0, perRound)
+		for len(subs) < perRound {
+			sub, err := churner.Subscribe(context.Background(), "ledger", make(chan interface{}, 1), "accountBlocksByAddress", address)
+			if err != nil {
+				if err.Error() == ErrSubscribeBacklogFull.Error() {
+					time.Sleep(time.Millisecond)
+					continue
+				}
+				t.Fatalf("round %d: subscribe %d failed: %v", round, len(subs), err)
+			}
+			subs = append(subs, sub)
+		}
+		for _, sub := range subs {
+			sub.Unsubscribe()
+		}
+	}
+
+	// The churner holds nothing now; a fresh client must be admitted.
 	client := waitForCapacity(t, rpcServer, "accountBlocksByAddress", address)
 	defer client.Close()
 }

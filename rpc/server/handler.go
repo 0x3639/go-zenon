@@ -202,8 +202,8 @@ func (h *handler) addSubscriptions(nn []*Notifier) {
 	defer h.subLock.Unlock()
 
 	for _, n := range nn {
-		// Every notifier handed out by handleSubscribe holds one reservation,
-		// whether or not the service created a subscription with it.
+		// Every notifier collected by handleSubscribe holds one reservation
+		// and a subscription to convert it into.
 		h.pendingSubs--
 		if sub := n.takeSubscription(); sub != nil {
 			h.serverSubs[sub.ID] = sub
@@ -211,12 +211,21 @@ func (h *handler) addSubscriptions(nn []*Notifier) {
 	}
 }
 
+// releaseSubscription returns a reservation taken by reserveSubscription for
+// a call that ended without creating a subscription.
+func (h *handler) releaseSubscription() {
+	h.subLock.Lock()
+	defer h.subLock.Unlock()
+	h.pendingSubs--
+}
+
 // reserveSubscription claims one slot of the connection's subscription budget
 // for a subscribe call that is about to run. Slots held by calls still in
 // flight count as well, so neither a batch nor concurrent single requests can
-// exceed maxSubscriptionsPerConn. The slot is released by addSubscriptions
-// when the call's notifier is collected, and the installed subscription's
-// slot is released by unsubscribe or cancelServerSubscriptions.
+// exceed maxSubscriptionsPerConn. The slot is released by releaseSubscription
+// if the call creates no subscription, converted by addSubscriptions when
+// the call's notifier is collected, and the installed subscription's slot is
+// released by unsubscribe or cancelServerSubscriptions.
 func (h *handler) reserveSubscription() error {
 	h.subLock.Lock()
 	defer h.subLock.Unlock()
@@ -414,10 +423,20 @@ func (h *handler) handleSubscribe(cp *callProc, msg *jsonrpcMessage) *jsonrpcMes
 
 	// Install notifier in context so the subscription handler can find it.
 	n := &Notifier{h: h, namespace: namespace}
-	cp.notifiers = append(cp.notifiers, n)
 	ctx := context.WithValue(cp.ctx, notifierKey{}, n)
 
-	return h.runMethod(ctx, msg, callb, args)
+	answer := h.runMethod(ctx, msg, callb, args)
+
+	// A call that returned without creating a subscription has nothing to
+	// install, so its reservation is returned now rather than when the whole
+	// batch has run: later elements of the same batch must not be rejected
+	// on behalf of slots that nothing holds.
+	if !n.hasSubscription() {
+		h.releaseSubscription()
+		return answer
+	}
+	cp.notifiers = append(cp.notifiers, n)
+	return answer
 }
 
 // runMethod runs the Go callback for an RPC method.

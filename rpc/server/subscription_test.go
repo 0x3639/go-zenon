@@ -14,6 +14,9 @@ import (
 type subscriptionTestService struct {
 	failBeforeCreate bool
 	failAfterCreate  bool
+	// rejectFirst makes the first n calls fail before creating a
+	// subscription, then clears itself.
+	rejectFirst int
 }
 
 var errServiceRejected = errors.New("service rejected the subscription")
@@ -24,6 +27,10 @@ func (s *subscriptionTestService) Events(ctx context.Context) (*Subscription, er
 		return nil, ErrNotificationsUnsupported
 	}
 	if s.failBeforeCreate {
+		return nil, errServiceRejected
+	}
+	if s.rejectFirst > 0 {
+		s.rejectFirst--
 		return nil, errServiceRejected
 	}
 	sub := notifier.CreateSubscription()
@@ -155,6 +162,47 @@ func TestRejectedSubscriptionReleasesReservation(t *testing.T) {
 
 	svc.failBeforeCreate = false
 	subscribeN(t, client, maxSubscriptionsPerConn)
+}
+
+// Within one batch, a request the service rejected must not hold its
+// reservation against later elements of the same batch: a batch of
+// maxSubscriptionsPerConn rejections followed by one accepted request must
+// accept that last request.
+func TestRejectedSubscriptionInBatchFreesSlotForLaterElement(t *testing.T) {
+	svc := &subscriptionTestService{rejectFirst: maxSubscriptionsPerConn}
+	server := newSubscriptionTestServer(t, svc)
+	client := DialInProc(server)
+	defer client.Close()
+
+	batch := make([]BatchElem, maxSubscriptionsPerConn+1)
+	ids := make([]string, len(batch))
+	for i := range batch {
+		batch[i] = BatchElem{
+			Method: "test.subscribe",
+			Args:   []interface{}{"events"},
+			Result: &ids[i],
+		}
+	}
+	if err := client.BatchCall(batch); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxSubscriptionsPerConn; i++ {
+		if batch[i].Error == nil || !strings.Contains(batch[i].Error.Error(), errServiceRejected.Error()) {
+			t.Fatalf("batch element %d: expected the service error, got %v", i, batch[i].Error)
+		}
+	}
+	last := batch[maxSubscriptionsPerConn]
+	if last.Error != nil {
+		t.Fatalf("last batch element: expected success after rejected elements, got %v", last.Error)
+	}
+	if ids[maxSubscriptionsPerConn] == "" {
+		t.Fatal("last batch element has no subscription ID")
+	}
+
+	// Exactly one slot is in use afterwards.
+	subscribeN(t, client, maxSubscriptionsPerConn-1)
+	_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+	assertLimitError(t, err)
 }
 
 // A subscription the service created before returning an error is still
