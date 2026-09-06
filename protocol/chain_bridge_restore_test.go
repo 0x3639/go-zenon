@@ -300,19 +300,31 @@ func TestInsertChain_RejectsMalformedPrefetchedBlocksBeforeTouchingPool(t *testi
 	common.Expect(t, counting.snapshots, 1)
 }
 
-func TestInsertChain_AcceptsPrefetchedBlocksInAnyOrder(t *testing.T) {
+func TestInsertChain_RejectsPrefetchedBlocksOutOfContentOrder(t *testing.T) {
 	f := newRestoreFixtureWith(t, true)
 	defer f.z.StopPanic()
+	counting := &snapshotCountingChain{Chain: f.z.Chain()}
+	bridge := protocol.NewChainBridge(counting, f.z.Consensus(), f.z.Verifier(), f.supervisor)
 
 	blocks := f.detailed.AccountBlocks
 	if blocks[0].Address == blocks[1].Address {
 		t.Fatal("fixture should hold blocks from two different accounts")
 	}
+	// The list is still exactly the momentum's content, only not in content
+	// order. Every producer emits content order, so this is malformed input.
 	swapped := &nom.DetailedMomentum{
 		Momentum:      f.detailed.Momentum,
 		AccountBlocks: []*nom.AccountBlock{blocks[1], blocks[0]},
 	}
-	_, err := f.bridge.InsertChain([]*nom.DetailedMomentum{swapped})
+	_, err := bridge.InsertChain([]*nom.DetailedMomentum{swapped})
+	if err == nil {
+		t.Fatal("expected out-of-order prefetched blocks to be rejected")
+	}
+	common.Expect(t, counting.snapshots, 0)
+	common.Expect(t, f.z.Chain().GetFrontierMomentumStore().Identifier(), f.previous)
+
+	// Content order still inserts through the same bridge.
+	_, err = bridge.InsertChain([]*nom.DetailedMomentum{f.detailed})
 	common.FailIfErr(t, err)
 	common.Expect(t, f.z.Chain().GetFrontierMomentumStore().Identifier(), f.detailed.Momentum.Identifier())
 }
@@ -331,6 +343,22 @@ func TestInsertChain_RejectsDuplicatePrefetchedBlocks(t *testing.T) {
 	_, err := bridge.InsertChain([]*nom.DetailedMomentum{duplicated})
 	if err == nil {
 		t.Fatal("expected duplicate prefetched blocks to be rejected")
+	}
+	common.Expect(t, counting.snapshots, 0)
+	common.Expect(t, f.z.Chain().GetFrontierMomentumStore().Identifier(), f.previous)
+
+	// A momentum whose content lists the same header twice, with a matching
+	// block list, is rejected before the pool is touched rather than left
+	// for the verifier.
+	momentum := *f.detailed.Momentum
+	momentum.Content = nom.MomentumContent{momentum.Content[0], momentum.Content[0]}
+	duplicatedContent := &nom.DetailedMomentum{
+		Momentum:      &momentum,
+		AccountBlocks: []*nom.AccountBlock{blocks[0], blocks[0]},
+	}
+	_, err = bridge.InsertChain([]*nom.DetailedMomentum{duplicatedContent})
+	if err == nil {
+		t.Fatal("expected duplicated content headers to be rejected")
 	}
 	common.Expect(t, counting.snapshots, 0)
 	common.Expect(t, f.z.Chain().GetFrontierMomentumStore().Identifier(), f.previous)
@@ -373,10 +401,9 @@ func TestInsertChain_DoesNotMutateCallerDetailedMomentum(t *testing.T) {
 	f := newRestoreFixtureWith(t, true)
 	defer f.z.StopPanic()
 
-	blocks := f.detailed.AccountBlocks
 	supplied := &nom.DetailedMomentum{
 		Momentum:      f.detailed.Momentum,
-		AccountBlocks: []*nom.AccountBlock{blocks[1], blocks[0]},
+		AccountBlocks: append([]*nom.AccountBlock(nil), f.detailed.AccountBlocks...),
 	}
 	before := append([]*nom.AccountBlock(nil), supplied.AccountBlocks...)
 
@@ -395,10 +422,12 @@ func TestInsertChain_DoesNotMutateCallerDetailedMomentum(t *testing.T) {
 	<-done
 	common.FailIfErr(t, err)
 
+	// The caller's list still holds its own objects, not the private copies
+	// insert worked on.
 	common.Expect(t, len(supplied.AccountBlocks), len(before))
 	for i := range before {
 		if supplied.AccountBlocks[i] != before[i] {
-			t.Fatalf("caller's block list was reordered at index %d", i)
+			t.Fatalf("caller's block list was modified at index %d", i)
 		}
 	}
 }
@@ -410,8 +439,7 @@ func TestInsertChain_DoesNotWriteToCallerAccountBlocks(t *testing.T) {
 	// Pool holds a byte-different copy, so the momentum's block takes the
 	// replacement path through the VM, which sets plasma fields on the block
 	// it is given.
-	poolCopy := f.receive.Block.Copy()
-	poolCopy.Signature = alternateSign(g.User2, poolCopy.Hash.Bytes())
+	poolCopy := byteDifferentCopy(t, f.receive.Block)
 	common.FailIfErr(t, f.bridge.AddAccountBlocks([]*nom.AccountBlock{poolCopy}))
 
 	supplied := f.detailed.AccountBlocks[0].Copy()
