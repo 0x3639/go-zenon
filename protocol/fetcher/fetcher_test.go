@@ -427,9 +427,12 @@ type accountingEvents struct {
 // marks imported, the hook events, and n distinct blocks to announce.
 func newAccountingHarness(n int) (*testHarness, *importedSet, *accountingEvents, []*nom.DetailedMomentum) {
 	imported := &importedSet{blocks: make(map[types.Hash]*nom.DetailedMomentum)}
+	// Each hash begins fetching at most once and expires at most once, so
+	// n slots guarantee the hooks never block the loop however the events
+	// are batched.
 	events := &accountingEvents{
-		fetching: make(chan []types.Hash, 16),
-		expired:  make(chan []types.Hash, 16),
+		fetching: make(chan []types.Hash, n),
+		expired:  make(chan []types.Hash, n),
 	}
 	h := newHookedTestHarness(
 		imported.get,

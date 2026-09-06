@@ -243,7 +243,9 @@ func (f *Fetcher) loop() {
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
 				f.forgetHash(hash)
-				expired = append(expired, hash)
+				if f.expiredHook != nil {
+					expired = append(expired, hash)
+				}
 			} else if oldest.IsZero() || announce.time.Before(oldest) {
 				oldest = announce.time
 			}
@@ -251,7 +253,7 @@ func (f *Fetcher) loop() {
 		if !oldest.IsZero() {
 			expire.Reset(fetchTimeout - time.Since(oldest))
 		}
-		if len(expired) > 0 && f.expiredHook != nil {
+		if len(expired) > 0 {
 			f.expiredHook(expired)
 		}
 		// Import any queued blocks that could potentially fit
