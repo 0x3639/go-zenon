@@ -56,6 +56,8 @@ func TestSpork_CreateCommunitySpork(t *testing.T) {
 	types.CommunitySporkAddress = g.Pillar1.Address
 	definition.CommunitySporkAddressStartHeight = 10
 	definition.CommunitySporkAddressEndHeight = 15
+	definition.CommunitySporkAddressRenewalStartHeight = 100
+	definition.CommunitySporkAddressRenewalEndHeight = 200
 
 	sporkAPI := embedded.NewSporkApi(z)
 	defer z.SaveLogs(common.EmbeddedLogger).Equals(t, `
@@ -114,6 +116,96 @@ t=2001-09-09T01:48:20+0000 lvl=dbug msg=created module=embedded contract=spork s
 		),
 	}).Error(t, constants.ErrPermissionDenied)
 	insertMomentums(z, 2)
+}
+
+// Test community spork address renewal window boundaries.
+// The authorization check runs when the contract receive is generated, so the
+// relevant height is the frontier at receive time (send frontier + 1), not the
+// height at which the send was created.
+func TestSpork_CommunitySporkRenewalWindow(t *testing.T) {
+	z := mock.NewMockZenon(t)
+	defer z.StopPanic()
+
+	// Original window [10, 15), renewal window [20, 25)
+	types.CommunitySporkAddress = g.Pillar1.Address
+	definition.CommunitySporkAddressStartHeight = 10
+	definition.CommunitySporkAddressEndHeight = 15
+	definition.CommunitySporkAddressRenewalStartHeight = 20
+	definition.CommunitySporkAddressRenewalEndHeight = 25
+
+	sporkAPI := embedded.NewSporkApi(z)
+	defer z.SaveLogs(common.EmbeddedLogger).Equals(t, `
+t=2001-09-09T01:48:20+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:d8dbf1c52335a1ad4f2d6c5ac681909c1425acd151ad60508001ce83dfeeca3f Name:spork-original Description:spork description Activated:false EnforcementHeight:0}"
+t=2001-09-09T01:49:50+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:3a3c91f1b8236dbe65cfa5eedc2a29ad8eb091e70bd3f88ebe5f4d4b88b67818 Name:spork-renewal-start Description:spork description Activated:false EnforcementHeight:0}"
+t=2001-09-09T01:50:30+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:86072a570f89a9ebec643d2680db45b59094df785f1d4557782fd9d65320ccd5 Name:spork-renewal-last Description:spork description Activated:false EnforcementHeight:0}"
+`)
+
+	createBlock := func(name string) *nom.AccountBlock {
+		return &nom.AccountBlock{
+			Address:   g.Pillar1.Address,
+			ToAddress: types.SporkContract,
+			Data: definition.ABISpork.PackMethodPanic(definition.SporkCreateMethodName,
+				name,                // name
+				"spork description", // description
+			),
+		}
+	}
+
+	// Received at 11: inside the original window
+	z.InsertMomentumsTo(10)
+	z.InsertSendBlock(createBlock("spork-original"), nil, mock.SkipVmChanges)
+	z.InsertNewMomentum()
+
+	// Received at 15: original end height is exclusive
+	z.InsertMomentumsTo(14)
+	defer z.CallContract(createBlock("spork-original-end")).Error(t, constants.ErrPermissionDenied)
+	insertMomentums(z, 2)
+
+	// Received at 19: gap between the windows
+	z.InsertMomentumsTo(18)
+	defer z.CallContract(createBlock("spork-gap")).Error(t, constants.ErrPermissionDenied)
+	insertMomentums(z, 1)
+
+	// Received at 20: renewal start height is inclusive
+	z.InsertSendBlock(createBlock("spork-renewal-start"), nil, mock.SkipVmChanges)
+	z.InsertNewMomentum()
+
+	// Received at 24: last valid height of the renewal window
+	z.InsertMomentumsTo(23)
+	z.InsertSendBlock(createBlock("spork-renewal-last"), nil, mock.SkipVmChanges)
+	z.InsertNewMomentum()
+
+	// Received at 25: renewal end height is exclusive
+	defer z.CallContract(createBlock("spork-expired")).Error(t, constants.ErrPermissionDenied)
+	insertMomentums(z, 2)
+
+	common.Json(sporkAPI.GetAll(0, 10)).Equals(t, `
+{
+	"count": 3,
+	"list": [
+		{
+			"id": "3a3c91f1b8236dbe65cfa5eedc2a29ad8eb091e70bd3f88ebe5f4d4b88b67818",
+			"name": "spork-renewal-start",
+			"description": "spork description",
+			"activated": false,
+			"enforcementHeight": 0
+		},
+		{
+			"id": "86072a570f89a9ebec643d2680db45b59094df785f1d4557782fd9d65320ccd5",
+			"name": "spork-renewal-last",
+			"description": "spork description",
+			"activated": false,
+			"enforcementHeight": 0
+		},
+		{
+			"id": "d8dbf1c52335a1ad4f2d6c5ac681909c1425acd151ad60508001ce83dfeeca3f",
+			"name": "spork-original",
+			"description": "spork description",
+			"activated": false,
+			"enforcementHeight": 0
+		}
+	]
+}`)
 }
 
 // Test create spork from non-spork address
@@ -242,6 +334,8 @@ func TestSpork_ActivateCommunitySpork(t *testing.T) {
 	types.CommunitySporkAddress = g.Pillar1.Address
 	definition.CommunitySporkAddressStartHeight = 1
 	definition.CommunitySporkAddressEndHeight = 25
+	definition.CommunitySporkAddressRenewalStartHeight = 100
+	definition.CommunitySporkAddressRenewalEndHeight = 200
 
 	sporkAPI := embedded.NewSporkApi(z)
 	defer z.SaveLogs(common.EmbeddedLogger).Equals(t, `

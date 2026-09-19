@@ -34,8 +34,17 @@ var (
 	// ABISpork is abi definition of token contract
 	ABISpork = abi.JSONToABIContract(strings.NewReader(jsonSpork))
 
+	// Original authorization window. Kept unchanged so historical
+	// execution results are preserved.
 	CommunitySporkAddressStartHeight uint64 = 10109240 // Targeting 2025-04-16 12:00:00 UTC
 	CommunitySporkAddressEndHeight   uint64 = 13243712 // Targeting 2026-04-16 12:00:00 UTC
+
+	// Renewal authorization window. Heights are projected from the observed
+	// mainnet rate of ~11.35s per momentum (frontier 14228943 at
+	// 2026-09-19 16:57:40 UTC). At the nominal 10s rate the window would
+	// open around 2026-10-15 and close around 2028-06-24 instead.
+	CommunitySporkAddressRenewalStartHeight uint64 = 14455739 // Targeting 2026-10-19 12:00:00 UTC
+	CommunitySporkAddressRenewalEndHeight   uint64 = 19791986 // Targeting 2028-09-19 12:00:00 UTC
 )
 
 const (
