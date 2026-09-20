@@ -118,10 +118,13 @@ t=2001-09-09T01:48:20+0000 lvl=dbug msg=created module=embedded contract=spork s
 	insertMomentums(z, 2)
 }
 
-// Test community spork address renewal window boundaries.
-// The authorization check runs when the contract receive is generated, so the
-// relevant height is the frontier at receive time (send frontier + 1), not the
-// height at which the send was created.
+// Test community spork address renewal window boundaries for both create and
+// activate. The authorization check runs in the contract receive, whose
+// MomentumAcknowledged is the momentum that confirmed the send, so the relevant
+// height is the send's confirmation height. It is not the height at which the
+// send was created, nor the frontier at the time the receive is generated. In
+// this fixture every send is confirmed by the next momentum, so a send inserted
+// at frontier N is evaluated at height N+1.
 func TestSpork_CommunitySporkRenewalWindow(t *testing.T) {
 	z := mock.NewMockZenon(t)
 	defer z.StopPanic()
@@ -136,8 +139,10 @@ func TestSpork_CommunitySporkRenewalWindow(t *testing.T) {
 	sporkAPI := embedded.NewSporkApi(z)
 	defer z.SaveLogs(common.EmbeddedLogger).Equals(t, `
 t=2001-09-09T01:48:20+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:d8dbf1c52335a1ad4f2d6c5ac681909c1425acd151ad60508001ce83dfeeca3f Name:spork-original Description:spork description Activated:false EnforcementHeight:0}"
-t=2001-09-09T01:49:50+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:3a3c91f1b8236dbe65cfa5eedc2a29ad8eb091e70bd3f88ebe5f4d4b88b67818 Name:spork-renewal-start Description:spork description Activated:false EnforcementHeight:0}"
-t=2001-09-09T01:50:30+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:86072a570f89a9ebec643d2680db45b59094df785f1d4557782fd9d65320ccd5 Name:spork-renewal-last Description:spork description Activated:false EnforcementHeight:0}"
+t=2001-09-09T01:49:50+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:c333f39e1bbbdbeb42e7f04ae52f8c9a51447f606f059cd581a41c2e960dbb9a Name:spork-renewal-start Description:spork description Activated:false EnforcementHeight:0}"
+t=2001-09-09T01:49:50+0000 lvl=dbug msg=activated module=embedded contract=spork spork="&{Id:d8dbf1c52335a1ad4f2d6c5ac681909c1425acd151ad60508001ce83dfeeca3f Name:spork-original Description:spork description Activated:true EnforcementHeight:26}"
+t=2001-09-09T01:50:30+0000 lvl=dbug msg=created module=embedded contract=spork spork="&{Id:023262531ccb839cb58d58738d759ad4907f5923ca76aa78c7d76854b4de3dc0 Name:spork-renewal-last Description:spork description Activated:false EnforcementHeight:0}"
+t=2001-09-09T01:50:30+0000 lvl=dbug msg=activated module=embedded contract=spork spork="&{Id:c333f39e1bbbdbeb42e7f04ae52f8c9a51447f606f059cd581a41c2e960dbb9a Name:spork-renewal-start Description:spork description Activated:true EnforcementHeight:30}"
 `)
 
 	createBlock := func(name string) *nom.AccountBlock {
@@ -150,33 +155,60 @@ t=2001-09-09T01:50:30+0000 lvl=dbug msg=created module=embedded contract=spork s
 			),
 		}
 	}
+	sporkId := func(name string) types.Hash {
+		sporkList, err := sporkAPI.GetAll(0, 10)
+		common.FailIfErr(t, err)
+		for _, spork := range sporkList.List {
+			if spork.Name == name {
+				return spork.Id
+			}
+		}
+		t.Fatalf("spork %v not found", name)
+		return types.ZeroHash
+	}
+	activateBlock := func(name string) *nom.AccountBlock {
+		return &nom.AccountBlock{
+			Address:   g.Pillar1.Address,
+			ToAddress: types.SporkContract,
+			Data: definition.ABISpork.PackMethodPanic(definition.SporkActivateMethodName,
+				sporkId(name), // id
+			),
+		}
+	}
 
-	// Received at 11: inside the original window
+	// Confirmed at 11: inside the original window
 	z.InsertMomentumsTo(10)
 	z.InsertSendBlock(createBlock("spork-original"), nil, mock.SkipVmChanges)
 	z.InsertNewMomentum()
 
-	// Received at 15: original end height is exclusive
+	// Confirmed at 15: original end height is exclusive
 	z.InsertMomentumsTo(14)
 	defer z.CallContract(createBlock("spork-original-end")).Error(t, constants.ErrPermissionDenied)
+	defer z.CallContract(activateBlock("spork-original")).Error(t, constants.ErrPermissionDenied)
 	insertMomentums(z, 2)
 
-	// Received at 19: gap between the windows
+	// Confirmed at 19: gap between the windows
 	z.InsertMomentumsTo(18)
 	defer z.CallContract(createBlock("spork-gap")).Error(t, constants.ErrPermissionDenied)
+	defer z.CallContract(activateBlock("spork-original")).Error(t, constants.ErrPermissionDenied)
 	insertMomentums(z, 1)
 
-	// Received at 20: renewal start height is inclusive
+	// Confirmed at 20: renewal start height is inclusive
 	z.InsertSendBlock(createBlock("spork-renewal-start"), nil, mock.SkipVmChanges)
+	z.InsertSendBlock(activateBlock("spork-original"), nil, mock.SkipVmChanges)
 	z.InsertNewMomentum()
+	types.ImplementedSporksMap[sporkId("spork-original")] = true
 
-	// Received at 24: last valid height of the renewal window
+	// Confirmed at 24: last valid height of the renewal window
 	z.InsertMomentumsTo(23)
 	z.InsertSendBlock(createBlock("spork-renewal-last"), nil, mock.SkipVmChanges)
+	z.InsertSendBlock(activateBlock("spork-renewal-start"), nil, mock.SkipVmChanges)
 	z.InsertNewMomentum()
+	types.ImplementedSporksMap[sporkId("spork-renewal-start")] = true
 
-	// Received at 25: renewal end height is exclusive
+	// Confirmed at 25: renewal end height is exclusive
 	defer z.CallContract(createBlock("spork-expired")).Error(t, constants.ErrPermissionDenied)
+	defer z.CallContract(activateBlock("spork-renewal-last")).Error(t, constants.ErrPermissionDenied)
 	insertMomentums(z, 2)
 
 	common.Json(sporkAPI.GetAll(0, 10)).Equals(t, `
@@ -184,25 +216,25 @@ t=2001-09-09T01:50:30+0000 lvl=dbug msg=created module=embedded contract=spork s
 	"count": 3,
 	"list": [
 		{
-			"id": "3a3c91f1b8236dbe65cfa5eedc2a29ad8eb091e70bd3f88ebe5f4d4b88b67818",
-			"name": "spork-renewal-start",
-			"description": "spork description",
-			"activated": false,
-			"enforcementHeight": 0
-		},
-		{
-			"id": "86072a570f89a9ebec643d2680db45b59094df785f1d4557782fd9d65320ccd5",
+			"id": "023262531ccb839cb58d58738d759ad4907f5923ca76aa78c7d76854b4de3dc0",
 			"name": "spork-renewal-last",
 			"description": "spork description",
 			"activated": false,
 			"enforcementHeight": 0
 		},
 		{
+			"id": "c333f39e1bbbdbeb42e7f04ae52f8c9a51447f606f059cd581a41c2e960dbb9a",
+			"name": "spork-renewal-start",
+			"description": "spork description",
+			"activated": true,
+			"enforcementHeight": 30
+		},
+		{
 			"id": "d8dbf1c52335a1ad4f2d6c5ac681909c1425acd151ad60508001ce83dfeeca3f",
 			"name": "spork-original",
 			"description": "spork description",
-			"activated": false,
-			"enforcementHeight": 0
+			"activated": true,
+			"enforcementHeight": 26
 		}
 	]
 }`)

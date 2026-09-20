@@ -43,6 +43,16 @@ var (
 	// mainnet rate of ~11.35s per momentum (frontier 14228943 at
 	// 2026-09-19 16:57:40 UTC). At the nominal 10s rate the window would
 	// open around 2026-10-15 and close around 2028-06-24 instead.
+	//
+	// Rollout: the check runs in the contract receive at the height of the
+	// momentum that confirmed the send. Nodes without this window regenerate
+	// that receive with ErrPermissionDenied and reject any momentum that
+	// confirms a community spork send inside [RenewalStart, RenewalEnd). The
+	// chain therefore diverges only when such a send is confirmed while
+	// un-upgraded nodes are still producing or validating momentums. Do not
+	// send community spork transactions until the network runs a release that
+	// includes this window; every node should upgrade before
+	// CommunitySporkAddressRenewalStartHeight so that the window can be used.
 	CommunitySporkAddressRenewalStartHeight uint64 = 14455739 // Targeting 2026-10-19 12:00:00 UTC
 	CommunitySporkAddressRenewalEndHeight   uint64 = 19791986 // Targeting 2028-09-19 12:00:00 UTC
 )
