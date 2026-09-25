@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/chain/cache/storage"
 	g "github.com/zenon-network/go-zenon/chain/genesis/mock"
@@ -22,11 +24,22 @@ import (
 type rollbackCountingChain struct {
 	chain.Chain
 	rollbacks int
+	// failCommitOf, when set, makes the commit of the momentum with this hash
+	// fail after its cache update has already gone through, the way a store
+	// error would.
+	failCommitOf types.Hash
 }
 
 func (c *rollbackCountingChain) RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error {
 	c.rollbacks++
 	return c.Chain.RollbackTo(insertLocker, identifier)
+}
+
+func (c *rollbackCountingChain) AddMomentumTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error {
+	if !c.failCommitOf.IsZero() && transaction.Momentum.Hash == c.failCommitOf {
+		return errors.Errorf("injected commit failure for %v", transaction.Momentum.Identifier())
+	}
+	return c.Chain.AddMomentumTransaction(insertLocker, transaction)
 }
 
 // chainSnapshot is everything a failed side-chain insert must leave alone.
@@ -453,6 +466,232 @@ func TestInsertChain_RepeatedRestoresKeepStoredPatchesIdentical(t *testing.T) {
 			if string(patchesAfter[i]) != string(patchesBefore[i]) {
 				t.Fatalf("attempt %d: stored patch for height %d changed: %d bytes before, %d bytes after", attempt, target.Height+uint64(i)+1, len(patchesBefore[i]), len(patchesAfter[i]))
 			}
+		}
+	}
+}
+
+// TestInsertChain_RestoreBoundaryAtDepthLimit runs the restore/keep decision
+// at the deepest fork the depth check admits: a removed branch of 30. A
+// committed prefix of 30 is restored, which is the longest restore there is,
+// and a prefix of 31 is kept.
+func TestInsertChain_RestoreBoundaryAtDepthLimit(t *testing.T) {
+	cases := []struct {
+		name      string
+		committed int
+		restored  bool
+	}{
+		{"prefix as long as the 30-deep removed branch is restored", 30, true},
+		{"prefix longer than the 30-deep removed branch is kept", 31, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newForkFixture(t, 35, 37)
+			defer f.z.StopPanic()
+			common.Expect(t, f.removed, 30)
+			counting, bridge := newSideChainBridge(f.z)
+
+			candidates := append([]*nom.DetailedMomentum{}, f.fork[:tc.committed]...)
+			last := f.fork[tc.committed-1].Momentum
+			candidates = append(candidates, invalidTail(last, last.Height+1)...)
+
+			index, err := bridge.InsertChain(candidates)
+			if err == nil {
+				t.Fatal("expected the side chain to be rejected")
+			}
+			common.Expect(t, index, tc.committed)
+			if tc.restored {
+				common.Expect(t, counting.rollbacks, 2)
+				expectChainEquals(t, f.z.Chain(), f.original)
+			} else {
+				common.Expect(t, counting.rollbacks, 1)
+				expectFrontierAt(t, f.z.Chain(), last)
+			}
+
+			_, err = bridge.InsertChain(f.fork)
+			common.FailIfErr(t, err)
+			expectFrontierAt(t, f.z.Chain(), f.fork[len(f.fork)-1].Momentum)
+		})
+	}
+}
+
+// TestInsertChain_KnownPrefixOffsetsReturnedIndex feeds momentums the node
+// already has ahead of the side chain, as a downloader batch that starts
+// below the fork point does. The known prefix is skipped, the restore/keep
+// decision counts only the committed candidates, and the returned index still
+// points at the failing candidate's position in the batch as given.
+func TestInsertChain_KnownPrefixOffsetsReturnedIndex(t *testing.T) {
+	f := newForkFixture(t, 7, 9)
+	defer f.z.StopPanic()
+	common.Expect(t, f.removed, 2)
+	counting, bridge := newSideChainBridge(f.z)
+
+	store := f.z.Chain().GetFrontierMomentumStore()
+	known := make([]*nom.DetailedMomentum, 0, 2)
+	for height := uint64(4); height <= 5; height++ {
+		detailed, err := store.PrefetchMomentum(momentumAt(t, f.z.Chain(), height))
+		common.FailIfErr(t, err)
+		known = append(known, detailed)
+	}
+
+	// Two known momentums, two genuine candidates that commit, then an
+	// invalid one: as many committed as removed, so the branch is restored.
+	candidates := append([]*nom.DetailedMomentum{}, known...)
+	candidates = append(candidates, f.fork[:2]...)
+	candidates = append(candidates, invalidTail(f.fork[1].Momentum, 10)...)
+
+	index, err := bridge.InsertChain(candidates)
+	if err == nil {
+		t.Fatal("expected the side chain to be rejected")
+	}
+	common.Expect(t, index, len(known)+2)
+	common.Expect(t, counting.rollbacks, 2)
+	expectChainEquals(t, f.z.Chain(), f.original)
+
+	// The same known prefix ahead of the genuine fork still replaces the
+	// branch.
+	candidates = append(append([]*nom.DetailedMomentum{}, known...), f.fork...)
+	_, err = bridge.InsertChain(candidates)
+	common.FailIfErr(t, err)
+	expectFrontierAt(t, f.z.Chain(), f.fork[len(f.fork)-1].Momentum)
+}
+
+// TestInsertChain_RestoreAfterCommitFailsPastCacheUpdate fails a candidate at
+// the last step, after its cache entry is written and before its momentum is
+// committed. The insert path compensates by rolling the cache back one step;
+// the restore then has to start from a chain and cache that agree, and put
+// the original branch back on both.
+func TestInsertChain_RestoreAfterCommitFailsPastCacheUpdate(t *testing.T) {
+	f := newForkFixture(t, 7, 9)
+	defer f.z.StopPanic()
+	common.Expect(t, f.removed, 2)
+	counting, bridge := newSideChainBridge(f.z)
+
+	// The first candidate commits, the second passes every check and fails
+	// only at the commit.
+	counting.failCommitOf = f.fork[1].Momentum.Hash
+	index, err := bridge.InsertChain(f.fork)
+	if err == nil {
+		t.Fatal("expected the side chain to be rejected")
+	}
+	common.Expect(t, index, 1)
+	common.Expect(t, counting.rollbacks, 2)
+	expectChainEquals(t, f.z.Chain(), f.original)
+
+	// With the fault gone the same fork replaces the branch.
+	counting.failCommitOf = types.Hash{}
+	_, err = bridge.InsertChain(f.fork)
+	common.FailIfErr(t, err)
+	expectFrontierAt(t, f.z.Chain(), f.fork[len(f.fork)-1].Momentum)
+}
+
+// momentumEvent is one notification a chain listener received.
+type momentumEvent struct {
+	kind       string
+	identifier types.HashHeight
+}
+
+// recordingListener keeps every momentum event in the order it was delivered.
+type recordingListener struct {
+	events []momentumEvent
+}
+
+func (l *recordingListener) InsertMomentum(detailed *nom.DetailedMomentum) {
+	l.events = append(l.events, momentumEvent{"insert", detailed.Momentum.Identifier()})
+}
+func (l *recordingListener) DeleteMomentum(detailed *nom.DetailedMomentum) {
+	l.events = append(l.events, momentumEvent{"delete", detailed.Momentum.Identifier()})
+}
+
+// TestInsertChain_ListenersSeeDeleteThenInsertOnRestore pins the event
+// sequence a restore produces: the removed branch is announced as deleted,
+// the committed prefix as inserted then deleted, and the original momentums
+// as inserted again. Nothing is suppressed or replayed out of order.
+func TestInsertChain_ListenersSeeDeleteThenInsertOnRestore(t *testing.T) {
+	f := newForkFixture(t, 7, 9)
+	defer f.z.StopPanic()
+	common.Expect(t, f.removed, 2)
+	_, bridge := newSideChainBridge(f.z)
+	original6 := momentumAt(t, f.z.Chain(), 6).Identifier()
+	original7 := momentumAt(t, f.z.Chain(), 7).Identifier()
+
+	listener := &recordingListener{}
+	f.z.Chain().Register(listener)
+	defer f.z.Chain().UnRegister(listener)
+
+	// One genuine candidate commits, the next fails: the original two come
+	// back.
+	candidates := append([]*nom.DetailedMomentum{}, f.fork[:1]...)
+	candidates = append(candidates, invalidTail(f.fork[0].Momentum, 8)...)
+	_, err := bridge.InsertChain(candidates)
+	if err == nil {
+		t.Fatal("expected the side chain to be rejected")
+	}
+	expectChainEquals(t, f.z.Chain(), f.original)
+
+	expected := []momentumEvent{
+		{"delete", original7},
+		{"delete", original6},
+		{"insert", f.fork[0].Momentum.Identifier()},
+		{"delete", f.fork[0].Momentum.Identifier()},
+		{"insert", original6},
+		{"insert", original7},
+	}
+	common.Expect(t, len(listener.events), len(expected))
+	for i := range expected {
+		common.Expect(t, listener.events[i], expected[i])
+	}
+}
+
+// TestInsertChain_PendingPoolAfterRestore pins what a restore does to the
+// account pool, which it deliberately does not restore. Blocks that were
+// pending before the side chain arrived are dropped by the rollback, exactly
+// as any rollback drops them. A valid block carried by the failing candidate
+// was force-inserted before the candidate failed and stays pending, as if a
+// peer had relayed it on its own.
+func TestInsertChain_PendingPoolAfterRestore(t *testing.T) {
+	f := newForkFixture(t, 6, 7)
+	defer f.z.StopPanic()
+	_, bridge := newSideChainBridge(f.z)
+
+	pending := f.z.InsertSendBlock(&nom.AccountBlock{
+		Address:       g.User2.Address,
+		ToAddress:     g.User1.Address,
+		TokenStandard: types.ZnnTokenStandard,
+		Amount:        big.NewInt(1),
+	}, nil, mock.SkipVmChanges)
+	common.Expect(t, len(f.z.Chain().GetAllUncommittedAccountBlocks()), 1)
+
+	// A candidate carrying the fork's genuine account block, but signed by a
+	// key that is not the elected producer and advertising a changes-hash the
+	// node can't reproduce: the block applies, the momentum fails.
+	target := momentumAt(t, f.z.Chain(), 5)
+	head := attackerMomentum(target, 6)
+	head.Content = f.fork[0].Momentum.Content
+	head.Hash = head.ComputeHash()
+	head.Signature = g.User1.Sign(head.Hash.Bytes())
+	carried := f.fork[0].AccountBlocks
+	if len(carried) == 0 {
+		t.Fatal("fork head carries no account block")
+	}
+	candidates := []*nom.DetailedMomentum{
+		{Momentum: head, AccountBlocks: carried},
+		detailedOf(attackerMomentum(head, 7))[0],
+	}
+
+	_, err := bridge.InsertChain(candidates)
+	if err == nil {
+		t.Fatal("expected the side chain to be rejected")
+	}
+	expectChainEquals(t, f.z.Chain(), f.original)
+
+	uncommitted := f.z.Chain().GetAllUncommittedAccountBlocks()
+	common.Expect(t, len(uncommitted), len(carried))
+	for i, block := range carried {
+		common.Expect(t, uncommitted[i].Hash, block.Hash)
+	}
+	for _, block := range uncommitted {
+		if block.Hash == pending.Hash {
+			t.Fatal("block pending before the side chain survived the rollback")
 		}
 	}
 }

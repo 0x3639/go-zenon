@@ -19,10 +19,11 @@ func getEntryByHeightKey(height uint64) []byte {
 
 // FrontierWriteKeys lists the keys SetFrontier writes for a version. A patch
 // read back from a versioned manager already contains these writes, appended
-// by Manager.Add; strip them before handing such a patch to Add again.
+// by Manager.Add; strip them before handing such a patch to Add again. The
+// returned slices are the caller's to keep or modify.
 func FrontierWriteKeys(version types.HashHeight) [][]byte {
 	return [][]byte{
-		getFrontierIdentifierKey(),
+		append([]byte(nil), getFrontierIdentifierKey()...),
 		getHeightByHashKey(version.Hash),
 		getEntryByHeightKey(version.Height),
 	}

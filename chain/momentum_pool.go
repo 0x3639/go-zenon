@@ -169,7 +169,17 @@ func (c *momentumPool) CaptureBranchAbove(insertLocker sync.Locker, identifier t
 func (c *momentumPool) GetMomentumPatch(identifier types.HashHeight) db.Patch {
 	c.changes.Lock()
 	defer c.changes.Unlock()
-	return c.chainManager.GetPatch(identifier)
+	stored := c.chainManager.GetPatch(identifier)
+	if stored == nil {
+		return nil
+	}
+	// The in-memory manager hands out the patch it holds, and a patch loaded
+	// from a dump keeps that dump as its buffer, so copy the bytes as well as
+	// the patch; otherwise a caller could alter the stored history through
+	// the returned value.
+	patch, err := db.NewPatchFromDump(append([]byte(nil), stored.Dump()...))
+	common.DealWithErr(err)
+	return patch
 }
 
 func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.HashHeight) error {
