@@ -242,6 +242,33 @@ func TestHandleGetBlocks_MixedRequestPastLimitIsRejected(t *testing.T) {
 	}
 }
 
+// Repeating one hash does not shrink the request: the bound counts entries as
+// decoded, not distinct hashes, because every entry costs a lookup. A request
+// that names the same unknown hash once more than the limit is rejected after
+// exactly MaxBlocksRequest lookups like any other oversized request.
+func TestHandleGetBlocks_DuplicateHashesCountTowardLimit(t *testing.T) {
+	chain := &lookupCountingChain{}
+
+	hashes := make([]types.Hash, MaxBlocksRequest+1)
+	for i := range hashes {
+		hashes[i] = unknownHashes(1)[0]
+	}
+
+	result, err := serveGetBlocks(t, chain, hashes)
+	if err == nil {
+		t.Fatal("handleMsg accepted the request")
+	}
+	if !strings.Contains(err.Error(), errCode(ErrMsgTooLarge).String()) {
+		t.Fatalf("error %q does not report %q", err, errCode(ErrMsgTooLarge).String())
+	}
+	if result.answered {
+		t.Fatal("a rejected request was answered")
+	}
+	if chain.lookups != MaxBlocksRequest {
+		t.Fatalf("%d lookups, want exactly %d", chain.lookups, MaxBlocksRequest)
+	}
+}
+
 // The reply-volume cap is unchanged: a request naming more known blocks than
 // MaxBlockFetch is answered with MaxBlockFetch blocks and the remaining hashes
 // are never looked up.

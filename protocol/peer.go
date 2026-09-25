@@ -195,7 +195,8 @@ func (p *peer) RequestHashesFromNumber(from uint64, count int) error {
 
 // RequestBlocks fetches a batch of blocks corresponding to the specified hashes.
 // A batch larger than MaxBlocksRequest is sent as several requests, since the
-// remote side drops a peer that names more hashes than that in one message.
+// remote side looks up at most that many hashes per message and drops a peer
+// whose request runs past that bound before the reply cap fills.
 func (p *peer) RequestBlocks(hashes []types.Hash) error {
 	log.Info("fetching", "peer-id", p.id, "num-blocks", len(hashes))
 	for len(hashes) > MaxBlocksRequest {

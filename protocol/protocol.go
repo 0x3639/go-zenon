@@ -32,8 +32,12 @@ const (
 
 	// MaxBlocksRequest is the most hashes a peer may name in one GetBlocksMsg.
 	// Every named hash costs the receiver a store lookup whether or not the
-	// block exists, so the bound is on the request rather than on the hits,
-	// and a request naming more is treated as a protocol violation.
+	// block exists, so the bound is on the request rather than on the hits:
+	// the receiver looks up at most this many hashes, and a request that
+	// names more is treated as a protocol violation when the lookups reach
+	// it. A request that fills the reply cap of downloader.MaxBlockFetch
+	// found blocks within the first MaxBlocksRequest hashes is answered
+	// before the excess is seen, as it was before the bound existed.
 	//
 	// The value is the larger of the two batch sizes honest requesters use:
 	// the downloader asks for at most downloader.MaxBlockFetch blocks per
