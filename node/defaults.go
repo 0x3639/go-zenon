@@ -21,10 +21,13 @@ var DefaultNodeConfig = Config{
 	LogLevel: "info",
 
 	// RPC serves local clients only unless the operator opts in: the
-	// listeners bind to loopback, HTTP accepts the localhost hostname and IP
-	// literals as Host, and no cross-origin browser access is granted (the
-	// WebSocket validator still admits localhost origins and non-browser
-	// clients when the list is empty). A public endpoint needs explicit
+	// listeners bind to loopback and HTTP accepts the localhost hostname and
+	// IP literals as Host. With no CORS list the HTTP server sends no
+	// cross-origin headers, so browsers block reads from other origins. With
+	// no WebSocket origin list the validator admits clients that send no
+	// Origin header and browser pages from http://localhost or
+	// http://<machine hostname> on any port, and rejects the rest. Neither
+	// check authenticates the caller. A public endpoint needs explicit
 	// hosts, and usually origins, in config.json or on the command line.
 	RPC: RPCConfig{
 		HTTPPort:   p2p.DefaultHTTPPort,
