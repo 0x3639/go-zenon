@@ -89,7 +89,7 @@ func freePort(t *testing.T) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	return l.Addr().(*net.TCPAddr).Port
 }
 
@@ -102,7 +102,7 @@ func httpPost(t *testing.T, addr string) (int, []byte) {
 	if err != nil {
 		t.Fatalf("POST %s: %v", addr, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read response from %s: %v", addr, err)
@@ -147,11 +147,13 @@ func requireWSPing(t *testing.T, addr string) {
 	if conn == nil {
 		t.Fatalf("WS handshake refused on %s", addr)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(pingRequest)); err != nil {
 		t.Fatalf("WS write on %s: %v", addr, err)
 	}
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("WS set read deadline on %s: %v", addr, err)
+	}
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("WS read on %s: %v", addr, err)
@@ -163,7 +165,7 @@ func requireWSPing(t *testing.T, addr string) {
 func requireNoWS(t *testing.T, addr string) {
 	t.Helper()
 	if conn := wsDial(addr); conn != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.Fatalf("listener %s upgrades WebSocket connections but should not", addr)
 	}
 }
@@ -294,7 +296,7 @@ func TestDisabledProtocolLeavesPortFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	port := l.Addr().(*net.TCPAddr).Port
 
 	n := startRPCTestNode(t, RPCConfig{
