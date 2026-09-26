@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -75,10 +76,24 @@ func startRPCTestNode(t *testing.T, cfg RPCConfig) *Node {
 	return n
 }
 
+// isAddrInUse reports whether err is a failure to bind an address that is
+// already taken. Unix sockets report EADDRINUSE; Winsock reports
+// WSAEADDRINUSE (10048), which is not the value Go gives syscall.EADDRINUSE
+// on Windows.
+func isAddrInUse(err error) bool {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return false
+	}
+	return errno == syscall.EADDRINUSE || errno == 10048
+}
+
 // startRPCTestNodeOnFreePorts is for configurations that need a specific
 // non-zero port. Such a port can only be chosen by binding and releasing
 // it, so another process may take it before startRPC binds it again; an
-// address-in-use failure is retried with a fresh configuration.
+// address-in-use failure is retried with a fresh configuration, after
+// stopping whatever the failed attempt did start. Any other error fails
+// the test.
 func startRPCTestNodeOnFreePorts(t *testing.T, build func() RPCConfig) *Node {
 	t.Helper()
 	for attempt := 0; attempt < 10; attempt++ {
@@ -89,7 +104,7 @@ func startRPCTestNodeOnFreePorts(t *testing.T, build func() RPCConfig) *Node {
 			return n
 		}
 		n.stopRPC()
-		if !errors.Is(err, syscall.EADDRINUSE) && !strings.Contains(err.Error(), "address already in use") {
+		if !isAddrInUse(err) {
 			t.Fatalf("startRPC: %v", err)
 		}
 	}
@@ -346,6 +361,65 @@ func TestStartRPCSeparatePorts(t *testing.T) {
 
 	requireWSPing(t, wsAddr)
 	requireNoHTTPRPC(t, wsAddr)
+}
+
+// The retry helper classifies bind failures by errno on every platform and
+// does not treat anything else as retryable.
+func TestIsAddrInUse(t *testing.T) {
+	bind := func(errno syscall.Errno) error {
+		return &net.OpError{Op: "listen", Net: "tcp", Err: &os.SyscallError{Syscall: "bind", Err: errno}}
+	}
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"unix EADDRINUSE", bind(syscall.EADDRINUSE), true},
+		{"winsock WSAEADDRINUSE", bind(syscall.Errno(10048)), true},
+		{"other errno", bind(syscall.EACCES), false},
+		{"not a bind failure", errors.New("HTTP server already running"), false},
+		{"nil", nil, false},
+	}
+	for _, tc := range cases {
+		if got := isAddrInUse(tc.err); got != tc.want {
+			t.Errorf("%s: isAddrInUse = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// When the chosen port is taken before startRPC binds it, the helper stops
+// the failed attempt and tries again with a fresh configuration. The first
+// attempt here is made to fail by configuring a port that is held for the
+// whole test; the second uses an ephemeral port and serves.
+func TestStartRPCTestNodeRetriesTakenPort(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	held := l.Addr().(*net.TCPAddr).Port
+
+	attempts := 0
+	n := startRPCTestNodeOnFreePorts(t, func() RPCConfig {
+		attempts++
+		port := held
+		if attempts > 1 {
+			port = 0
+		}
+		return RPCConfig{
+			EnableHTTP: true, HTTPHost: "127.0.0.1", HTTPPort: port,
+			EnableWS: true, WSHost: "127.0.0.1", WSPort: port,
+		}
+	})
+	if attempts != 2 {
+		t.Fatalf("%d attempts, want 2", attempts)
+	}
+	addr := boundAddr(n.http)
+	if addr == l.Addr().String() {
+		t.Fatalf("node bound the held port %s", addr)
+	}
+	requireHTTPPing(t, addr)
+	requireWSPing(t, addr)
 }
 
 // With both protocols enabled on the same non-zero port, as in a deployed
