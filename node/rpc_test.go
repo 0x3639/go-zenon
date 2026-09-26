@@ -1,15 +1,21 @@
 package node
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/inconshreveable/log15"
 
 	rpc "github.com/zenon-network/go-zenon/rpc/server"
 )
@@ -67,6 +73,73 @@ func startRPCTestNode(t *testing.T, cfg RPCConfig) *Node {
 	}
 	t.Cleanup(n.stopRPC)
 	return n
+}
+
+// startRPCTestNodeOnFreePorts is for configurations that need a specific
+// non-zero port. Such a port can only be chosen by binding and releasing
+// it, so another process may take it before startRPC binds it again; an
+// address-in-use failure is retried with a fresh configuration.
+func startRPCTestNodeOnFreePorts(t *testing.T, build func() RPCConfig) *Node {
+	t.Helper()
+	for attempt := 0; attempt < 10; attempt++ {
+		n := newRPCTestNode(build())
+		err := n.startRPC()
+		if err == nil {
+			t.Cleanup(n.stopRPC)
+			return n
+		}
+		n.stopRPC()
+		if !errors.Is(err, syscall.EADDRINUSE) && !strings.Contains(err.Error(), "address already in use") {
+			t.Fatalf("startRPC: %v", err)
+		}
+	}
+	t.Fatal("startRPC: chosen ports were taken on every attempt")
+	return nil
+}
+
+// syncBuffer collects log output from any goroutine.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// captureNodeLog routes the node logger into a buffer for the rest of the
+// test and restores the previous handler afterwards.
+func captureNodeLog(t *testing.T) *syncBuffer {
+	t.Helper()
+	buf := new(syncBuffer)
+	prev := log.GetHandler()
+	log.SetHandler(log15.StreamHandler(buf, log15.LogfmtFormat()))
+	t.Cleanup(func() { log.SetHandler(prev) })
+	return buf
+}
+
+// requireDisabledLog asserts that the "disabled by configuration" line for a
+// protocol, naming the ignored host, is present exactly once or absent.
+func requireDisabledLog(t *testing.T, logs, protocol, host string, want bool) {
+	t.Helper()
+	msg := `msg="` + protocol + `-RPC server disabled by configuration"`
+	got := 0
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, msg) && strings.Contains(line, "ignored-host="+host) {
+			got++
+		}
+	}
+	if (got == 1) != want || got > 1 {
+		t.Fatalf("%s disabled-by-configuration log lines=%d, want present=%v; logs:\n%s", protocol, got, want, logs)
+	}
 }
 
 // boundAddr returns the address a server is listening on, or "" when it has
@@ -182,7 +255,8 @@ func requireUnbound(t *testing.T, what string, h *httpServer) {
 // A protocol whose enable flag is false must not bind a socket even though
 // its host is configured; the flag is the policy and the host only says
 // where an enabled protocol listens. Both-enabled uses the same port for
-// both protocols, which exercises the shared-listener path.
+// both protocols, which exercises the shared-listener path. A protocol that
+// is disabled while its host is configured is reported once in the log.
 func TestStartRPCHonorsEnableFlags(t *testing.T) {
 	cases := []struct {
 		name                 string
@@ -195,6 +269,7 @@ func TestStartRPCHonorsEnableFlags(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			logs := captureNodeLog(t)
 			n := startRPCTestNode(t, RPCConfig{
 				EnableHTTP: tc.enableHTTP,
 				HTTPHost:   "127.0.0.1",
@@ -229,16 +304,33 @@ func TestStartRPCHonorsEnableFlags(t *testing.T) {
 				requireUnbound(t, "HTTP server", n.http)
 				requireUnbound(t, "WS server", n.ws)
 			}
+			requireDisabledLog(t, logs.String(), "HTTP", "127.0.0.1", !tc.enableHTTP)
+			requireDisabledLog(t, logs.String(), "WS", "127.0.0.1", !tc.enableWS)
 		})
+	}
+}
+
+// The disabled-by-configuration line is only about a configured host being
+// ignored: a protocol that is off because its host is empty is not reported.
+func TestStartRPCEmptyHostIsNotReportedAsDisabled(t *testing.T) {
+	logs := captureNodeLog(t)
+	startRPCTestNode(t, RPCConfig{
+		EnableHTTP: false, HTTPHost: "", HTTPPort: 0,
+		EnableWS: false, WSHost: "", WSPort: 0,
+	})
+	if got := logs.String(); strings.Contains(got, "disabled by configuration") {
+		t.Fatalf("empty hosts reported as disabled by configuration:\n%s", got)
 	}
 }
 
 // With both protocols enabled on different ports each gets its own listener,
 // and neither listener serves the other protocol.
 func TestStartRPCSeparatePorts(t *testing.T) {
-	n := startRPCTestNode(t, RPCConfig{
-		EnableHTTP: true, HTTPHost: "127.0.0.1", HTTPPort: 0,
-		EnableWS: true, WSHost: "127.0.0.1", WSPort: freePort(t),
+	n := startRPCTestNodeOnFreePorts(t, func() RPCConfig {
+		return RPCConfig{
+			EnableHTTP: true, HTTPHost: "127.0.0.1", HTTPPort: 0,
+			EnableWS: true, WSHost: "127.0.0.1", WSPort: freePort(t),
+		}
 	})
 
 	httpAddr, wsAddr := boundAddr(n.http), boundAddr(n.ws)
@@ -254,6 +346,28 @@ func TestStartRPCSeparatePorts(t *testing.T) {
 
 	requireWSPing(t, wsAddr)
 	requireNoHTTPRPC(t, wsAddr)
+}
+
+// With both protocols enabled on the same non-zero port, as in a deployed
+// configuration, WebSocket shares the HTTP listener on that port and the
+// dedicated WebSocket server stays unbound.
+func TestStartRPCSharedNonZeroPort(t *testing.T) {
+	var port int
+	n := startRPCTestNodeOnFreePorts(t, func() RPCConfig {
+		port = freePort(t)
+		return RPCConfig{
+			EnableHTTP: true, HTTPHost: "127.0.0.1", HTTPPort: port,
+			EnableWS: true, WSHost: "127.0.0.1", WSPort: port,
+		}
+	})
+
+	addr := boundAddr(n.http)
+	if want := net.JoinHostPort("127.0.0.1", strconv.Itoa(port)); addr != want {
+		t.Fatalf("HTTP listener on %q, want %q", addr, want)
+	}
+	requireHTTPPing(t, addr)
+	requireWSPing(t, addr)
+	requireUnbound(t, "dedicated WS server", n.ws)
 }
 
 // The existing empty-host behavior is unchanged: no host, no listener, even
@@ -288,21 +402,52 @@ func TestStartRPCEmptyHostStaysDisabled(t *testing.T) {
 	}
 }
 
-// A disabled protocol must not claim its port either. The port is held by
-// another listener for the whole of startRPC: had either protocol tried to
-// bind it, startRPC would have failed with an address-in-use error.
+// A disabled protocol must not claim its port either, whether or not the
+// other protocol is enabled. The disabled protocol's port is held by another
+// listener for the whole of startRPC: had it been bound, startRPC would have
+// failed with an address-in-use error.
 func TestDisabledProtocolLeavesPortFree(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name                 string
+		enableHTTP, enableWS bool
+	}{
+		{"both disabled", false, false},
+		{"http enabled, ws disabled", true, false},
+		{"ws enabled, http disabled", false, true},
 	}
-	defer func() { _ = l.Close() }()
-	port := l.Addr().(*net.TCPAddr).Port
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = l.Close() }()
+			held := l.Addr().(*net.TCPAddr).Port
 
-	n := startRPCTestNode(t, RPCConfig{
-		EnableHTTP: false, HTTPHost: "127.0.0.1", HTTPPort: port,
-		EnableWS: false, WSHost: "127.0.0.1", WSPort: port,
-	})
-	requireUnbound(t, "HTTP server", n.http)
-	requireUnbound(t, "WS server", n.ws)
+			// An enabled protocol takes an ephemeral port; a disabled one is
+			// configured on the held port.
+			cfg := RPCConfig{
+				EnableHTTP: tc.enableHTTP, HTTPHost: "127.0.0.1", HTTPPort: held,
+				EnableWS: tc.enableWS, WSHost: "127.0.0.1", WSPort: held,
+			}
+			if tc.enableHTTP {
+				cfg.HTTPPort = 0
+			}
+			if tc.enableWS {
+				cfg.WSPort = 0
+			}
+			n := startRPCTestNode(t, cfg)
+
+			if tc.enableHTTP {
+				requireHTTPPing(t, boundAddr(n.http))
+			} else {
+				requireUnbound(t, "HTTP server", n.http)
+			}
+			if tc.enableWS {
+				requireWSPing(t, boundAddr(n.ws))
+			} else {
+				requireUnbound(t, "WS server", n.ws)
+			}
+		})
+	}
 }
