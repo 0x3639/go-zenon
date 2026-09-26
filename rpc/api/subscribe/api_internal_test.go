@@ -2,6 +2,7 @@ package subscribe
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -178,8 +179,9 @@ func closeAll(clients []*rpc.Client) {
 }
 
 // waitForCapacity retries a subscribe on a fresh connection until it is
-// accepted or the deadline passes; capacity is returned by the worker, which
-// runs asynchronously to the caller.
+// accepted or the deadline passes. Capacity is returned by watchers and the
+// install backlog is drained by the worker, both asynchronously to the
+// caller, so a limit error and a full backlog are both transient here.
 func waitForCapacity(t *testing.T, rpcServer *rpc.Server, args ...interface{}) *rpc.Client {
 	t.Helper()
 	client := rpc.DialInProc(rpcServer)
@@ -189,7 +191,9 @@ func waitForCapacity(t *testing.T, rpcServer *rpc.Server, args ...interface{}) *
 		if err == nil {
 			return client
 		}
-		if err.Error() != ErrSubscriptionLimitReached.Error() {
+		switch err.Error() {
+		case ErrSubscriptionLimitReached.Error(), ErrSubscribeBacklogFull.Error():
+		default:
 			t.Fatalf("unexpected subscribe error: %v", err)
 		}
 		if time.Now().After(deadline) {
@@ -292,4 +296,191 @@ func TestUnsubscribeChurnDoesNotStarveGlobalCapacity(t *testing.T) {
 	// The churner holds nothing now; a fresh client must be admitted.
 	client := waitForCapacity(t, rpcServer, "accountBlocksByAddress", address)
 	defer client.Close()
+}
+
+// startTestServerWithoutWorker builds the singleton server like
+// startTestServer but never starts the worker, so nothing drains installCh
+// or broadcasts: the test plays the worker itself by taking queued entries
+// with takeQueued and calling install, which makes the ordering between
+// install, the client letting go, and the worker's own cleanup explicit.
+func startTestServerWithoutWorker(t *testing.T) (*Server, *rpc.Server) {
+	t.Helper()
+	server := GetSubscribeServer(stubChain{})
+	if err := server.Init(); err != nil {
+		t.Fatal(err)
+	}
+	rpcServer := rpc.NewServer()
+	if err := rpcServer.RegisterName("ledger", server.Api); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		rpcServer.Stop()
+		// Stop waits for every watcher, so a watcher that does not
+		// terminate hangs the test here.
+		if err := server.Stop(); err != nil {
+			t.Error(err)
+		}
+	})
+	return server, rpcServer
+}
+
+func takeQueued(t *testing.T, server *Server) *Subscription {
+	t.Helper()
+	select {
+	case sub := <-server.installCh:
+		return sub
+	case <-time.After(5 * time.Second):
+		t.Fatal("no subscription was queued for install")
+		return nil
+	}
+}
+
+func isInstalled(server *Server, sub *Subscription) bool {
+	server.subsMu.Lock()
+	defer server.subsMu.Unlock()
+	_, ok := server.subscriptions[sub.options.subscriptionType][sub.rpc.ID]
+	return ok
+}
+
+func waitUninstalled(t *testing.T, server *Server, sub *Subscription) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for isInstalled(server, sub) {
+		if time.Now().After(deadline) {
+			t.Fatal("subscription was not uninstalled")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// An installed subscription is removed, and its global slot returned, when
+// the client unsubscribes or disconnects even though no worker runs at all:
+// reclamation must not depend on the worker visiting the entry, which a
+// broadcast-driven sweep would, and a stalled worker must not hold slots.
+func TestClientLettingGoReclaimsSlotWithoutWorker(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		letGo func(client *rpc.Client, sub *rpc.ClientSubscription)
+	}{
+		{"unsubscribe", func(_ *rpc.Client, sub *rpc.ClientSubscription) { sub.Unsubscribe() }},
+		{"disconnect", func(client *rpc.Client, _ *rpc.ClientSubscription) { client.Close() }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, rpcServer := startTestServerWithoutWorker(t)
+			client := rpc.DialInProc(rpcServer)
+			defer client.Close()
+
+			clientSub, err := client.Subscribe(context.Background(), "ledger", make(chan interface{}, 1), "momentums")
+			if err != nil {
+				t.Fatal(err)
+			}
+			queued := takeQueued(t, server)
+			server.install(queued)
+			if !isInstalled(server, queued) || server.live.Load() != 1 {
+				t.Fatalf("expected one installed subscription holding one slot, live=%d", server.live.Load())
+			}
+
+			tc.letGo(client, clientSub)
+
+			waitUninstalled(t, server, queued)
+			if live := server.live.Load(); live != 0 {
+				t.Fatalf("slot not returned exactly once, live=%d", live)
+			}
+		})
+	}
+}
+
+// The worker owns subscription.notifier and clears it in Closed when the
+// next broadcast finds the client gone. That can happen right after install,
+// before the entry's watcher has run, so the watcher must not read the field:
+// it has to wait on signals captured by install. The client lets go while
+// the entry is still queued, then the worker installs it and immediately
+// performs its broadcast-side cleanup. Under the race detector this fails
+// if the watcher reads the field; without it, a watcher that runs after the
+// field is cleared dereferences nil. Either way the slot must be released
+// exactly once and the watcher must still terminate on Stop.
+func TestWatcherIgnoresWorkerCleanupOfLeftEntry(t *testing.T) {
+	server, rpcServer := startTestServerWithoutWorker(t)
+	client := rpc.DialInProc(rpcServer)
+	defer client.Close()
+
+	clientSub, err := client.Subscribe(context.Background(), "ledger", make(chan interface{}, 1), "momentums")
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := takeQueued(t, server)
+	clientSub.Unsubscribe()
+
+	// worker: install, then the next broadcast sees the client gone
+	server.install(queued)
+	if !queued.Closed() {
+		t.Fatal("expected the entry to report its client gone")
+	}
+	server.uninstall(queued)
+
+	waitUninstalled(t, server, queued)
+	if live := server.live.Load(); live != 0 {
+		t.Fatalf("slot not returned exactly once, live=%d", live)
+	}
+}
+
+// Connections racing for the last slots cannot overshoot the global limit:
+// the check and the increment in subscribe are serialized by stopLock, so
+// concurrent subscribe calls from many connections are accepted exactly
+// maxSubscriptions times in total and the next request is rejected.
+func TestGlobalSubscriptionLimitUnderConcurrentAdmission(t *testing.T) {
+	_, rpcServer := startTestServer(t)
+
+	const connections = 2 * maxSubscriptions / 64
+	var (
+		wg       sync.WaitGroup
+		mu       sync.Mutex
+		accepted int
+		clients  []*rpc.Client
+		failure  error
+	)
+	for i := 0; i < connections; i++ {
+		client := rpc.DialInProc(rpcServer)
+		clients = append(clients, client)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				_, err := client.Subscribe(context.Background(), "ledger", make(chan interface{}, 1), "momentums")
+				if err == nil {
+					mu.Lock()
+					accepted++
+					mu.Unlock()
+					continue
+				}
+				switch err.Error() {
+				case ErrSubscribeBacklogFull.Error():
+					time.Sleep(time.Millisecond)
+					continue
+				case rpc.ErrTooManySubscriptions.Error(), ErrSubscriptionLimitReached.Error():
+					return
+				default:
+					mu.Lock()
+					failure = err
+					mu.Unlock()
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	defer closeAll(clients)
+	if failure != nil {
+		t.Fatalf("unexpected subscribe error: %v", failure)
+	}
+	if accepted != maxSubscriptions {
+		t.Fatalf("accepted %d subscriptions concurrently, want %d", accepted, maxSubscriptions)
+	}
+
+	extra := rpc.DialInProc(rpcServer)
+	defer extra.Close()
+	_, err := extra.Subscribe(context.Background(), "ledger", make(chan interface{}, 1), "momentums")
+	if err == nil || err.Error() != ErrSubscriptionLimitReached.Error() {
+		t.Fatalf("expected %v, got %v", ErrSubscriptionLimitReached, err)
+	}
 }

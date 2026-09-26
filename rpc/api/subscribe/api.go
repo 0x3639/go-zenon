@@ -229,26 +229,30 @@ type BroadcastStats struct {
 
 func (s *Server) install(subscription *Subscription) {
 	s.log.Info("install", "id", subscription.rpc.ID)
+	// The watcher's signals are read here, on the worker, which owns
+	// subscription.notifier: the next broadcast may find the client gone and
+	// clear that field in Closed before the goroutine launched below has
+	// run, so the watcher is handed the channels and never reads the field.
+	unsubscribed, disconnected := subscription.rpc.Err(), subscription.notifier.Closed()
 	s.subsMu.Lock()
 	s.subscriptions[subscription.options.subscriptionType][subscription.rpc.ID] = subscription
 	s.subsMu.Unlock()
 	s.wg.Add(1)
-	go s.watch(subscription)
+	go s.watch(subscription, unsubscribed, disconnected)
 }
 
 // watch removes the subscription as soon as its client unsubscribes or its
-// connection closes. It waits on the same signals Closed reports, but on
-// copies taken here: the worker owns subscription.notifier and clears it in
-// Closed, so the watcher never reads the field again. A client that went
-// away while the entry was still queued is removed right after install.
-func (s *Server) watch(subscription *Subscription) {
+// connection closes, the same two signals Closed reports, captured by
+// install. Of the subscription itself it only uses the immutable options and
+// rpc fields to find the entry. A client that went away while the entry was
+// still queued is removed right after install.
+func (s *Server) watch(subscription *Subscription, unsubscribed <-chan error, disconnected <-chan interface{}) {
 	defer s.wg.Done()
-	rpcSub, notifier := subscription.rpc, subscription.notifier
 	select {
 	case <-s.stopped:
 		return
-	case <-rpcSub.Err():
-	case <-notifier.Closed():
+	case <-unsubscribed:
+	case <-disconnected:
 	}
 	s.uninstall(subscription)
 }

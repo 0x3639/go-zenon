@@ -17,6 +17,10 @@ type subscriptionTestService struct {
 	// rejectFirst makes the first n calls fail before creating a
 	// subscription, then clears itself.
 	rejectFirst int
+	// panicBeforeCreate and panicAfterCreate make the callback panic, which
+	// the RPC server recovers into an error response.
+	panicBeforeCreate bool
+	panicAfterCreate  bool
 }
 
 var errServiceRejected = errors.New("service rejected the subscription")
@@ -33,9 +37,15 @@ func (s *subscriptionTestService) Events(ctx context.Context) (*Subscription, er
 		s.rejectFirst--
 		return nil, errServiceRejected
 	}
+	if s.panicBeforeCreate {
+		panic("service panicked before creating the subscription")
+	}
 	sub := notifier.CreateSubscription()
 	if s.failAfterCreate {
 		return nil, errServiceRejected
+	}
+	if s.panicAfterCreate {
+		panic("service panicked after creating the subscription")
 	}
 	return sub, nil
 }
@@ -257,4 +267,77 @@ func TestSubscriptionLimitResetsPerConnection(t *testing.T) {
 		assertLimitError(t, err)
 		client.Close()
 	}
+}
+
+// A callback that panics is answered with the server's crash error and its
+// reservation is accounted like any other return: released when it panicked
+// before creating a subscription, converted into a held slot when it
+// panicked after (the subscription exists on the connection, as with an
+// error returned after creation).
+func TestPanickingSubscriptionCallbackKeepsBudgetExact(t *testing.T) {
+	t.Run("before create", func(t *testing.T) {
+		svc := &subscriptionTestService{panicBeforeCreate: true}
+		server := newSubscriptionTestServer(t, svc)
+		client := DialInProc(server)
+		defer client.Close()
+
+		for i := 0; i < maxSubscriptionsPerConn+1; i++ {
+			_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+			if err == nil || !strings.Contains(err.Error(), "crashed") {
+				t.Fatalf("attempt %d: expected the crash error, got %v", i, err)
+			}
+		}
+		svc.panicBeforeCreate = false
+		subscribeN(t, client, maxSubscriptionsPerConn)
+	})
+	t.Run("after create", func(t *testing.T) {
+		svc := &subscriptionTestService{panicAfterCreate: true}
+		server := newSubscriptionTestServer(t, svc)
+		client := DialInProc(server)
+		defer client.Close()
+
+		for i := 0; i < maxSubscriptionsPerConn; i++ {
+			_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+			if err == nil || !strings.Contains(err.Error(), "crashed") {
+				t.Fatalf("attempt %d: expected the crash error, got %v", i, err)
+			}
+		}
+		svc.panicAfterCreate = false
+		_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+		assertLimitError(t, err)
+	})
+}
+
+// Single requests sent concurrently on one connection each run on their own
+// call goroutine; the reservation is taken under subLock and counts calls in
+// flight, so exactly maxSubscriptionsPerConn of them are accepted and every
+// other one is answered with the limit error.
+func TestConcurrentSubscribesRespectPerConnectionLimit(t *testing.T) {
+	server := newSubscriptionTestServer(t, &subscriptionTestService{})
+	client := DialInProc(server)
+	defer client.Close()
+
+	const attempts = 3 * maxSubscriptionsPerConn
+	results := make(chan error, attempts)
+	for i := 0; i < attempts; i++ {
+		go func() {
+			_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+			results <- err
+		}()
+	}
+	accepted := 0
+	for i := 0; i < attempts; i++ {
+		switch err := <-results; {
+		case err == nil:
+			accepted++
+		case err.Error() == ErrTooManySubscriptions.Error():
+		default:
+			t.Fatalf("unexpected subscribe error: %v", err)
+		}
+	}
+	if accepted != maxSubscriptionsPerConn {
+		t.Fatalf("accepted %d concurrent subscriptions, want %d", accepted, maxSubscriptionsPerConn)
+	}
+	_, err := client.Subscribe(context.Background(), "test", make(chan int, 1), "events")
+	assertLimitError(t, err)
 }
