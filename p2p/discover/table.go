@@ -64,9 +64,10 @@ type Table struct {
 	// inbound holds the identities with a bond started by an unsolicited
 	// ping, whether waiting for a bonding slot or holding one. An identity
 	// is admitted before its goroutine starts and removed when it exits, so
-	// work is bounded before it is queued anywhere, and an identity that is
-	// already in flight is not admitted again: its pings coalesce onto the
-	// existing process instead of each taking a permit.
+	// work is bounded before it is queued anywhere, and an identity whose
+	// inbound bond is still in flight is not admitted again: its pings
+	// coalesce onto that process instead of each taking a permit. Outbound
+	// bonds are not tracked here and take no permit.
 	inbound map[NodeID]struct{}
 
 	nodeAddedHook func(*Node) // for testing
@@ -444,8 +445,9 @@ func (tab *Table) bond(pinged bool, id NodeID, addr *net.UDPAddr, tcpPort uint16
 }
 
 // admitInbound reserves an inbound bonding permit for id. It reports false,
-// and reserves nothing, when the budget is full or a bond for id is already
-// in flight. The caller must return the permit with releaseInbound.
+// and reserves nothing, when the budget is full or an inbound bond for id
+// is already in flight. The caller must return the permit with
+// releaseInbound.
 func (tab *Table) admitInbound(id NodeID) bool {
 	tab.bondmu.Lock()
 	defer tab.bondmu.Unlock()
