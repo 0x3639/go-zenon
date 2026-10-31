@@ -166,8 +166,10 @@ func (pm *ProtocolManager) Start() {
 		pm.wg.Done()
 	}()
 
+	pm.wg.Add(1)
 	go func() {
 		pm.txsyncLoop()
+		pm.wg.Done()
 	}()
 }
 
