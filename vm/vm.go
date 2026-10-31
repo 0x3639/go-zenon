@@ -174,6 +174,11 @@ func (vm *VM) applyBlock(block *nom.AccountBlock) error {
 				// deterministic contract failure at this point, so the
 				// mismatch is not a verdict on the block and carries no
 				// sentinel; callers treat it as an ordinary import failure.
+				// This also leaves a deterministic refusal the foreign
+				// branch accepted (a method returning ErrPermissionDenied
+				// here, say) unremembered: telling the two apart needs
+				// the embedded methods to report provenance, which they
+				// do not yet. Unremembered fails safe; see issue #239.
 				return errors.Errorf("auto-received block has different changes-hash expected %v but got %v (local generation failed: %v)", generated.ChangesHash, block.ChangesHash, executionErr)
 			}
 			return errors.Wrapf(constants.ErrAutoReceiveChangesHashMismatch, "expected %v but got %v", generated.ChangesHash, block.ChangesHash)
