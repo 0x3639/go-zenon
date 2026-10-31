@@ -60,6 +60,16 @@ func (pm *ProtocolManager) insertFromDownload(momentums []*nom.DetailedMomentum)
 	return index, err
 }
 
+// importWork is what the readiness predicate reads from the downloader:
+// whether a session is running, what its queue and import worker hold,
+// and whether the worker owns blocks. The downloader satisfies it; tests
+// pass a model of its queue-to-worker handoff.
+type importWork interface {
+	Synchronising() bool
+	Stats() (pending int, cached int, importing int, estimate time.Duration)
+	Processing() bool
+}
+
 // ReadyToProduce reports whether a pillar on this node may produce for the
 // current slot. It is the producer's gate; SyncInfo stays the telemetry
 // and keeps its meaning.
@@ -75,11 +85,16 @@ func (pm *ProtocolManager) insertFromDownload(momentums []*nom.DetailedMomentum)
 // whatever peers connect or reconnect in the meantime, until a session
 // does import a batch again.
 func (pm *ProtocolManager) ReadyToProduce() bool {
+	return pm.readyToProduce(pm.downloader)
+}
+
+// readyToProduce is ReadyToProduce reading the downloader through work.
+func (pm *ProtocolManager) readyToProduce(work importWork) bool {
 	info := pm.syncInfo()
 	if info.State == NotEnoughPeers {
 		return false
 	}
-	if pm.downloader.Synchronising() {
+	if work.Synchronising() {
 		return false
 	}
 	// Stats before Processing, in that order: a delivered batch sits in the
@@ -87,10 +102,10 @@ func (pm *ProtocolManager) ReadyToProduce() bool {
 	// worker sets its flag before it takes anything. Read the other way
 	// round, a worker starting between the two reads could take the batch
 	// before Stats looked and both checks would come back empty.
-	if _, cached, importing, _ := pm.downloader.Stats(); cached > 0 || importing > 0 {
+	if _, cached, importing, _ := work.Stats(); cached > 0 || importing > 0 {
 		return false
 	}
-	if pm.downloader.Processing() {
+	if work.Processing() {
 		return false
 	}
 	if info.State == SyncDone {
