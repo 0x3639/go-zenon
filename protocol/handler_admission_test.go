@@ -79,6 +79,25 @@ func downloaderHas(pm *ProtocolManager, id string) bool {
 	return pm.downloader.UnregisterPeer(id) == nil
 }
 
+// awaitAdmitted returns once the connection under id has been admitted in
+// full. admit publishes the peer-set entry before it registers the
+// connection with the downloader, both under pm.admission, so the entry
+// becoming visible is not the end of the admission; acquiring the mutex
+// afterwards is, since admit still held it when the entry appeared. The
+// mutex is released again before the caller observes or asserts anything.
+func awaitAdmitted(t *testing.T, pm *ProtocolManager, id string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for pm.peers.Peer(id) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the connection was not admitted after the handshake")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	pm.admission.Lock()
+	pm.admission.Unlock()
+}
+
 // A node's previous connection served a side-chain whose import outlives
 // the connection; the node reconnects and the verdict lands while the new
 // connection is in its status handshake, after the pre-handshake check.
@@ -151,14 +170,14 @@ func TestAdmissionAdmitsPeerAfterHandshake(t *testing.T) {
 	awaitClosed(t, rw.reading, "the handshake to start")
 	close(rw.release)
 
-	deadline := time.Now().Add(10 * time.Second)
-	for pm.peers.Peer(p.id) == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the connection was not admitted after the handshake")
-		}
-		time.Sleep(time.Millisecond)
+	// Both registries are read only once the admission has completed;
+	// the downloader observation unregisters the peer as a side effect.
+	awaitAdmitted(t, pm, p.id)
+	inPeers, inDownloader := pm.peers.Peer(p.id) != nil, downloaderHas(pm, p.id)
+	if !inPeers {
+		t.Fatal("an admitted connection must stay in the peer set")
 	}
-	if !downloaderHas(pm, p.id) {
+	if !inDownloader {
 		t.Fatal("an admitted connection must be registered with the downloader")
 	}
 
@@ -189,13 +208,7 @@ func TestRejectPeerRemovesAdmittedConnection(t *testing.T) {
 	go func() { done <- pm.handle(p) }()
 	awaitClosed(t, rw.reading, "the handshake to start")
 	close(rw.release)
-	deadline := time.Now().Add(10 * time.Second)
-	for pm.peers.Peer(p.id) == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("the connection was not admitted after the handshake")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	awaitAdmitted(t, pm, p.id)
 
 	rejected := &SideChainRejected{Momentum: types.HashHeight{Height: 9, Hash: hashOf(9)}, Cause: verifier.ErrMChangesHashInvalid}
 	pm.rejectPeer(p.id, errors.Join(errors.New("Block import failed"), rejected))
