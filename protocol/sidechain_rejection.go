@@ -21,7 +21,16 @@ const (
 	// last time they were offered.
 	rejectedCandidateTTL = time.Hour
 	// rejectedCandidateCap bounds the memory; the oldest entry is evicted
-	// when it is full.
+	// when it is full. The bound is on memory, not on what one node can
+	// record: entries are keyed on the bytes served, so every distinct
+	// batch a node varies is a new entry, but a batch records at most one
+	// (the first rejected candidate) and the node is quarantined for
+	// peerQuarantinePeriod on that verdict, so one node id adds one entry
+	// per period and filling the memory takes as many node ids as entries.
+	// Eviction forgets a verdict and nothing else: the candidate is checked
+	// again on its next offer, with the rollback and restore that the
+	// memory spares, which is what happened to every candidate before the
+	// memory existed.
 	rejectedCandidateCap = 4096
 )
 
