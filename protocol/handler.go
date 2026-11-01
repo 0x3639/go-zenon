@@ -68,6 +68,8 @@ type ProtocolManager struct {
 	// node therefore lands either before its reconnection is admitted,
 	// and refuses it, or after, and finds it registered to remove.
 	admission sync.Mutex
+	// progress is what ReadyToProduce measures the stall window from.
+	progress *producerProgress
 
 	SubProtocols []p2p.Protocol
 
@@ -94,6 +96,7 @@ func NewProtocolManager(minPeers int, networkId uint64, bridge ChainBridge) *Pro
 		chainman:   bridge,
 		peers:      newPeerSet(),
 		quarantine: newPeerQuarantine(peerQuarantinePeriod, peerQuarantineCap),
+		progress:   newProducerProgress(),
 		newPeerCh:  make(chan *peer, 1),
 		txsyncCh:   make(chan *txsync),
 		quitSync:   make(chan struct{}),
@@ -122,7 +125,7 @@ func NewProtocolManager(minPeers int, networkId uint64, bridge ChainBridge) *Pro
 		manager.chainman.HasBlock,
 		manager.chainman.GetBlock,
 		manager.chainman.CurrentBlock,
-		manager.chainman.InsertChain,
+		manager.insertFromDownload,
 		manager.removePeer,
 		manager.rejectPeer)
 
