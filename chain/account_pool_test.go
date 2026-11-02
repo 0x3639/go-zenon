@@ -734,8 +734,9 @@ func TestAccountPool_filterBlocksToCommit_SkipsOversizedContractBatch(t *testing
 		[]*nom.AccountBlock{u1})
 }
 
-// A block that fills the budget exactly is selected; one byte more and it
-// is skipped and reported.
+// A block that fills the budget exactly, by the selector's additive
+// estimate (worst-case header, encoded block, content entry), is selected;
+// one byte more and it is skipped and reported.
 func TestAccountPool_filterBlocksToCommit_BudgetBoundary(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})
@@ -759,6 +760,31 @@ func TestAccountPool_filterBlocksToCommit_BudgetBoundary(t *testing.T) {
 	common.Expect(t, total(over), maxDetailedMomentumWireSize+1)
 	expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{over}), []*nom.AccountBlock{})
 	common.Expect(t, len(*warnings), 1)
+
+	// Offered behind another account's block, the same block is rejected
+	// for the room left before its exact size is known; it still can never
+	// fit a momentum and is still reported, once.
+	ap = newAccountPool(fakeStable{})
+	warnings = captureWarnings(ap)
+	prefix := pendingBlock(types.Address{0, 2}, 1, nom.BlockTypeUserSend, 1024)
+	for i := 0; i < 2; i++ {
+		expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{prefix, over}), []*nom.AccountBlock{prefix})
+	}
+	common.Expect(t, len(*warnings), 1)
+}
+
+// A receive whose descendant list holds a nil entry still encodes; the
+// raw-size lower bound must not trip over it.
+func TestAccountPool_filterBlocksToCommit_NilDescendant(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+
+	receive := pendingBlock(types.PlasmaContract, 1, nom.BlockTypeContractReceive, 8)
+	receive.DescendantBlocks = []*nom.AccountBlock{nil}
+	if blockWireSize(receive) < 0 {
+		t.Skip("a nil descendant no longer encodes")
+	}
+	expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{receive}), []*nom.AccountBlock{receive})
 }
 
 // When the momentum is simply full, a batch that does not fit the room
@@ -779,8 +805,9 @@ func TestAccountPool_filterBlocksToCommit_FullMomentumPacksLaterBatches(t *testi
 	common.Expect(t, len(*warnings), 0)
 }
 
-// Without an oversized block the selection is exactly what it was: every
-// offered block, in the offered order, up to the block-count cap.
+// Without a batch that does not fit, the selection is exactly what it
+// was: every offered block, in the offered order, up to the block-count
+// cap.
 func TestAccountPool_filterBlocksToCommit_UnchangedWithoutOversizedBlock(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})

@@ -852,11 +852,12 @@ func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock {
 // selector does. The rule exists because a single pending block can be
 // larger than the whole budget (before the dynamic-plasma spork a
 // receive block's data is not bounded), and such a block stays pending
-// until it is replaced or rolled back. Ending the walk there, as this
-// used to, let one such block keep every account the walk had not
-// reached yet out of the momentum, at a different point each time since
-// the walk order is the pool's map order. The block-count cap keeps its
-// original behaviour and ends the walk.
+// until it is replaced, rolled back or confirmed by another producer.
+// Ending the walk there, as this used to, let one such block keep every
+// account the walk had not reached yet out of the momentum, at a point
+// that may change from one momentum to the next since the walk order is
+// the pool's map order. The block-count cap keeps its original
+// behaviour and ends the walk.
 func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock {
 	toCommit := make([]*nom.AccountBlock, 0, len(blocks))
 	batch := make([]*nom.AccountBlock, 0, MaxAccountBlocksInMomentum)
@@ -887,11 +888,12 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 		// the RLP-encoded DetailedMomentum, each block counted with the
 		// content entry (AccountHeader) it adds to the momentum. The raw
 		// field lengths are a lower bound on the encoded size, so a batch
-		// that is too large by that measure alone is skipped without
-		// encoding it; a pending set full of oversized blocks then costs
-		// a length sum, not an encoding of each, at every momentum.
-		rawSize := batchRawSize(batch)
-		if sizeEstimate+rawSize > maxDetailedMomentumWireSize {
+		// that could not fit even an empty momentum by that measure alone
+		// is skipped without encoding it; a pending set full of oversized
+		// blocks then costs a length sum, not an encoding of each, at
+		// every momentum. Anything smaller is measured exactly, so that a
+		// batch is only reported when it really can never fit.
+		if rawSize := batchRawSize(batch); headerSize+rawSize > maxDetailedMomentumWireSize {
 			ap.reportOversizedBatch(batch, rawSize, headerSize, false, false)
 			skipBatch()
 			continue
@@ -963,6 +965,9 @@ func batchRawSize(batch []*nom.AccountBlock) int {
 }
 
 func blockRawSize(block *nom.AccountBlock) int {
+	if block == nil {
+		return 0
+	}
 	size := len(block.Data) + len(block.PublicKey) + len(block.Signature)
 	for _, d := range block.DescendantBlocks {
 		size += blockRawSize(d)
