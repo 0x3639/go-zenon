@@ -297,6 +297,15 @@ loop:
 
 	p.rw.close(reason)
 	close(p.closed)
+	// Join the read loop, the ping loop and every protocol goroutine
+	// before returning, as the legacy backend does: runPeer frees the
+	// peer's slot as soon as run returns, and a protocol handler still
+	// inside Run would otherwise keep its registration past the removal,
+	// which a reconnect with the same identity then trips over. All of
+	// them unblock on the closed stream or p.closed, and their final
+	// sends on protoErr, readErr and writeErr have buffer space, so the
+	// join is bounded by the handlers' own exit.
+	p.wg.Wait()
 	common.P2PLogger.Debug("peer.run() finished")
 	if requested {
 		reason = p2p.DiscRequested
