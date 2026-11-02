@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -504,12 +505,13 @@ func DeserializeAccountBlock(data []byte) (*AccountBlock, error) {
 // it, so that decoding costs time linear in the input.
 const (
 	// MaxDescendantDepth is how many levels of descendant blocks may
-	// nest below the block being decoded: the recursion limit the
-	// protobuf decoder applies to the wire form
-	// (protowire.DefaultRecursionLimit), so no block the node decodes
-	// from a peer or from storage is refused here. encoding/json stops
-	// nested input well before this depth under its own nesting limit;
-	// the explicit bound keeps the invariant on this side of it.
+	// nest below the block being decoded from JSON: a ceiling set to
+	// the recursion limit the protobuf decoder applies to stored blocks
+	// (protowire.DefaultRecursionLimit), which that decoder reaches a
+	// few levels earlier because each block's hash fields nest too.
+	// encoding/json stops nested input at about half this depth under
+	// its own nesting limit; the explicit bound keeps the invariant on
+	// this side of it rather than on the library's.
 	MaxDescendantDepth = protowire.DefaultRecursionLimit
 )
 
@@ -649,11 +651,24 @@ func (ab *AccountBlockMarshal) FromNomMarshalJson() *AccountBlock {
 // descendants nested deeper than MaxDescendantDepth, and a descendant
 // whose Nonce does not decode. The root's own nonce is left to the
 // decoder that owns it (AccountBlock.UnmarshalJSON reports it,
-// FromNomMarshalJson ignores it). Errors name the index path to the
-// offending block. Every JSON decoder that yields an AccountBlock
-// calls it.
+// FromNomMarshalJson ignores it). A failure below the root is reported
+// as a DescendantError carrying the index path to the offending block,
+// built once, so locating a failure costs no more than reaching it.
+// Every JSON decoder that yields an AccountBlock calls it.
+//
+// Check sees the tree as encoding/json left it. A JSON object that
+// repeats the descendantBlocks key is decoded by that package with the
+// later list reusing the elements of the earlier one field by field,
+// so a later entry that omits its nonce keeps the earlier entry's.
 func (ab *AccountBlockMarshal) Check() error {
-	return ab.check(0)
+	err := ab.check(0)
+	if located, ok := err.(*DescendantError); ok {
+		// The path was collected leaf to root on the way back up.
+		for i, j := 0, len(located.Path)-1; i < j; i, j = i+1, j-1 {
+			located.Path[i], located.Path[j] = located.Path[j], located.Path[i]
+		}
+	}
+	return err
 }
 
 func (ab *AccountBlockMarshal) check(depth int) error {
@@ -672,11 +687,51 @@ func (ab *AccountBlockMarshal) check(depth int) error {
 		if dBlock == nil {
 			return fmt.Errorf("descendant block at index %d is null", index)
 		}
-		if err := dBlock.check(depth + 1); err != nil {
-			return fmt.Errorf("descendant block at index %d: %w", index, err)
+		err := dBlock.check(depth + 1)
+		if err == nil {
+			continue
 		}
+		located, ok := err.(*DescendantError)
+		if !ok {
+			located = &DescendantError{Err: err}
+		}
+		located.Path = append(located.Path, index)
+		return located
 	}
 	return nil
+}
+
+// DescendantError is a Check failure in a descendant block, located by
+// Path, the list indices from the root's descendant list down to the
+// block whose check failed with Err. Its message names every level of
+// a short path and elides the middle of a long one, so the message
+// stays small however deep the failure.
+type DescendantError struct {
+	Path []int
+	Err  error
+}
+
+func (e *DescendantError) Error() string {
+	var b strings.Builder
+	path := e.Path
+	const shown = 8
+	if len(path) > shown {
+		for _, index := range path[:shown/2] {
+			fmt.Fprintf(&b, "descendant block at index %d: ", index)
+		}
+		fmt.Fprintf(&b, "%d more levels: ", len(path)-shown/2-1)
+		path = path[len(path)-1:]
+	}
+	for _, index := range path {
+		fmt.Fprintf(&b, "descendant block at index %d: ", index)
+	}
+	b.WriteString(e.Err.Error())
+	return b.String()
+}
+
+// Unwrap returns the check failure at the located block.
+func (e *DescendantError) Unwrap() error {
+	return e.Err
 }
 
 // MarshalJSON encodes the block via its AccountBlockMarshal wire

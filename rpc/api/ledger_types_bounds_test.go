@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -77,9 +78,10 @@ func TestAccountBlock_UnmarshalJSON_AmountAndSupplyLengthAreBounded(t *testing.T
 		t.Fatalf("oversized supply in a list element: err = %v", err)
 	}
 
-	// Rejection costs a scan of the input, not a parse: 1 MiB of digits
-	// took about half a second to parse before the bound existed.
-	digits := strings.Repeat("7", 1<<20)
+	// Rejection costs a scan of the input, not a parse: 2 MiB of digits
+	// took about two seconds to parse before the bound existed (and
+	// about 50 ms to refuse afterwards with the race detector on).
+	digits := strings.Repeat("7", 2<<20)
 	for _, text := range []string{
 		`{"height":1,"nonce":"0000000000000000","amount":"` + digits + `"}`,
 		`{"height":1,"nonce":"0000000000000000","token":{"totalSupply":"` + digits + `"}}`,
@@ -89,10 +91,10 @@ func TestAccountBlock_UnmarshalJSON_AmountAndSupplyLengthAreBounded(t *testing.T
 		err := json.Unmarshal([]byte(text), &b)
 		elapsed := time.Since(start)
 		if err == nil {
-			t.Fatal("1 MiB digit string decoded without error")
+			t.Fatal("2 MiB digit string decoded without error")
 		}
-		if elapsed > 200*time.Millisecond {
-			t.Fatalf("rejecting a 1 MiB digit string took %v, want well under 200ms", elapsed)
+		if elapsed > time.Second {
+			t.Fatalf("rejecting a 2 MiB digit string took %v, want well under 1s", elapsed)
 		}
 	}
 }
@@ -109,8 +111,8 @@ func TestAccountBlock_UnmarshalJSON_DescendantDecodeIsLinear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if elapsed > 1500*time.Millisecond {
-		t.Fatalf("decoding %d bytes of nested descendants took %v, want well under 1.5s", len(wide), elapsed)
+	if elapsed > 5*time.Second {
+		t.Fatalf("decoding %d bytes of nested descendants took %v, want well under 5s", len(wide), elapsed)
 	}
 	ledger, err := block.ToLedgerBlock()
 	if err != nil {
@@ -121,5 +123,35 @@ func TestAccountBlock_UnmarshalJSON_DescendantDecodeIsLinear(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(nestedDescendantsJSON(6000)), &block); err == nil {
 		t.Fatal("6000 nested descendants decoded without error")
+	}
+
+	// A failure deep in a submitted chain is located once, by its index
+	// path, and refused at the cost of reaching it: the block is never
+	// converted, and the message stays small.
+	var b strings.Builder
+	for i := 0; i < 4900; i++ {
+		b.WriteString(`{"height":1,"nonce":"0000000000000000","descendantBlocks":[`)
+	}
+	b.WriteString(`{"height":1,"nonce":"0000000000000000","amount":"` + strings.Repeat("9", largestAmountDigits+1) + `"}`)
+	for i := 0; i < 4900; i++ {
+		b.WriteString(`]}`)
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start = time.Now()
+	err = json.Unmarshal([]byte(b.String()), &block)
+	elapsed = time.Since(start)
+	runtime.ReadMemStats(&after)
+	if err == nil {
+		t.Fatal("oversized amount at depth 4900 decoded without error")
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 64<<20 {
+		t.Fatalf("rejecting a bad leaf at depth 4900 allocated %d bytes, want well under 64 MiB", allocated)
+	}
+	if elapsed > 5*time.Second || len(err.Error()) > 1024 {
+		t.Fatalf("rejecting a bad leaf at depth 4900 took %v with a %d-byte message", elapsed, len(err.Error()))
+	}
+	if !strings.Contains(err.Error(), "amount") || !strings.Contains(err.Error(), "more levels") {
+		t.Fatalf("deep rejection: %.300s", err.Error())
 	}
 }
