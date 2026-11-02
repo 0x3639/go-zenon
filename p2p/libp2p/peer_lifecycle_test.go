@@ -82,6 +82,19 @@ func TestDisconnectWriteHonoursDiscWriteTimeout(t *testing.T) {
 	expectPeerReasonWithin(t, done, p2p.DiscQuitting, start, discWriteTimeout+time.Second)
 }
 
+// Against a stream that takes the write, the disconnect frame is written
+// and the peer ends without waiting for the disconnect deadline.
+func TestDisconnectWritesDiscFrameToHealthyStream(t *testing.T) {
+	s := newHeldStream()
+	p, done := runPongTestPeer(t, s)
+
+	start := time.Now()
+	go p.Disconnect(p2p.DiscQuitting)
+	expectEntered(t, s.entered, discMsg)
+	s.release(t)
+	expectPeerReasonWithin(t, done, p2p.DiscQuitting, start, discWriteTimeout/2)
+}
+
 // A write already stalled on the stream when the peer is dropped holds
 // the write lock the disconnect frame needs. The disconnect deadline cuts
 // that write short too, so the stalled write and the disconnect frame

@@ -359,27 +359,30 @@ func TestStreamRW_ReadMsgAllocatesForReceivedBytesOnly(t *testing.T) {
 }
 
 // One byte over maxMessageSize is still rejected from the header alone,
-// with the same error as before.
+// with the same error as before, and nothing after the header is read.
 func TestStreamRW_RejectsOneByteOverMax(t *testing.T) {
 	ms := newMockStream()
 	var header [8]byte
 	binary.BigEndian.PutUint32(header[0:4], 1)
 	binary.BigEndian.PutUint32(header[4:8], maxMessageSize+1)
 	ms.readBuf.Write(header[:])
+	sentinel := []byte("payload that must stay unread")
+	ms.readBuf.Write(sentinel)
 
 	_, err := NewStreamRW(ms).ReadMsg()
 	want := fmt.Sprintf("message too large: %d bytes (max %d)", maxMessageSize+1, maxMessageSize)
 	if err == nil || err.Error() != want {
 		t.Fatalf("ReadMsg error = %v, want %q", err, want)
 	}
-	if ms.readBuf.Len() != 0 {
-		t.Fatal("ReadMsg read past the header of a rejected frame")
+	if ms.readBuf.Len() != len(sentinel) {
+		t.Fatalf("ReadMsg consumed %d bytes past the header of a rejected frame", len(sentinel)-ms.readBuf.Len())
 	}
 }
 
-// Payloads of every size up to maxMessageSize, around each buffer
-// boundary, arrive intact when the stream hands them over in short
-// reads, and the payload buffer is exactly the payload's size.
+// Payloads from 0 bytes to maxMessageSize, around the first buffer
+// boundaries and at the limit, arrive intact when the stream hands them
+// over in short reads, and the payload buffer is exactly the payload's
+// size.
 func TestStreamRW_ReadMsgPayloadSizes(t *testing.T) {
 	sizes := []int{
 		0, 1,
