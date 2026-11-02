@@ -124,7 +124,7 @@ func TestAccountPool_ReplacementAndDuplicateAcceptedAtCap(t *testing.T) {
 
 func TestAccountPool_filterBlocksToCommit(t *testing.T) {
 	ap := accountPool{}
-	MaxAccountBlocksInMomentum = 2
+	setMaxAccountBlocksInMomentum(t, 2)
 	common.Expect(t, len(ap.filterBlocksToCommit([]*nom.AccountBlock{
 		{Height: 1, BlockType: nom.BlockTypeUserSend},
 		{Height: 2, BlockType: nom.BlockTypeUserSend},
@@ -659,10 +659,11 @@ func expectSameBlocks(t *testing.T, got, want []*nom.AccountBlock) {
 }
 
 // A pending block that is larger than the whole detailed-momentum wire
-// budget can never be included in any momentum. Before the pre-spork
+// budget can never be included by this producer. Before the pre-spork
 // selector skipped it, meeting such a block ended selection for that
-// momentum, so every pending block the walk had not reached yet stayed
-// unconfirmed for as long as the oversized block was pending.
+// momentum, so every pending block the walk had not reached yet was left
+// out of it, at a different point each momentum since the walk order is
+// the pool's map order.
 func TestAccountPool_filterBlocksToCommit_SkipsOversizedBlock(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})
@@ -690,8 +691,9 @@ func TestAccountPool_filterBlocksToCommit_SkipsOversizedBlock(t *testing.T) {
 }
 
 // Momentum content must not have a gap in any account chain, so once a
-// block of an account is skipped its later blocks are skipped too; blocks
-// of other accounts after it are still selected.
+// block of an account is skipped its later blocks are skipped too, even
+// when they are offered after another account; blocks of other accounts
+// after it are still selected.
 func TestAccountPool_filterBlocksToCommit_SkipsRestOfOversizedAccount(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})
@@ -706,25 +708,75 @@ func TestAccountPool_filterBlocksToCommit_SkipsRestOfOversizedAccount(t *testing
 	expectSameBlocks(t,
 		ap.filterBlocksToCommit([]*nom.AccountBlock{a1, a2, a3, b1}),
 		[]*nom.AccountBlock{a1, b1})
+	expectSameBlocks(t,
+		ap.filterBlocksToCommit([]*nom.AccountBlock{a1, a2, b1, a3}),
+		[]*nom.AccountBlock{a1, b1})
 }
 
-// A contract batch (descendant sends followed by the receive that
-// produced them) is selected or skipped whole; an oversized batch does
-// not end selection either.
+// A contract batch (the descendant sends a contract receive produced,
+// then the receive carrying them) is selected or skipped whole; an
+// oversized batch does not end selection either.
 func TestAccountPool_filterBlocksToCommit_SkipsOversizedContractBatch(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})
 
-	embedded := types.Address{0, 1}
+	embedded := types.PlasmaContract
 	user := types.Address{0, 2}
-	send1 := pendingBlock(embedded, 1, nom.BlockTypeContractSend, 16)
+	send1 := pendingBlock(embedded, 1, nom.BlockTypeContractSend, maxDetailedMomentumWireSize)
 	send2 := pendingBlock(embedded, 2, nom.BlockTypeContractSend, 16)
-	receive := pendingBlock(embedded, 3, nom.BlockTypeContractReceive, maxDetailedMomentumWireSize)
+	receive := pendingBlock(embedded, 3, nom.BlockTypeContractReceive, 8)
+	receive.DescendantBlocks = []*nom.AccountBlock{send1, send2}
+	receive.Hash = receive.ComputeHash()
 	u1 := pendingBlock(user, 1, nom.BlockTypeUserSend, 16)
 
 	expectSameBlocks(t,
 		ap.filterBlocksToCommit([]*nom.AccountBlock{send1, send2, receive, u1}),
 		[]*nom.AccountBlock{u1})
+}
+
+// A block that fills the budget exactly is selected; one byte more and it
+// is skipped and reported.
+func TestAccountPool_filterBlocksToCommit_BudgetBoundary(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+	warnings := captureWarnings(ap)
+
+	a := types.Address{0, 1}
+	// Find the data length at which the whole detailed momentum (worst-case
+	// header, the block and its content entry) is exactly the budget. The
+	// RLP overhead is constant for data lengths of the same width, so one
+	// measurement at a nearby length gives the exact length.
+	probe := pendingBlock(a, 1, nom.BlockTypeUserReceive, 8*1000*1000)
+	total := func(block *nom.AccountBlock) int {
+		return worstCaseMomentumHeaderSize() + blockWireSize(block) + contentEntrySize(block)
+	}
+	exact := pendingBlock(a, 1, nom.BlockTypeUserReceive, len(probe.Data)+maxDetailedMomentumWireSize-total(probe))
+	common.Expect(t, total(exact), maxDetailedMomentumWireSize)
+	expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{exact}), []*nom.AccountBlock{exact})
+	common.Expect(t, len(*warnings), 0)
+
+	over := pendingBlock(a, 1, nom.BlockTypeUserReceive, len(exact.Data)+1)
+	common.Expect(t, total(over), maxDetailedMomentumWireSize+1)
+	expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{over}), []*nom.AccountBlock{})
+	common.Expect(t, len(*warnings), 1)
+}
+
+// When the momentum is simply full, a batch that does not fit the room
+// left is skipped for this momentum without a warning, and later batches
+// that do fit are still packed; the base selector stopped at the first.
+func TestAccountPool_filterBlocksToCommit_FullMomentumPacksLaterBatches(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+	warnings := captureWarnings(ap)
+
+	a1 := pendingBlock(types.Address{0, 1}, 1, nom.BlockTypeUserReceive, 5*1024*1024)
+	b1 := pendingBlock(types.Address{0, 2}, 1, nom.BlockTypeUserReceive, 4*1024*1024)
+	c1 := pendingBlock(types.Address{0, 3}, 1, nom.BlockTypeUserSend, 16)
+
+	expectSameBlocks(t,
+		ap.filterBlocksToCommit([]*nom.AccountBlock{a1, b1, c1}),
+		[]*nom.AccountBlock{a1, c1})
+	common.Expect(t, len(*warnings), 0)
 }
 
 // Without an oversized block the selection is exactly what it was: every

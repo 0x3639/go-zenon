@@ -51,7 +51,7 @@ var (
 // maxDetailedMomentumWireSize is the largest RLP-encoded DetailedMomentum
 // that fits in a protocol message.  It mirrors protocol.MaxDetailedMomentumWireSize
 // but is defined locally because chain cannot import protocol (import cycle).
-const maxDetailedMomentumWireSize = 10*1024*1024 - 2*1024*1024 - 4096 // 8,386,048
+const maxDetailedMomentumWireSize = 10*1024*1024 - 2*1024*1024 - 4096 // 8,384,512
 
 // oversizedReportMemory is how many distinct over-budget pending blocks
 // the pool remembers having warned about, so that a block that stays
@@ -149,9 +149,10 @@ type accountPool struct {
 	plasmaMu sync.Mutex
 
 	// oversizedReported remembers the hashes of pending blocks already
-	// reported as over the momentum wire budget (see filterBlocksToCommit).
-	// The cache is safe for concurrent use; it is created on first use so
-	// a zero-value pool can select content too.
+	// reported as over the momentum wire budget (see reportOversizedBatch),
+	// created on first use. It bounds the warnings, not the work: with
+	// more than oversizedReportMemory distinct such blocks pending, the
+	// oldest entries are evicted and their blocks are reported again.
 	oversizedReported     *lru.Cache
 	oversizedReportedOnce sync.Once
 }
@@ -844,18 +845,33 @@ func (ap *accountPool) GetNewMomentumContent() []*nom.AccountBlock {
 // A batch that does not fit the remaining budget is skipped, together
 // with every later block of the same accounts, since momentum content
 // may not leave a gap in an account chain; the walk then continues with
-// the other accounts. This matters because a single pending block can be
+// the other accounts. Up to the first batch that does not fit, the
+// selection is what the walk produced before this rule: the same blocks
+// in the same order. After it, smaller batches of later accounts may
+// still be packed into a momentum that is nearly full, as the post-spork
+// selector does. The rule exists because a single pending block can be
 // larger than the whole budget (before the dynamic-plasma spork a
 // receive block's data is not bounded), and such a block stays pending
-// until it is replaced. Ending the walk there, as this used to, let one
-// such block keep every account the walk had not reached yet out of
-// every momentum this node produced. The block-count cap keeps its
+// until it is replaced or rolled back. Ending the walk there, as this
+// used to, let one such block keep every account the walk had not
+// reached yet out of the momentum, at a different point each time since
+// the walk order is the pool's map order. The block-count cap keeps its
 // original behaviour and ends the walk.
 func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.AccountBlock {
 	toCommit := make([]*nom.AccountBlock, 0, len(blocks))
 	batch := make([]*nom.AccountBlock, 0, MaxAccountBlocksInMomentum)
-	sizeEstimate := worstCaseMomentumHeaderSize()
+	headerSize := worstCaseMomentumHeaderSize()
+	sizeEstimate := headerSize
 	var skippedAddresses map[types.Address]bool
+	skipBatch := func() {
+		if skippedAddresses == nil {
+			skippedAddresses = make(map[types.Address]bool)
+		}
+		for _, skipped := range batch {
+			skippedAddresses[skipped.Address] = true
+		}
+		batch = batch[:0]
+	}
 	for _, block := range blocks {
 		if skippedAddresses[block.Address] {
 			continue
@@ -869,7 +885,17 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 		}
 		// Byte-budget check: the batch must fit the remaining room of
 		// the RLP-encoded DetailedMomentum, each block counted with the
-		// content entry (AccountHeader) it adds to the momentum.
+		// content entry (AccountHeader) it adds to the momentum. The raw
+		// field lengths are a lower bound on the encoded size, so a batch
+		// that is too large by that measure alone is skipped without
+		// encoding it; a pending set full of oversized blocks then costs
+		// a length sum, not an encoding of each, at every momentum.
+		rawSize := batchRawSize(batch)
+		if sizeEstimate+rawSize > maxDetailedMomentumWireSize {
+			ap.reportOversizedBatch(batch, rawSize, headerSize, false, false)
+			skipBatch()
+			continue
+		}
 		batchSize := 0
 		unencodable := false
 		for _, b := range batch {
@@ -881,14 +907,8 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 			batchSize += sz + contentEntrySize(b)
 		}
 		if unencodable || sizeEstimate+batchSize > maxDetailedMomentumWireSize {
-			if skippedAddresses == nil {
-				skippedAddresses = make(map[types.Address]bool)
-			}
-			for _, skipped := range batch {
-				skippedAddresses[skipped.Address] = true
-			}
-			ap.reportOversizedBatch(batch, batchSize, unencodable)
-			batch = batch[:0]
+			ap.reportOversizedBatch(batch, batchSize, headerSize, true, unencodable)
+			skipBatch()
 			continue
 		}
 		sizeEstimate += batchSize
@@ -898,13 +918,17 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 	return toCommit
 }
 
-// reportOversizedBatch warns about a batch that can never fit a momentum
-// on its own, once per block: a batch that merely did not fit the room
-// left in this momentum is normal and not reported. Selection runs at
-// every momentum and the block stays pending, so the warning is keyed on
-// the block hash and remembered in a bounded cache.
-func (ap *accountPool) reportOversizedBatch(batch []*nom.AccountBlock, batchSize int, unencodable bool) {
-	if !unencodable && worstCaseMomentumHeaderSize()+batchSize <= maxDetailedMomentumWireSize {
+// reportOversizedBatch warns about a batch that could never fit a
+// momentum on its own, once per block: a batch that merely did not fit
+// the room left in this momentum is normal and not reported. Selection
+// runs at every momentum and the block stays pending, so the warning is
+// keyed on the hash of the block that closes the batch and remembered in
+// a bounded cache. size is the batch's encoded size (content entries
+// included) when exact is set, otherwise the raw-length lower bound the
+// batch was rejected on.
+func (ap *accountPool) reportOversizedBatch(batch []*nom.AccountBlock, size, headerSize int, exact, unencodable bool) {
+	room := maxDetailedMomentumWireSize - headerSize
+	if !unencodable && size <= room {
 		return
 	}
 	ap.oversizedReportedOnce.Do(func() {
@@ -916,11 +940,34 @@ func (ap *accountPool) reportOversizedBatch(batch []*nom.AccountBlock, batchSize
 	if seen, _ := ap.oversizedReported.ContainsOrAdd(block.Hash, struct{}{}); seen {
 		return
 	}
-	if unencodable {
-		ap.log.Warn("skipping pending account-block that can't be encoded", "header", block.Header())
-		return
+	log := ap.log.New("header", block.Header())
+	switch {
+	case unencodable:
+		log.Warn("skipping pending account-block that can't be encoded")
+	case exact:
+		log.Warn("skipping pending account-block over the momentum wire budget", "batch-size", size, "budget", room)
+	default:
+		log.Warn("skipping pending account-block over the momentum wire budget", "batch-size-at-least", size, "budget", room)
 	}
-	ap.log.Warn("skipping pending account-block over the momentum wire budget", "header", block.Header(), "size", batchSize, "budget", maxDetailedMomentumWireSize)
+}
+
+// batchRawSize is a cheap lower bound on the RLP-encoded size of the
+// batch: the lengths of every block's variable-length fields, descendant
+// blocks included, before any encoding overhead.
+func batchRawSize(batch []*nom.AccountBlock) int {
+	total := 0
+	for _, block := range batch {
+		total += blockRawSize(block)
+	}
+	return total
+}
+
+func blockRawSize(block *nom.AccountBlock) int {
+	size := len(block.Data) + len(block.PublicKey) + len(block.Signature)
+	for _, d := range block.DescendantBlocks {
+		size += blockRawSize(d)
+	}
+	return size
 }
 
 // worstCaseMomentumHeaderSize returns the RLP-encoded size of a fully
