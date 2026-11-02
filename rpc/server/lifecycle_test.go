@@ -295,3 +295,75 @@ func TestClientSubscriptionQueueBoundedInBytes(t *testing.T) {
 		t.Fatalf("%d notifications of %d bytes queued without overflow", n, size)
 	}
 }
+
+// reverseCallService calls back to the peer that called it, through the
+// client the connection's handler serves it from.
+type reverseCallService struct {
+	ctx  chan context.Context
+	done chan error
+}
+
+func (s *reverseCallService) Ask(ctx context.Context) error {
+	s.ctx <- ctx
+	client, _ := ClientFromContext(ctx)
+	var answer string
+	err := client.CallContext(ctx, &answer, "peer.answer")
+	s.done <- err
+	return err
+}
+
+// A method serving a peer's call calls back to that peer, and the connection
+// breaks while the call-back request is being written. Teardown cancels the
+// method's context and waits for it; the call-back then gives up on its
+// cancelled context, and its giving up must not need the dispatch loop that
+// is running the teardown.
+func TestReverseCallDuringTeardownDoesNotDeadlock(t *testing.T) {
+	svc := &reverseCallService{ctx: make(chan context.Context, 1), done: make(chan error, 1)}
+	reg := new(serviceRegistry)
+	if err := reg.registerName("test", svc); err != nil {
+		t.Fatal(err)
+	}
+	codec := newScriptedClientCodec()
+	client := initClient(codec, randomIDGenerator(), reg, 0)
+	t.Cleanup(func() {
+		codec.releaseWrites()
+		closed := make(chan struct{})
+		go func() {
+			client.Close()
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(pendingCallTestTimeout):
+			t.Error("Client.Close did not return: the connection's teardown is stuck")
+		}
+	})
+
+	codec.events <- readEvent{msgs: []*jsonrpcMessage{{Version: vsn, ID: json.RawMessage("1"), Method: "test.ask"}}}
+	var callCtx context.Context
+	select {
+	case callCtx = <-svc.ctx:
+	case <-time.After(pendingCallTestTimeout):
+		t.Fatal("the peer's call never ran")
+	}
+	codec.awaitWriting(t) // the call-back request, held in the write
+	codec.injectReadError(errPeerGone)
+	select {
+	case <-callCtx.Done():
+	case <-time.After(pendingCallTestTimeout):
+		t.Fatal("teardown did not cancel the running call's context")
+	}
+	codec.releaseWrites()
+
+	select {
+	case err := <-svc.done:
+		if err == nil {
+			t.Fatal("the call-back succeeded on a broken connection")
+		}
+	case <-time.After(pendingCallTestTimeout):
+		t.Fatal("the call-back did not return after its context was cancelled")
+	}
+	codec.awaitWriting(t) // the method's own answer
+	codec.releaseWrites()
+	codec.awaitClosed(t)
+}

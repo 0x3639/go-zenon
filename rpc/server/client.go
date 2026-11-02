@@ -171,12 +171,18 @@ func (op *requestOp) outstanding() bool {
 func (op *requestOp) wait(ctx context.Context, c *Client) (*jsonrpcMessage, error) {
 	select {
 	case <-ctx.Done():
-		// Send the timeout to dispatch so it can remove the request IDs.
+		// Send the timeout to dispatch so it can remove the request IDs. The
+		// caller does not wait for that: dispatch may be closing the
+		// connection and waiting for the caller itself, a call the
+		// connection's handler is running. A reply arriving in between
+		// cannot block dispatch, as op.resp has room for one per ID.
 		if !c.isHTTP {
-			select {
-			case c.reqTimeout <- op:
-			case <-c.closing:
-			}
+			go func() {
+				select {
+				case c.reqTimeout <- op:
+				case <-c.closing:
+				}
+			}()
 		}
 		return nil, ctx.Err()
 	case resp, ok := <-op.resp:

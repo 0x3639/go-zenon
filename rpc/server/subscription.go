@@ -376,9 +376,10 @@ func (sub *ClientSubscription) Err() <-chan error {
 }
 
 // Unsubscribe unsubscribes the notification and closes the error channel.
-// It can safely be called more than once. It waits for the server to
-// confirm for at most five seconds, and not at all once the connection has
-// gone.
+// It can safely be called more than once. The request to the server carries
+// a five-second deadline and is abandoned when the connection closes; a
+// write already in progress on the connection can delay it by up to that
+// write's own timeout.
 func (sub *ClientSubscription) Unsubscribe() {
 	sub.errOnce.Do(func() {
 		select {
@@ -504,10 +505,10 @@ func (sub *ClientSubscription) unmarshal(result json.RawMessage) (interface{}, e
 	return val.Elem().Interface(), err
 }
 
-// requestUnsubscribe asks the server to end the subscription. It gives up
-// after subscribeTimeout, or when connCtx ends because the connection's
-// handler is closing: a server that withholds the answer, or a connection
-// that is going away, must not keep Unsubscribe waiting.
+// requestUnsubscribe asks the server to end the subscription under a
+// subscribeTimeout deadline that also ends when connCtx does, because the
+// connection's handler is closing: a server that withholds the answer, or a
+// connection that is going away, must not keep Unsubscribe waiting.
 func (sub *ClientSubscription) requestUnsubscribe(connCtx context.Context) error {
 	ctx, cancel := context.WithTimeout(connCtx, subscribeTimeout)
 	defer cancel()
