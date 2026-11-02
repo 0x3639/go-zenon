@@ -1,7 +1,10 @@
 package chain
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/inconshreveable/log15"
 
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/chain/store"
@@ -603,5 +606,215 @@ func TestAccountPool_RebuildDropsBlocksAboveFrontier(t *testing.T) {
 	if got := readValue(t, surviving, testAppKeyK1); got != "v1" {
 		t.Fatalf("%s = %q after replacement, want %q — prefix state lost",
 			testAppKeyK1, got, "v1")
+	}
+}
+
+// pendingBlock builds a hashed block for the content-selection tests;
+// dataLen bytes of Data make it as large on the wire as the test needs.
+func pendingBlock(address types.Address, height uint64, blockType uint64, dataLen int) *nom.AccountBlock {
+	block := &nom.AccountBlock{
+		Address:   address,
+		BlockType: blockType,
+		Height:    height,
+		Data:      make([]byte, dataLen),
+	}
+	block.Hash = block.ComputeHash()
+	return block
+}
+
+// setMaxAccountBlocksInMomentum pins the pre-spork block-count cap for one
+// test and restores it afterwards, since the cap is a package variable.
+func setMaxAccountBlocksInMomentum(t *testing.T, limit int) {
+	t.Helper()
+	previous := MaxAccountBlocksInMomentum
+	MaxAccountBlocksInMomentum = limit
+	t.Cleanup(func() { MaxAccountBlocksInMomentum = previous })
+}
+
+// captureWarnings replaces the pool's logger with one that records every
+// warning message and returns the recorded messages.
+func captureWarnings(ap *accountPool) *[]string {
+	messages := make([]string, 0)
+	logger := log15.New()
+	logger.SetHandler(log15.FuncHandler(func(r *log15.Record) error {
+		if r.Lvl <= log15.LvlWarn {
+			messages = append(messages, r.Msg)
+		}
+		return nil
+	}))
+	ap.log = logger
+	return &messages
+}
+
+func expectSameBlocks(t *testing.T, got, want []*nom.AccountBlock) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("selected %d blocks, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Hash != want[i].Hash {
+			t.Fatalf("block %d: selected %v@%d, want %v@%d", i, got[i].Address, got[i].Height, want[i].Address, want[i].Height)
+		}
+	}
+}
+
+// A pending block that is larger than the whole detailed-momentum wire
+// budget can never be included in any momentum. Before the pre-spork
+// selector skipped it, meeting such a block ended selection for that
+// momentum, so every pending block the walk had not reached yet stayed
+// unconfirmed for as long as the oversized block was pending.
+func TestAccountPool_filterBlocksToCommit_SkipsOversizedBlock(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+
+	a := types.Address{0, 1}
+	b := types.Address{0, 2}
+	c := types.Address{0, 3}
+	oversized := pendingBlock(a, 1, nom.BlockTypeUserReceive, maxDetailedMomentumWireSize)
+	b1 := pendingBlock(b, 1, nom.BlockTypeUserSend, 16)
+	b2 := pendingBlock(b, 2, nom.BlockTypeUserReceive, 16)
+	c1 := pendingBlock(c, 1, nom.BlockTypeUserSend, 16)
+
+	for name, tc := range map[string]struct {
+		in, want []*nom.AccountBlock
+	}{
+		"oversized first":   {[]*nom.AccountBlock{oversized, b1, b2, c1}, []*nom.AccountBlock{b1, b2, c1}},
+		"oversized between": {[]*nom.AccountBlock{b1, b2, oversized, c1}, []*nom.AccountBlock{b1, b2, c1}},
+		"oversized last":    {[]*nom.AccountBlock{b1, b2, c1, oversized}, []*nom.AccountBlock{b1, b2, c1}},
+		"only oversized":    {[]*nom.AccountBlock{oversized}, []*nom.AccountBlock{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			expectSameBlocks(t, ap.filterBlocksToCommit(tc.in), tc.want)
+		})
+	}
+}
+
+// Momentum content must not have a gap in any account chain, so once a
+// block of an account is skipped its later blocks are skipped too; blocks
+// of other accounts after it are still selected.
+func TestAccountPool_filterBlocksToCommit_SkipsRestOfOversizedAccount(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+
+	a := types.Address{0, 1}
+	b := types.Address{0, 2}
+	a1 := pendingBlock(a, 1, nom.BlockTypeUserSend, 16)
+	a2 := pendingBlock(a, 2, nom.BlockTypeUserReceive, maxDetailedMomentumWireSize)
+	a3 := pendingBlock(a, 3, nom.BlockTypeUserSend, 16)
+	b1 := pendingBlock(b, 1, nom.BlockTypeUserSend, 16)
+
+	expectSameBlocks(t,
+		ap.filterBlocksToCommit([]*nom.AccountBlock{a1, a2, a3, b1}),
+		[]*nom.AccountBlock{a1, b1})
+}
+
+// A contract batch (descendant sends followed by the receive that
+// produced them) is selected or skipped whole; an oversized batch does
+// not end selection either.
+func TestAccountPool_filterBlocksToCommit_SkipsOversizedContractBatch(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+
+	embedded := types.Address{0, 1}
+	user := types.Address{0, 2}
+	send1 := pendingBlock(embedded, 1, nom.BlockTypeContractSend, 16)
+	send2 := pendingBlock(embedded, 2, nom.BlockTypeContractSend, 16)
+	receive := pendingBlock(embedded, 3, nom.BlockTypeContractReceive, maxDetailedMomentumWireSize)
+	u1 := pendingBlock(user, 1, nom.BlockTypeUserSend, 16)
+
+	expectSameBlocks(t,
+		ap.filterBlocksToCommit([]*nom.AccountBlock{send1, send2, receive, u1}),
+		[]*nom.AccountBlock{u1})
+}
+
+// Without an oversized block the selection is exactly what it was: every
+// offered block, in the offered order, up to the block-count cap.
+func TestAccountPool_filterBlocksToCommit_UnchangedWithoutOversizedBlock(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+	warnings := captureWarnings(ap)
+
+	embedded := types.Address{0, 1}
+	a := types.Address{0, 2}
+	b := types.Address{0, 3}
+	offered := []*nom.AccountBlock{
+		pendingBlock(embedded, 1, nom.BlockTypeContractSend, 16),
+		pendingBlock(embedded, 2, nom.BlockTypeContractReceive, 1024),
+		pendingBlock(a, 1, nom.BlockTypeUserSend, 16),
+		pendingBlock(a, 2, nom.BlockTypeUserSend, 16*1024),
+		pendingBlock(b, 1, nom.BlockTypeUserReceive, 0),
+	}
+	expectSameBlocks(t, ap.filterBlocksToCommit(offered), offered)
+	common.Expect(t, len(*warnings), 0)
+
+	// The block-count cap still cuts the walk short.
+	setMaxAccountBlocksInMomentum(t, 3)
+	expectSameBlocks(t, ap.filterBlocksToCommit(offered), offered[:3])
+	common.Expect(t, len(*warnings), 0)
+}
+
+// Selection runs at every momentum, so an oversized block that stays
+// pending is reported once per block, not once per momentum.
+func TestAccountPool_filterBlocksToCommit_LogsOversizedBlockOnce(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+	warnings := captureWarnings(ap)
+
+	a := types.Address{0, 1}
+	b := types.Address{0, 2}
+	first := pendingBlock(a, 1, nom.BlockTypeUserReceive, maxDetailedMomentumWireSize)
+	second := pendingBlock(b, 1, nom.BlockTypeUserReceive, maxDetailedMomentumWireSize+1)
+
+	for i := 0; i < 3; i++ {
+		expectSameBlocks(t, ap.filterBlocksToCommit([]*nom.AccountBlock{first, second}), []*nom.AccountBlock{})
+	}
+	common.Expect(t, len(*warnings), 2)
+	for _, message := range *warnings {
+		if !strings.Contains(message, "wire budget") {
+			t.Fatalf("unexpected warning %q", message)
+		}
+	}
+}
+
+// End to end through the pool: an account whose only pending block is
+// oversized does not keep the other accounts' pending blocks out of the
+// next momentum, whatever order the pool walks its accounts in.
+func TestAccountPool_GetNewMomentumContent_SkipsOversizedReceive(t *testing.T) {
+	setMaxAccountBlocksInMomentum(t, 100)
+	ap := newAccountPool(fakeStable{})
+
+	add := func(block *nom.AccountBlock) {
+		common.FailIfErr(t, ap.getAccountManager(block.Address).Add(&nom.AccountBlockTransaction{
+			Block:   block,
+			Changes: db.NewPatch(),
+		}))
+	}
+	oversized := pendingBlock(types.Address{0, 1}, 1, nom.BlockTypeUserReceive, maxDetailedMomentumWireSize)
+	add(oversized)
+	expected := make(map[types.Hash]*nom.AccountBlock)
+	for i := byte(2); i < 8; i++ {
+		previous := types.ZeroHash
+		for height := uint64(1); height <= 2; height++ {
+			block := pendingBlock(types.Address{0, i}, height, nom.BlockTypeUserSend, 16)
+			block.PreviousHash = previous
+			block.Hash = block.ComputeHash()
+			previous = block.Hash
+			expected[block.Hash] = block
+			add(block)
+		}
+	}
+
+	content := ap.GetNewMomentumContent()
+	common.Expect(t, len(content), len(expected))
+	lastHeight := make(map[types.Address]uint64)
+	for _, block := range content {
+		if block.Hash == oversized.Hash {
+			t.Fatal("oversized block was selected")
+		}
+		if _, ok := expected[block.Hash]; !ok {
+			t.Fatalf("unexpected block %v@%d selected", block.Address, block.Height)
+		}
+		common.Expect(t, block.Height, lastHeight[block.Address]+1)
+		lastHeight[block.Address] = block.Height
 	}
 }
