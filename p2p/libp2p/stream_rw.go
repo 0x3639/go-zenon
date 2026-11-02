@@ -36,6 +36,12 @@ type StreamRW struct {
 	stream network.Stream
 	rmu    sync.Mutex
 	wmu    sync.Mutex
+
+	// dmu orders write-deadline updates. wlimit, when set, is the latest
+	// write deadline any write may have from then on (see
+	// limitWriteDeadline).
+	dmu    sync.Mutex
+	wlimit time.Time
 }
 
 // NewStreamRW creates a new StreamRW wrapping the given libp2p stream.
@@ -121,13 +127,15 @@ func readPayload(r io.Reader, size int) ([]byte, error) {
 	}
 }
 
-// WriteMsg writes a message to the stream.
+// WriteMsg writes a message to the stream under the frameWriteTimeout
+// deadline, or under the limit set by limitWriteDeadline if that is
+// earlier.
 func (rw *StreamRW) WriteMsg(msg p2p.Msg) error {
 	rw.wmu.Lock()
 	defer rw.wmu.Unlock()
 
-	rw.stream.SetWriteDeadline(time.Now().Add(frameWriteTimeout))
-	defer rw.stream.SetWriteDeadline(time.Time{})
+	rw.setWriteDeadline(time.Now().Add(frameWriteTimeout))
+	defer rw.setWriteDeadline(time.Time{})
 
 	// Encode payload. Bound the read at maxMessageSize+1 so an oversized
 	// or unbounded Payload reader can't force an unbounded allocation
@@ -158,6 +166,33 @@ func (rw *StreamRW) WriteMsg(msg p2p.Msg) error {
 		}
 	}
 	return nil
+}
+
+// limitWriteDeadline makes t the latest write deadline the stream has from
+// now on: a write already in progress fails at t at the latest, and
+// WriteMsg never sets a later deadline. The disconnect path uses it so its
+// short deadline holds for the disconnect frame, which WriteMsg would
+// otherwise extend to frameWriteTimeout, and for a write that was already
+// stalled on the stream when the peer was dropped. It does not take wmu,
+// so it can cut short the write that holds it.
+func (rw *StreamRW) limitWriteDeadline(t time.Time) {
+	rw.dmu.Lock()
+	defer rw.dmu.Unlock()
+	if rw.wlimit.IsZero() || t.Before(rw.wlimit) {
+		rw.wlimit = t
+	}
+	rw.stream.SetWriteDeadline(rw.wlimit)
+}
+
+// setWriteDeadline sets the stream's write deadline to t, or to the limit
+// set by limitWriteDeadline when t is later or zero.
+func (rw *StreamRW) setWriteDeadline(t time.Time) {
+	rw.dmu.Lock()
+	defer rw.dmu.Unlock()
+	if !rw.wlimit.IsZero() && (t.IsZero() || t.After(rw.wlimit)) {
+		t = rw.wlimit
+	}
+	rw.stream.SetWriteDeadline(t)
 }
 
 // writeFull writes all bytes from buf to w, looping on short writes.

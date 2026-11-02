@@ -81,7 +81,10 @@ func (c *peerConn) close(err error) {
 	// the stream gracefully (half-close — the remote can still drain
 	// anything we already sent).
 	if r, ok := err.(p2p.DiscReason); ok && r != p2p.DiscNetworkError {
-		c.stream.SetWriteDeadline(time.Now().Add(discWriteTimeout))
+		// The limit also cuts short a write still stalled on the stream,
+		// which holds the write lock the disc frame needs, so both are
+		// bounded by discWriteTimeout rather than frameWriteTimeout each.
+		c.rw.limitWriteDeadline(time.Now().Add(discWriteTimeout))
 		p2p.Send(c.rw, discMsg, []p2p.DiscReason{r})
 		c.stream.Close()
 		return
