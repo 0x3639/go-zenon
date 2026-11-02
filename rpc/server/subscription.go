@@ -344,6 +344,10 @@ type ClientSubscription struct {
 // This is the sentinel value sent on sub.quit when Unsubscribe is called.
 var errUnsubscribed = errors.New("unsubscribed")
 
+// errDuplicateSubscriptionID is returned by Subscribe when the server
+// answers with the ID of a subscription the connection already has.
+var errDuplicateSubscriptionID = errors.New("duplicate subscription ID")
+
 func newClientSubscription(c *Client, namespace string, channel reflect.Value) *ClientSubscription {
 	sub := &ClientSubscription{
 		client:      c,
@@ -372,7 +376,9 @@ func (sub *ClientSubscription) Err() <-chan error {
 }
 
 // Unsubscribe unsubscribes the notification and closes the error channel.
-// It can safely be called more than once.
+// It can safely be called more than once. It waits for the server to
+// confirm for at most five seconds, and not at all once the connection has
+// gone.
 func (sub *ClientSubscription) Unsubscribe() {
 	sub.errOnce.Do(func() {
 		select {
@@ -404,7 +410,9 @@ func (sub *ClientSubscription) close(err error) {
 
 // run is the forwarding loop of the subscription. It runs in its own goroutine and
 // is launched by the client's handler after the subscription has been created.
-func (sub *ClientSubscription) run() {
+// connCtx ends when the connection's handler closes; forwarded is called once
+// the loop has stopped sending to sub.channel.
+func (sub *ClientSubscription) run(connCtx context.Context, forwarded func()) {
 	defer close(sub.unsubDone)
 
 	unsubscribe, err := sub.forward()
@@ -412,10 +420,11 @@ func (sub *ClientSubscription) run() {
 	// The client's dispatch loop won't be able to execute the unsubscribe call if it is
 	// blocked in sub.deliver() or sub.close(). Closing forwardDone unblocks them.
 	close(sub.forwardDone)
+	forwarded()
 
 	// Call the unsubscribe method on the server.
 	if unsubscribe {
-		sub.requestUnsubscribe()
+		sub.requestUnsubscribe(connCtx)
 	}
 
 	// Send the error.
@@ -438,6 +447,7 @@ func (sub *ClientSubscription) forward() (unsubscribeServer bool, err error) {
 		{Dir: reflect.SelectSend, Chan: sub.channel},
 	}
 	buffer := list.New()
+	bufferBytes := 0 // encoded size of the notifications in buffer
 
 	for {
 		var chosen int
@@ -447,7 +457,7 @@ func (sub *ClientSubscription) forward() (unsubscribeServer bool, err error) {
 			chosen, recv, _ = reflect.Select(cases[:2])
 		} else {
 			// Non-empty buffer, send the first queued item.
-			cases[2].Send = reflect.ValueOf(buffer.Front().Value)
+			cases[2].Send = reflect.ValueOf(buffer.Front().Value.(queuedNotification).value)
 			chosen, recv, _ = reflect.Select(cases)
 		}
 
@@ -463,20 +473,29 @@ func (sub *ClientSubscription) forward() (unsubscribeServer bool, err error) {
 			return false, err
 
 		case 1: // <-sub.in
-			val, err := sub.unmarshal(recv.Interface().(json.RawMessage))
+			raw := recv.Interface().(json.RawMessage)
+			if buffer.Len() == maxClientSubscriptionBuffer || bufferBytes+len(raw) > maxClientSubscriptionBufferBytes {
+				return true, ErrSubscriptionQueueOverflow
+			}
+			val, err := sub.unmarshal(raw)
 			if err != nil {
 				return true, err
 			}
-			if buffer.Len() == maxClientSubscriptionBuffer {
-				return true, ErrSubscriptionQueueOverflow
-			}
-			buffer.PushBack(val)
+			buffer.PushBack(queuedNotification{value: val, size: len(raw)})
+			bufferBytes += len(raw)
 
 		case 2: // sub.channel<-
 			cases[2].Send = reflect.Value{} // Don't hold onto the value.
-			buffer.Remove(buffer.Front())
+			bufferBytes -= buffer.Remove(buffer.Front()).(queuedNotification).size
 		}
 	}
+}
+
+// queuedNotification is a decoded notification waiting in a subscription's
+// buffer, with the size of its encoding.
+type queuedNotification struct {
+	value interface{}
+	size  int
 }
 
 func (sub *ClientSubscription) unmarshal(result json.RawMessage) (interface{}, error) {
@@ -485,7 +504,13 @@ func (sub *ClientSubscription) unmarshal(result json.RawMessage) (interface{}, e
 	return val.Elem().Interface(), err
 }
 
-func (sub *ClientSubscription) requestUnsubscribe() error {
+// requestUnsubscribe asks the server to end the subscription. It gives up
+// after subscribeTimeout, or when connCtx ends because the connection's
+// handler is closing: a server that withholds the answer, or a connection
+// that is going away, must not keep Unsubscribe waiting.
+func (sub *ClientSubscription) requestUnsubscribe(connCtx context.Context) error {
+	ctx, cancel := context.WithTimeout(connCtx, subscribeTimeout)
+	defer cancel()
 	var result interface{}
-	return sub.client.Call(&result, sub.namespace+unsubscribeMethodSuffix, sub.subid)
+	return sub.client.CallContext(ctx, &result, sub.namespace+unsubscribeMethodSuffix, sub.subid)
 }

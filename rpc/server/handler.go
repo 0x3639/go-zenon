@@ -224,12 +224,14 @@ func (h *handler) handleMsg(msg *jsonrpcMessage, slotAcquired bool) {
 	})
 }
 
-// close cancels all requests except for inflightReq and waits for
-// call goroutines to shut down.
+// close cancels all requests except for inflightReq, cancels the contexts
+// of the calls still running and waits for their goroutines to shut down.
+// The contexts are cancelled first: a call that returns only when its
+// context ends would otherwise hold the connection's teardown open.
 func (h *handler) close(err error, inflightReq *requestOp) {
 	h.cancelAllRequests(err, inflightReq)
-	h.callWG.Wait()
 	h.cancelRoot()
+	h.callWG.Wait()
 	h.cancelServerSubscriptions(err)
 }
 
@@ -388,14 +390,22 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		op.err = msg.Error
 		return
 	}
-	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		h.callWG.Add(1)
-		go func() {
-			op.sub.run()
-			h.callWG.Done()
-		}()
-		h.clientSubs[op.sub.subid] = op.sub
+	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err != nil {
+		return
 	}
+	// The ID names the subscription for the rest of the connection; a
+	// second subscription under it would take over the first one's
+	// notifications and leave its forwarding loop without a way to stop.
+	if h.clientSubs[op.sub.subid] != nil {
+		op.err = errDuplicateSubscriptionID
+		return
+	}
+	// close waits for the forwarding loop, not for the unsubscribe request
+	// that may follow it: that request needs the client's dispatch loop,
+	// which is the one running close.
+	h.callWG.Add(1)
+	go op.sub.run(h.rootCtx, h.callWG.Done)
+	h.clientSubs[op.sub.subid] = op.sub
 }
 
 // handleCallMsg executes a call message and returns the answer.

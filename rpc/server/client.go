@@ -66,6 +66,10 @@ const (
 	// shrinks on demand. If the buffer reaches the size below, the subscription is
 	// dropped.
 	maxClientSubscriptionBuffer = 20000
+	// maxClientSubscriptionBufferBytes bounds the same buffer by the encoded
+	// size of the notifications it holds, so that a server sending large
+	// notifications cannot make the client hold 20000 of them.
+	maxClientSubscriptionBufferBytes = 32 * 1024 * 1024
 )
 
 // BatchElem is an element in a batch request.
@@ -475,8 +479,9 @@ func (c *Client) ShhSubscribe(ctx context.Context, channel interface{}, args ...
 // The context argument cancels the RPC request that sets up the subscription but has no
 // effect on the subscription after Subscribe has returned.
 //
-// Slow subscribers will be dropped eventually. Client buffers up to 20000 notifications
-// before considering the subscriber dead. The subscription Err channel will receive
+// Slow subscribers will be dropped eventually. Client buffers up to 20000 notifications,
+// and no more than 32 MiB of them as encoded by the server, before considering the
+// subscriber dead. The subscription Err channel will receive
 // ErrSubscriptionQueueOverflow. Use a sufficiently large buffer on the channel or ensure
 // that the channel usually has at least one reader to prevent this issue.
 func (c *Client) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*ClientSubscription, error) {
