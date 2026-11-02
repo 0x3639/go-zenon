@@ -17,6 +17,12 @@ import (
 // This prevents a malicious peer from causing an OOM by declaring a huge payload.
 const maxMessageSize = 10 * 1024 * 1024 // 10MB, matching ProtocolMaxMsgSize
 
+// initialPayloadBuffer is the most readMsg allocates for a payload before
+// any of it has arrived. The buffer doubles as it fills, up to the declared
+// size, so a header alone cannot make the reader reserve a full
+// maxMessageSize buffer for the length of the read deadline.
+const initialPayloadBuffer = 64 * 1024
+
 // StreamRW wraps a libp2p bidirectional stream to implement p2p.MsgReadWriter.
 //
 // Wire format (replaces RLPX framing):
@@ -76,12 +82,9 @@ func (rw *StreamRW) readMsg(maxSize uint32, timeout time.Duration) (p2p.Msg, err
 		return p2p.Msg{}, fmt.Errorf("message too large: %d bytes (max %d)", size, maxSize)
 	}
 
-	// Read payload
-	payload := make([]byte, size)
-	if size > 0 {
-		if _, err := io.ReadFull(rw.stream, payload); err != nil {
-			return p2p.Msg{}, err
-		}
+	payload, err := readPayload(rw.stream, int(size))
+	if err != nil {
+		return p2p.Msg{}, err
 	}
 
 	return p2p.Msg{
@@ -89,6 +92,33 @@ func (rw *StreamRW) readMsg(maxSize uint32, timeout time.Duration) (p2p.Msg, err
 		Size:    size,
 		Payload: &payloadReader{data: payload},
 	}, nil
+}
+
+// readPayload reads exactly size bytes from r. The buffer starts at
+// initialPayloadBuffer and doubles each time it fills, so its size stays
+// within twice what the remote has actually sent (or initialPayloadBuffer,
+// if larger), and the final buffer is exactly size bytes. A stream that ends
+// before the first payload byte returns io.EOF and one that ends later
+// returns io.ErrUnexpectedEOF, as io.ReadFull does.
+func readPayload(r io.Reader, size int) ([]byte, error) {
+	buf := make([]byte, min(size, initialPayloadBuffer))
+	read := 0
+	for {
+		n, err := io.ReadFull(r, buf[read:])
+		read += n
+		if err != nil {
+			if err == io.EOF && read > 0 {
+				err = io.ErrUnexpectedEOF
+			}
+			return nil, err
+		}
+		if read == size {
+			return buf, nil
+		}
+		grown := make([]byte, min(2*len(buf), size))
+		copy(grown, buf[:read])
+		buf = grown
+	}
 }
 
 // WriteMsg writes a message to the stream.
