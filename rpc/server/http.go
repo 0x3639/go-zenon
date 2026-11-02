@@ -272,11 +272,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	// OPTIONS asks what the endpoint supports; it carries no call, so its
-	// body is never dispatched. A CORS preflight is answered by the CORS
-	// handler in front of this one when CORS is configured.
+	// OPTIONS carries no call, so its body is never dispatched. A CORS
+	// preflight is answered by the CORS handler in front of this one when
+	// CORS is configured.
 	if r.Method == http.MethodOptions {
-		w.Header().Set("Allow", "GET, POST, OPTIONS")
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

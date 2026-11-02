@@ -82,8 +82,10 @@ type BatchElem struct {
 	// non-nil pointer value of the desired type, otherwise the response will be
 	// discarded.
 	Result interface{}
-	// Error is set if the server returns an error for this request, or if
-	// unmarshaling into Result fails. It is not set for I/O errors.
+	// Error is set if the server returns an error for this request, if
+	// unmarshaling into Result fails, or if an HTTP reply carries no
+	// response for this request (ErrMissingBatchResponse). It is not set for
+	// I/O errors.
 	Error error
 }
 
@@ -371,8 +373,9 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 // BatchCall sends all given requests as a single batch and waits for the server
 // to return a response for all of them.
 //
-// In contrast to Call, BatchCall only returns I/O errors. Any error specific to
-// a request is reported through the Error field of the corresponding BatchElem.
+// In contrast to Call, BatchCall only returns errors that concern the batch as
+// a whole, as BatchCallContext does. Any error specific to a request is
+// reported through the Error field of the corresponding BatchElem.
 //
 // Note that batch calls may not be executed atomically on the server side.
 func (c *Client) BatchCall(b []BatchElem) error {
@@ -384,9 +387,10 @@ func (c *Client) BatchCall(b []BatchElem) error {
 // waits for the server to return a response for all of them. The wait
 // duration is bounded by the context's deadline.
 //
-// In contrast to CallContext, BatchCallContext only returns errors that have occurred
-// while sending the request. Any error specific to a request is reported through the
-// Error field of the corresponding BatchElem.
+// In contrast to CallContext, BatchCallContext only returns errors that concern the
+// batch as a whole: sending it, waiting for it, or, over HTTP, a reply that does not
+// match it. Any error specific to a request is reported through the Error field of
+// the corresponding BatchElem.
 //
 // Over HTTP the reply arrives in one piece. A reply that answers a call
 // outside the batch, answers a call twice or has more elements than the

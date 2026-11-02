@@ -134,6 +134,9 @@ func TestHTTPBatchRejectsInvalidResponse(t *testing.T) {
 		{"duplicate id", func(ids []json.RawMessage) string {
 			return "[" + result(ids[0], "a") + "," + result(ids[0], "again") + "]"
 		}},
+		{"id spelled as a string", func(ids []json.RawMessage) string {
+			return "[" + result(ids[0], "a") + "," + result(json.RawMessage(fmt.Sprintf("%q", ids[1])), "b") + "]"
+		}},
 		{"extra element", func(ids []json.RawMessage) string {
 			return "[" + result(ids[0], "a") + "," + result(ids[1], "b") + "," + result(ids[0], "again") + "]"
 		}},
@@ -165,19 +168,36 @@ func TestHTTPBatchRejectsInvalidResponse(t *testing.T) {
 // ErrMissingBatchResponse instead of the call waiting for a reply that cannot
 // arrive.
 func TestHTTPBatchMarksMissingResponses(t *testing.T) {
-	client := newScriptedHTTPClient(t, http.StatusOK, func(ids []json.RawMessage) io.ReadCloser {
-		return replyBody("[" + result(ids[1], "b") + "]")
-	})
-	batch := twoElemBatch()
-	out := runClientCall(t, func(ctx context.Context) error { return client.BatchCallContext(ctx, batch) })
-	if out.panicked != nil || out.err != nil {
-		t.Fatalf("BatchCallContext: error %v, panic %v", out.err, out.panicked)
+	tests := []struct {
+		name     string
+		reply    func(ids []json.RawMessage) string
+		answered bool // whether element 1 is answered with "b"
+	}{
+		{"one of two", func(ids []json.RawMessage) string { return "[" + result(ids[1], "b") + "]" }, true},
+		{"empty array", func([]json.RawMessage) string { return "[]" }, false},
+		{"null", func([]json.RawMessage) string { return "null" }, false},
 	}
-	if batch[0].Error != ErrMissingBatchResponse {
-		t.Errorf("element 0: error %v, want %v", batch[0].Error, ErrMissingBatchResponse)
-	}
-	if batch[1].Error != nil || *batch[1].Result.(*string) != "b" {
-		t.Errorf("element 1: result %q, error %v", *batch[1].Result.(*string), batch[1].Error)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newScriptedHTTPClient(t, http.StatusOK, func(ids []json.RawMessage) io.ReadCloser {
+				return replyBody(tt.reply(ids))
+			})
+			batch := twoElemBatch()
+			out := runClientCall(t, func(ctx context.Context) error { return client.BatchCallContext(ctx, batch) })
+			if out.panicked != nil || out.err != nil {
+				t.Fatalf("BatchCallContext: error %v, panic %v", out.err, out.panicked)
+			}
+			if batch[0].Error != ErrMissingBatchResponse {
+				t.Errorf("element 0: error %v, want %v", batch[0].Error, ErrMissingBatchResponse)
+			}
+			if tt.answered {
+				if batch[1].Error != nil || *batch[1].Result.(*string) != "b" {
+					t.Errorf("element 1: result %q, error %v", *batch[1].Result.(*string), batch[1].Error)
+				}
+			} else if batch[1].Error != ErrMissingBatchResponse {
+				t.Errorf("element 1: error %v, want %v", batch[1].Error, ErrMissingBatchResponse)
+			}
+		})
 	}
 }
 
@@ -291,9 +311,6 @@ func TestServeHTTPOptionsNotDispatched(t *testing.T) {
 		}
 		if rec.Body.Len() != 0 {
 			t.Errorf("body %q: response body %q, want none", body, rec.Body.String())
-		}
-		if allow := rec.Header().Get("Allow"); !strings.Contains(allow, http.MethodPost) {
-			t.Errorf("body %q: Allow header %q does not list POST", body, allow)
 		}
 	}
 	if got := atomic.LoadInt32(&svc.calls); got != 0 {
