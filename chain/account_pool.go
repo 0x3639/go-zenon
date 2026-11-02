@@ -892,7 +892,7 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 		// is skipped without encoding it; a pending set full of oversized
 		// blocks then costs a length sum, not an encoding of each, at
 		// every momentum. Anything smaller is measured exactly, so that a
-		// batch is only reported when it really can never fit.
+		// batch is only reported when it can never fit by that measure.
 		if rawSize := batchRawSize(batch); headerSize+rawSize > maxDetailedMomentumWireSize {
 			ap.reportOversizedBatch(batch, rawSize, headerSize, false, false)
 			skipBatch()
@@ -922,12 +922,16 @@ func (ap *accountPool) filterBlocksToCommit(blocks []*nom.AccountBlock) []*nom.A
 
 // reportOversizedBatch warns about a batch that could never fit a
 // momentum on its own, once per block: a batch that merely did not fit
-// the room left in this momentum is normal and not reported. Selection
-// runs at every momentum and the block stays pending, so the warning is
-// keyed on the hash of the block that closes the batch and remembered in
-// a bounded cache. size is the batch's encoded size (content entries
-// included) when exact is set, otherwise the raw-length lower bound the
-// batch was rejected on.
+// the room left in this momentum is normal and not reported. "Fit" is
+// by the selector's estimate (worst-case header plus the encoded blocks
+// and their content entries), which is conservative: a batch a few bytes
+// over it may still encode under the wire limit in a real momentum, and
+// is skipped and reported all the same. Selection runs at every
+// momentum and the block stays pending, so the warning is keyed on the
+// hash of the block that closes the batch and remembered in a bounded
+// cache. size is the batch's encoded size (content entries included)
+// when exact is set, otherwise the raw-length lower bound the batch was
+// rejected on.
 func (ap *accountPool) reportOversizedBatch(batch []*nom.AccountBlock, size, headerSize int, exact, unencodable bool) {
 	room := maxDetailedMomentumWireSize - headerSize
 	if !unencodable && size <= room {

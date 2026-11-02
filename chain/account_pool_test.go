@@ -662,8 +662,8 @@ func expectSameBlocks(t *testing.T, got, want []*nom.AccountBlock) {
 // budget can never be included by this producer. Before the pre-spork
 // selector skipped it, meeting such a block ended selection for that
 // momentum, so every pending block the walk had not reached yet was left
-// out of it, at a different point each momentum since the walk order is
-// the pool's map order.
+// out of it, at a point that may differ between momentums since the walk
+// order is the pool's map order.
 func TestAccountPool_filterBlocksToCommit_SkipsOversizedBlock(t *testing.T) {
 	setMaxAccountBlocksInMomentum(t, 100)
 	ap := newAccountPool(fakeStable{})
@@ -743,8 +743,9 @@ func TestAccountPool_filterBlocksToCommit_BudgetBoundary(t *testing.T) {
 	warnings := captureWarnings(ap)
 
 	a := types.Address{0, 1}
-	// Find the data length at which the whole detailed momentum (worst-case
-	// header, the block and its content entry) is exactly the budget. The
+	// Find the data length at which the selector's estimate of the detailed
+	// momentum (worst-case header, the block, its content entry) is exactly
+	// the budget. The
 	// RLP overhead is constant for data lengths of the same width, so one
 	// measurement at a nearby length gives the exact length.
 	probe := pendingBlock(a, 1, nom.BlockTypeUserReceive, 8*1000*1000)
@@ -762,8 +763,8 @@ func TestAccountPool_filterBlocksToCommit_BudgetBoundary(t *testing.T) {
 	common.Expect(t, len(*warnings), 1)
 
 	// Offered behind another account's block, the same block is rejected
-	// for the room left before its exact size is known; it still can never
-	// fit a momentum and is still reported, once.
+	// for the room left; its exact size still shows it can never fit a
+	// momentum, so it is still reported, once.
 	ap = newAccountPool(fakeStable{})
 	warnings = captureWarnings(ap)
 	prefix := pendingBlock(types.Address{0, 2}, 1, nom.BlockTypeUserSend, 1024)
