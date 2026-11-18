@@ -1,0 +1,169 @@
+{
+ "version": {
+  "version": "v0.0.10-alphanet-732-g924e6b8",
+  "commit": "924e6b87f77828e6c5e492b1a04bc5595ed3acbc"
+ },
+ "height": 68,
+ "results": [
+  {
+   "case": "one-chain",
+   "pass": true,
+   "detail": "height 66: {'pillar': '198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac', 'pillar2': '198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac', 'pillar3': '198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac', 'rpc': '198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac', 'observer': '198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac'}"
+  },
+  {
+   "case": "three-producers",
+   "pass": true,
+   "detail": "{\"z1qz9zr5c7a0p8qljvrwt2cy5j99w98c5myrn2un\": 24, \"z1qzedcjmds6cwuqu7wkrvl0dadwwauzaana6g8e\": 22, \"z1qq9n7fpaqd8lpcljandzmx4xtku9w4ftwyg0mq\": 21}"
+  },
+  {
+   "case": "cadence-10s",
+   "pass": false,
+   "detail": "66 intervals, not 10 s after heights: [(29, 20)]"
+  },
+  {
+   "case": "dynamic-plasma-version-2",
+   "pass": true,
+   "detail": "enforcement 30, first version-2 momentum 31"
+  },
+  {
+   "case": "spork-az",
+   "pass": true,
+   "detail": "{\"id\": \"6d2b1e6cb4025f2f45533f0fe22e9b7ce2014d91cc960471045fa64eee5a6ba3\", \"name\": \"az\", \"description\": \"az\", \"activated\": true, \"enforcementHeight\": 0}"
+  },
+  {
+   "case": "spork-htlc",
+   "pass": true,
+   "detail": "{\"id\": \"ceb7e3808ef17ea910adda2f3ab547be4cdfb54de8400ce3683258d06be1354b\", \"name\": \"htlc\", \"description\": \"htlc\", \"activated\": true, \"enforcementHeight\": 0}"
+  },
+  {
+   "case": "spork-libp2p",
+   "pass": true,
+   "detail": "{\"id\": \"0000000000000000000000000000000000000000000000000000000000000001\", \"name\": \"libp2p\", \"description\": \"Activates the libp2p networking stack\", \"activated\": true, \"enforcementHeight\": 20}"
+  },
+  {
+   "case": "spork-dynamic-plasma",
+   "pass": true,
+   "detail": "{\"id\": \"0000000000000000000000000000000000000000000000000000000000000002\", \"name\": \"dynamic-plasma\", \"description\": \"Activates Dynamic Plasma\", \"activated\": true, \"enforcementHeight\": 30}"
+  },
+  {
+   "case": "sync-pillar",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 68} peers=5"
+  },
+  {
+   "case": "sync-pillar2",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 67} peers=5"
+  },
+  {
+   "case": "sync-pillar3",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 68} peers=5"
+  },
+  {
+   "case": "sync-rpc",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 68} peers=4"
+  },
+  {
+   "case": "sync-observer",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 68} peers=4"
+  },
+  {
+   "case": "rpc:embedded.pillar.getAll",
+   "pass": true,
+   "detail": "{\"count\": 3, \"list\": [{\"name\": \"dev1\", \"rank\": 0, \"type\": 1, \"ownerAddress\": \"z1qq6eg8n43g032hanpsfp02qcdmv7zfj3y2lt5d\", \"producerAddress\": \"z1qq9n7fpaqd8lpcljandzmx4xtku9w4ftwyg0mq\", \"withdrawAddress"
+  },
+  {
+   "case": "rpc:embedded.pillar.getQsrRegistrationCost",
+   "pass": true,
+   "detail": "\"15000000000000\""
+  },
+  {
+   "case": "rpc:embedded.plasma.get",
+   "pass": true,
+   "detail": "{\"currentPlasma\": 0, \"maxPlasma\": 0, \"qsrAmount\": \"0\"}"
+  },
+  {
+   "case": "rpc:embedded.plasma.getVariables",
+   "pass": true,
+   "detail": "{\"MaxBasePlasmaInMomentum\": 4200000, \"FusedPlasmaTarget\": 1050000, \"PowPlasmaTarget\": 1050000, \"MaxPriceChangePercent\": 10, \"PriceChangeDenominator\": 20}"
+  },
+  {
+   "case": "rpc:embedded.token.getAll",
+   "pass": true,
+   "detail": "{\"count\": 2, \"list\": [{\"name\": \"QSR\", \"symbol\": \"QSR\", \"domain\": \"zenon.devnet\", \"totalSupply\": \"1163000000000000\", \"decimals\": 8, \"owner\": \"z1qxemdeddedxt0kenxxxxxxxxxxxxxxxxh9amk0\", \"tokenStandard\":"
+  },
+  {
+   "case": "rpc:embedded.sentinel.getAllActive",
+   "pass": true,
+   "detail": "{\"count\": 0, \"list\": []}"
+  },
+  {
+   "case": "rpc:embedded.stake.getEntriesByAddress",
+   "pass": true,
+   "detail": "{\"totalAmount\": \"0\", \"totalWeightedAmount\": \"0\", \"count\": 0, \"list\": []}"
+  },
+  {
+   "case": "rpc:embedded.accelerator.getAll",
+   "pass": true,
+   "detail": "{\"count\": 0, \"list\": []}"
+  },
+  {
+   "case": "rpc:embedded.swap.getLegacyPillars",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "case": "rpc:embedded.spork.getAll",
+   "pass": true,
+   "detail": "{\"count\": 5, \"list\": [{\"id\": \"0000000000000000000000000000000000000000000000000000000000000001\", \"name\": \"libp2p\", \"description\": \"Activates the libp2p networking stack\", \"activated\": true, \"enforceme"
+  },
+  {
+   "case": "rpc:embedded.bridge.getBridgeInfo",
+   "pass": true,
+   "detail": "{\"administrator\": \"z1qr9vtwsfr2n0nsxl2nfh6l5esqjh2wfj85cfq9\", \"compressedTssECDSAPubKey\": \"\", \"decompressedTssECDSAPubKey\": \"\", \"allowKeyGen\": false, \"halted\": false, \"unhaltedAt\": 0, \"unhaltDurationI"
+  },
+  {
+   "case": "rpc:embedded.liquidity.getLiquidityInfo",
+   "pass": true,
+   "detail": "{\"administrator\": \"z1qr9vtwsfr2n0nsxl2nfh6l5esqjh2wfj85cfq9\", \"isHalted\": false, \"znnReward\": \"0\", \"qsrReward\": \"0\", \"tokenTuples\": []}"
+  },
+  {
+   "case": "rpc:ledger.getAccountInfoByAddress",
+   "pass": true,
+   "detail": "{\"address\": \"z1qp3yph55qgresyytz83anynr2f4z39x2z3ej3e\", \"accountHeight\": 1, \"balanceInfoMap\": {\"zts1qsrxxxxxxxxxxxxxmrhjll\": {\"token\": {\"name\": \"QSR\", \"symbol\": \"QSR\", \"domain\": \"zenon.devnet\", \"total"
+  },
+  {
+   "case": "rpc:ledger.getDetailedMomentumsByHeight",
+   "pass": true,
+   "detail": "{\"list\": [{\"blocks\": [{\"version\": 1, \"chainIdentifier\": 69, \"blockType\": 1, \"hash\": \"e8ef552e5fb4e7a6ca150cb7b75ac9b562342cea0203403f2f018b70f56ac014\", \"previousHash\": \"0000000000000000000000000000000"
+  },
+  {
+   "case": "rpc:ledger.getMomentumsByPage",
+   "pass": true,
+   "detail": "{\"list\": [{\"version\": 2, \"chainIdentifier\": 69, \"hash\": \"b8621851f1b00283f7e2a538aed918bdae2c30fa5bb8a22bd5805ab3dd52abeb\", \"previousHash\": \"282d7ccd0d84b0a5f725ea5cd4458dd43d7eb5f1c05155f756ab4dd4d3b"
+  },
+  {
+   "case": "rpc:stats.processInfo",
+   "pass": true,
+   "detail": "{\"version\": \"v0.0.10-alphanet-732-g924e6b8\", \"commit\": \"924e6b87f77828e6c5e492b1a04bc5595ed3acbc\"}"
+  },
+  {
+   "case": "rpc:stats.osInfo",
+   "pass": true,
+   "detail": "{\"os\": \"linux\", \"platform\": \"alpine\", \"platformFamily\": \"alpine\", \"platformVersion\": \"3.24.2\", \"kernelVersion\": \"6.8.0-117-generic\", \"memoryTotal\": 8307171328, \"memoryFree\": 5696045056, \"numCPU\": 4, \""
+  },
+  {
+   "case": "late-joiner-synced",
+   "pass": true,
+   "detail": "{'state': 2, 'currentHeight': 68, 'targetHeight': 68} peers=5"
+  },
+  {
+   "case": "late-joiner-same-chain",
+   "pass": true,
+   "detail": "height 66: rpc 198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac joiner 198f2478771c6cbad0fafe14edb8dfe05abc52b60a1a4ac24a7d1adeaf0bd3ac"
+  }
+ ]
+}

@@ -1,0 +1,2 @@
+t=2026-11-18T10:04:09+0000 lvl=info msg="do not process current event" module=pillar submodule=manager event="{StartTime:2026-11-18 10:04:10 +0000 UTC EndTime:2026-11-18 10:04:20 +0000 UTC Producer:z1qzedcjmds6cwuqu7wkrvl0dadwwauzaana6g8e Name:dev3}" reason="current time is before start time"
+t=2026-11-18T10:04:20+0000 lvl=info msg="do not process current event" module=pillar submodule=manager event="{StartTime:2026-11-18 10:04:20 +0000 UTC EndTime:2026-11-18 10:04:30 +0000 UTC Producer:z1qz9zr5c7a0p8qljvrwt2cy5j99w98c5myrn2un Name:dev2}" reason="not our event"

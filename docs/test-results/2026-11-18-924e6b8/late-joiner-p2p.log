@@ -1,0 +1,9 @@
+t=2026-11-18T10:07:44+0000 lvl=info msg="libp2p spork not active; starting legacy (devp2p/RLPX) backend" module=p2p
+t=2026-11-18T10:07:44+0000 lvl=info msg="Starting Server" module=p2p
+t=2026-11-18T10:07:44+0000 lvl=info msg="Listening, enode://5812b9ef80f01db8a3586c0745bdcce1c54c9ea3325e5ddd93c81d7cea1d2e6d29cc51cb99661b1436340928b3f6535bd6f6020d791f68815ee12acfb624e6d6@[::]:35995" module=p2p
+t=2026-11-18T10:07:44+0000 lvl=info msg="Listening on" module=p2p address=[::]:35995
+t=2026-11-18T10:09:33+0000 lvl=info msg="P2PBackend=libp2p; starting libp2p backend directly (skipping spork oracle)" module=p2p
+t=2026-11-18T10:09:33+0000 lvl=info msg="Starting Server (libp2p)" module=p2p
+t=2026-11-18T10:09:33+0000 lvl=info msg="peer database opened" module=p2p path=/root/.znn/network/libp2p-peerstore
+t=2026-11-18T10:09:33+0000 lvl=info msg="Listening on [/ip4/127.0.0.1/tcp/35995 /ip4/172.30.0.15/tcp/35995]" module=p2p
+t=2026-11-18T10:09:48+0000 lvl=info msg="dht discovery: dialing candidates" module=p2p dialing=2 table=5 peers=3 outbound=1 min=5
