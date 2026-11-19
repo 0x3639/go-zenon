@@ -405,7 +405,7 @@ rpc-method	LedgerApi.GetFrontierAccountBlock	E1:B-1 E1:B-2b
 rpc-method	LedgerApi.GetFrontierMomentum	SMOKE E1:B-1
 rpc-method	LedgerApi.GetMomentumBeforeTime	
 rpc-method	LedgerApi.GetMomentumByHash	
-rpc-method	LedgerApi.GetMomentumsByHeight	SMOKE E1:TestSporkEdge
+rpc-method	LedgerApi.GetMomentumsByHeight	SMOKE E1:TestSporkEdge E1:TestSporkStagedEnforcement
 rpc-method	LedgerApi.GetMomentumsByPage	SMOKE
 rpc-method	LedgerApi.GetUnconfirmedBlocksByAddress	E1:B-9
 rpc-method	LedgerApi.GetUnreceivedBlocksByAddress	E1:B-1
@@ -454,12 +454,12 @@ rpc-method	TokenAPI.GetByOwner	E1:TK-1
 rpc-method	TokenAPI.GetByZts	E1:TK-1 E1:TK-10 E1:TK-3 E1:TK-4 E1:TK-5 E1:TK-7 E1:TK-8 E1:TK-9
 spork	AcceleratorSpork	
 spork	BridgeAndLiquiditySpork	
-spork	DynamicPlasmaSpork	E7:S-7
-spork	EmbeddedRefundSpork	
-spork	EpochRewardTermsSpork	E7:S-7
+spork	DynamicPlasmaSpork	E7:S-1 E7:S-2 E7:S-5 E7:S-7
+spork	EmbeddedRefundSpork	E7:S-1 E7:S-2 E7:S-5
+spork	EpochRewardTermsSpork	E7:S-1 E7:S-2 E7:S-5 E7:S-7
 spork	HtlcSpork	
-spork	Libp2pSpork	
-spork	PtlcSpork	
+spork	Libp2pSpork	E7:S-1 E7:S-2 E7:S-5
+spork	PtlcSpork	E7:S-1 E7:S-2 E7:S-5
 subscription	AccountBlocksByAddress	
 subscription	AllAccountBlocks	
 subscription	Momentums	
