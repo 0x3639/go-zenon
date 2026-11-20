@@ -1,0 +1,13 @@
+e2e: endpoints [http://localhost:36997], chain 69, start height 33, account indexes from 3112
+e2e: sporks enforced: [accelerator dynamic-plasma htlc libp2p]
+e2e: node v0.0.10-alphanet-734-gabe1fa6, fast constants: false
+=== RUN   TestSporkEdge
+=== PAUSE TestSporkEdge
+=== CONT  TestSporkEdge
+=== RUN   TestSporkEdge/S-7_ack_below_the_highest_enforcement_refused
+=== RUN   TestSporkEdge/S-7b_fresh_ack_accepted_after_the_refusal
+--- PASS: TestSporkEdge (60.21s)
+    --- PASS: TestSporkEdge/S-7_ack_below_the_highest_enforcement_refused (0.00s)
+    --- PASS: TestSporkEdge/S-7b_fresh_ack_accepted_after_the_refusal (10.03s)
+PASS
+ok  	github.com/zenon-network/go-zenon/test/e2e	414.138s
