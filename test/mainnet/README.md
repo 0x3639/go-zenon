@@ -34,7 +34,7 @@ python3 test/mainnet/compare.py \
   `--addr-window` momentums on the test node), read in batches of
   `--batch-size`; a batch counts only if the frontier hashes of both nodes
   are identical before and after the batch. Then every `embedded.*` read
-  method in `test/inventory/coverage.tsv` (61 methods) with lazily resolved
+  method in `test/inventory/coverage.tsv` (60 methods) with lazily resolved
   arguments (pillar name, accelerator project/phase, bridge network/wrap/
   unwrap ids, ZNN zts, ...) and paging to the end (pageSize 1000).
 - **M-2d** controls: self-self at height 100 (must match) and a planted
