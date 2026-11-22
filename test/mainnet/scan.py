@@ -53,6 +53,16 @@ PAGE = 1000
 DETAILED = 10           # getDetailedMomentumsByHeight count per call
 PROGRESS_EVERY = 100_000
 
+# secp256k1 field prime, for the on-curve check of bridge key changes.
+SECP256K1_P = 2**256 - 2**32 - 977
+
+# The embedded bridge contract: only sends to this address whose data starts
+# with the selector are real ChangeTssECDSAPubKey calls.
+BRIDGE_CONTRACT = "z1qxemdeddedxdrydgexxxxxxxxxxxxxxxmqgr0d"
+
+# User-send account blocks are blockType 2.
+USER_SEND = 2
+
 
 def log(line, fh):
     fh.write(json.dumps(line, default=str) + "\n")
@@ -81,12 +91,19 @@ def rpc(endpoint, method, params=None, timeout=120, retries=3):
 
 
 def tool_commit():
+    """The commit the tool runs from, with -dirty appended unless the tree is
+    clean, so a validation run is attributable to the code that produced it."""
     try:
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         out = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
                              capture_output=True, text=True, timeout=10)
         if out.returncode == 0:
-            return out.stdout.strip()
+            commit = out.stdout.strip()
+            dirty = subprocess.run(["git", "-C", root, "status", "--porcelain"],
+                                   capture_output=True, text=True, timeout=10)
+            if dirty.returncode == 0 and dirty.stdout.strip():
+                return commit + "-dirty"
+            return commit
     except Exception:
         pass
     return "unknown"
@@ -103,16 +120,20 @@ def gate(endpoint):
                          f"{h.get('hash')}, expected {MAINNET_GENESIS_MOMENTUM}")
 
 
-def scan_headers(endpoint, to_h, fh):
-    """Walk momentum headers 1..to_h in pages, verifying hash links."""
+def scan_headers(endpoint, from_h, to_h, fh):
+    """Walk momentum headers from_h..to_h in pages, verifying hash links.
+    The last page is capped at to_h; anything short of to_h is a FAIL."""
     read = 0
     prev_hash = None
-    h = 1
-    last_h = 0
+    h = from_h
+    last_h = from_h - 1
     link_breaks = []
+    short = False
     while h <= to_h:
-        page = rpc(endpoint, "ledger.getMomentumsByHeight", [h, PAGE])["list"]
+        page = rpc(endpoint, "ledger.getMomentumsByHeight",
+                   [h, min(PAGE, to_h - h + 1)])["list"]
         if not page:
+            short = True
             break
         for i, m in enumerate(page):
             if prev_hash is not None and m.get("previousHash") != prev_hash:
@@ -128,44 +149,94 @@ def scan_headers(endpoint, to_h, fh):
         if read % PROGRESS_EVERY < PAGE:
             log({"case": "M-3-headers", "status": "INFO", "progress": read,
                  "atHeight": last_h}, fh)
-        if len(page) < PAGE:
+        if len(page) < PAGE or last_h >= to_h:
+            if last_h < to_h and len(page) < min(PAGE, to_h - h + 1):
+                short = True
             break
         h = last_h + 1
-    log({"case": "M-3-headers", "status": "PASS" if not link_breaks else "FAIL",
-         "momentumsRead": read, "toHeight": prev_hash and last_h,
+    status = "FAIL" if (link_breaks or short or last_h != to_h) else "PASS"
+    log({"case": "M-3-headers", "status": status,
+         "from": from_h, "momentumsRead": read, "toHeight": last_h,
+         "statedTo": to_h, "shortRead": short,
          "linkBreaks": link_breaks[:20], "linkBreakCount": len(link_breaks)}, fh)
-    return read, link_breaks
+    return read, link_breaks, (status == "PASS")
+
+
+def abi_first_string(raw):
+    """Decode the first `string` argument of an ABI call payload (offsets
+    are relative to the head, which starts right after the 4-byte
+    selector)."""
+    if len(raw) < 36:
+        return None
+    off = int.from_bytes(raw[4:36], "big")
+    start = 4 + off  # head begins at byte 4
+    if start + 32 > len(raw):
+        return None
+    ln = int.from_bytes(raw[start:start + 32], "big")
+    if start + 32 + ln > len(raw):
+        return None
+    return raw[start + 32:start + 32 + ln]
+
+
+def secp256k1_on_curve(dec):
+    """True iff dec is a secp256k1 public key on the curve: a 65-byte
+    uncompressed (0x04 || X || Y) or a 33-byte compressed (0x02/0x03 || X)
+    point.  None if it is neither format."""
+    if len(dec) == 65 and dec[0] == 4:
+        x = int.from_bytes(dec[1:33], "big")
+        y = int.from_bytes(dec[33:65], "big")
+        if x >= SECP256K1_P or y >= SECP256K1_P:
+            return False
+        return (y * y - (pow(x, 3, SECP256K1_P) + 7)) % SECP256K1_P == 0
+    if len(dec) == 33 and dec[0] in (2, 3):
+        x = int.from_bytes(dec[1:33], "big")
+        if x >= SECP256K1_P:
+            return False
+        rhs = (pow(x, 3, SECP256K1_P) + 7) % SECP256K1_P
+        # p % 4 == 3, so the square root is rhs**((p+1)/4) mod p.
+        y = pow(rhs, (SECP256K1_P + 1) // 4, SECP256K1_P)
+        if y * y % SECP256K1_P != rhs:
+            return False  # no square root: not on the curve at all
+        return (y & 1) == (dec[0] & 1) or ((SECP256K1_P - y) & 1) == (dec[0] & 1)
+    return None  # not a key we recognize
 
 
 def scan_blocks(endpoint, from_h, to_h, fh):
-    """Scan full account blocks over a height range."""
+    """Scan full account blocks over a height range. Momentum 1 is skipped:
+    getDetailedMomentumsByHeight does not answer at height 1 on full-history
+    nodes (getMomentumByHash does); the range is logged so the exclusion is
+    visible. The last page is capped at to_h; anything short is a FAIL."""
     momentums = 0
     blocks_read = 0
     bridge_keys = []
     high_diff = []
+    parse_failures = 0
     h = from_h
-    last_h = from_h - 1
+    if h == 1:
+        log({"case": "M-3-blocks", "status": "INFO",
+             "detail": "momentum-1 excluded: getDetailedMomentumsByHeight does not "
+                       "answer at height 1 on full-history nodes; read it via "
+                       "getMomentumByHash if ever needed"}, fh)
+        h = 2
+    last_h = h - 1
+    short = False
     while h <= to_h:
+        want = min(DETAILED, to_h - h + 1)
         page = rpc(endpoint, "ledger.getDetailedMomentumsByHeight",
-                   [h, DETAILED]).get("list") or []
+                   [h, want]).get("list") or []
         if not page:
+            short = True
             break
         for e in page:
             m = e["momentum"]
             momentums += 1
-            try:
-                mdiff = int(m.get("difficulty", "0"))
-            except (ValueError, TypeError):
-                mdiff = 0
-            if mdiff >= HIGH_DIFF_THRESHOLD:
-                high_diff.append({"kind": "momentum", "height": m.get("height"),
-                                  "hash": m.get("hash"), "difficulty": m.get("difficulty")})
             for b in e.get("blocks") or []:
                 blocks_read += 1
                 try:
                     bdiff = int(b.get("difficulty", "0") or 0)
                 except (ValueError, TypeError):
                     bdiff = 0
+                    parse_failures += 1
                 if bdiff >= HIGH_DIFF_THRESHOLD:
                     high_diff.append({"kind": "block", "height": m.get("height"),
                                       "hash": b.get("hash"),
@@ -175,29 +246,54 @@ def scan_blocks(endpoint, from_h, to_h, fh):
                 try:
                     raw = base64.b64decode(data)
                 except Exception:
-                    pass
-                if raw[:4] == BRIDGE_KEY_SELECTOR:
+                    parse_failures += 1
+                if (raw[:4] == BRIDGE_KEY_SELECTOR
+                        and b.get("toAddress") == BRIDGE_CONTRACT
+                        and b.get("blockType") == USER_SEND):
+                    key_b64 = abi_first_string(raw)
+                    key_status = "not-decodable"
+                    key_dec = None
+                    if key_b64:
+                        try:
+                            key_dec = base64.b64decode(key_b64)
+                            on_curve = secp256k1_on_curve(key_dec)
+                            key_status = ("on-curve" if on_curve else
+                                          "OFF-CURVE" if on_curve is False else
+                                          "unexpected-key-format")
+                        except Exception:
+                            key_status = "not-decodable"
                     bridge_keys.append({"height": m.get("height"),
                                         "momentumHash": m.get("hash"),
                                         "address": b.get("address"),
                                         "blockHash": b.get("hash"),
-                                        "selector": BRIDGE_KEY_SELECTOR.hex()})
+                                        "selector": BRIDGE_KEY_SELECTOR.hex(),
+                                        "pubKeySha256": key_b64 and
+                                            hashlib.sha256(key_b64).hexdigest()[:16],
+                                        "keyCheck": key_status})
         last_h = page[-1]["momentum"].get("height")
         if momentums % PROGRESS_EVERY < DETAILED:
             log({"case": "M-3-blocks", "status": "INFO", "momentums": momentums,
                  "blocks": blocks_read, "atHeight": last_h}, fh)
-        if len(page) < DETAILED:
+        if len(page) < want:
+            if last_h < to_h:
+                short = True
             break
         h = last_h + 1
     for k in bridge_keys:
         log({"case": "M-3-bridgeKey", **k}, fh)
     for d in high_diff:
         log({"case": "M-3-highDifficulty", **d}, fh)
-    log({"case": "M-3-blocks", "status": "PASS", "momentumsRead": momentums,
-         "accountBlocksRead": blocks_read, "toHeight": last_h,
+    status = "FAIL" if (short or last_h != to_h
+                        or any(k["keyCheck"] != "on-curve" for k in bridge_keys)) \
+        else "PASS"
+    log({"case": "M-3-blocks", "status": status, "from": from_h,
+         "momentumsRead": momentums, "accountBlocksRead": blocks_read,
+         "toHeight": last_h, "statedTo": to_h, "shortRead": short,
          "bridgeKeySends": len(bridge_keys),
-         "highDifficultyItems": len(high_diff)}, fh)
-    return momentums, blocks_read, bridge_keys
+         "distinctBridgeKeys": len({k["pubKeySha256"] for k in bridge_keys}),
+         "highDifficultyItems": len(high_diff),
+         "parseFailures": parse_failures}, fh)
+    return momentums, blocks_read, bridge_keys, (status == "PASS")
 
 
 def main():
@@ -229,12 +325,16 @@ def main():
              "detail": "chain id 1 and mainnet genesis momentum verified"}, fh)
         fail = 0
         if args.headers:
-            _, breaks = scan_headers(args.node, min(to_h, frontier), fh)
+            _, breaks, ok = scan_headers(args.node, args.from_h, min(to_h, frontier), fh)
             fail += len(breaks)
+            if not ok:
+                fail += 1
         if args.blocks:
             if to_h > frontier:
                 sys.exit(f"--to {to_h} is above the frontier {frontier}")
-            scan_blocks(args.node, args.from_h, to_h, fh)
+            _, _, _, ok = scan_blocks(args.node, args.from_h, to_h, fh)
+            if not ok:
+                fail += 1
         log({"case": "summary", "fail": fail}, fh)
     if not args.out:
         with open(path) as fh:

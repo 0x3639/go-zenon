@@ -185,12 +185,19 @@ def rpc_catching(endpoint, method, params=None, timeout=60):
 
 
 def tool_commit():
+    """The commit the tool runs from, with -dirty appended unless the tree is
+    clean, so a validation run is attributable to the code that produced it."""
     try:
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         out = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
                              capture_output=True, text=True, timeout=10)
         if out.returncode == 0:
-            return out.stdout.strip()
+            commit = out.stdout.strip()
+            dirty = subprocess.run(["git", "-C", root, "status", "--porcelain"],
+                                   capture_output=True, text=True, timeout=10)
+            if dirty.returncode == 0 and dirty.stdout.strip():
+                return commit + "-dirty"
+            return commit
     except Exception:
         pass
     return "unknown"
@@ -238,7 +245,12 @@ def compare_momentum_answer(ref_a, test_a):
     rl = ref_a.get("list") or []
     tl = test_a.get("list") or []
     if not rl or not tl:
-        return "INFO", {"detail": "no-momentum-at-height", "ref": len(rl), "test": len(tl)}
+        if not rl and not tl:
+            return "INFO", {"detail": "no-momentum-at-height", "ref": 0, "test": 0}
+        # Blocks/momentums on exactly one side: the full-history reference
+        # (#17) serves every height, so one-sided availability is a FAIL.
+        return "FAIL", {"detail": "momentum-availability-mismatch",
+                        "ref": len(rl), "test": len(tl)}
     r, t = rl[0], tl[0]
     rm, tm = r["momentum"], t["momentum"]
     diffs = []
@@ -265,9 +277,10 @@ def compare_momentum_answer(ref_a, test_a):
             diffs.append({"field": "blocks", "ref": len(rb), "test": len(tb),
                           "firstDiff": first})
     elif rb or tb:
-        # A pruned reference node serves no old account blocks; that is an
-        # availability note, not a chain difference.
+        # Blocks on exactly one side: the #17 reference node is full
+        # history, so this is a chain difference, not an availability note.
         out["detail"] = "block-availability-mismatch"
+        diffs.append({"field": "blocks", "ref": len(rb), "test": len(tb)})
     return ("FAIL" if diffs else "PASS"), {**out, **({"diffs": diffs} if diffs else {})}
 
 
@@ -372,18 +385,24 @@ def page_all(endpoint, method, fixed_args):
     return merged, MAX_PAGES, True
 
 
-def sample_addresses(endpoint, S, want, fh):
+def sample_addresses(endpoint, ref, S, want, fh):
     """The sampling rule of 0x3639/go-zenon#17, so the sample is the same
     from any node and can be checked later: the seed is the momentum hash
     at height S, the first height divisible by 10,000 after the test node
     reports sync state 2.  For i = 0, 1, 2 and so on, sha3-256 of the seed
     followed by i as 8 big-endian bytes; the first 8 bytes of the digest,
     read as a big-endian integer n, name the momentum at 1 + (n mod S).
-    Collect the addresses of the account blocks in those momentums until
-    `want` distinct ones, and record for each: the address, the height it
-    was found at, and the account's height and frontier block hash at
-    sampling time."""
+    Collect the address of each account block in those momentums until
+    `want` distinct ones, stopping inside the momentum that reaches `want`.
+    Record for each: the address, the height it was found at, and the
+    account's height and frontier block hash at sampling time."""
+    if S <= 0 or S % 10000 != 0:
+        raise SystemExit(f"sample rule: S={S} is not a height divisible by 10,000")
     seed_hex = rpc(endpoint, "ledger.getMomentumsByHeight", [S, 1])["list"][0]["hash"]
+    ref_seed = rpc(ref, "ledger.getMomentumsByHeight", [S, 1])["list"][0]["hash"]
+    if ref_seed != seed_hex:
+        raise SystemExit(f"sample rule: seed hash mismatch at S={S} "
+                         f"(ref {ref_seed} != test {seed_hex}); nodes not on one chain")
     seed = bytes.fromhex(seed_hex.removeprefix("0x"))
     log({"case": "M-2c", "status": "INFO", "detail": "sample-rule",
          "S": S, "seedHash": seed_hex, "want": want}, fh)
@@ -404,11 +423,14 @@ def sample_addresses(endpoint, S, want, fh):
                 f"skipped index.")
         for e in page:
             for b in e.get("blocks") or []:
-                for k in ("address", "toAddress"):
-                    a = b.get(k)
-                    if a and a not in seen:
-                        seen.add(a)
-                        order.append({"address": a, "foundHeight": h})
+                a = b.get("address")
+                if a and a not in seen:
+                    seen.add(a)
+                    order.append({"address": a, "foundHeight": h})
+                    if len(order) == want:
+                        break
+            if len(order) == want:
+                break
     for row in order:
         page = rpc(endpoint, "ledger.getAccountBlocksByPage",
                    [row["address"], 0, 1], timeout=30).get("list") or []
@@ -468,13 +490,30 @@ def run(ref, test, args, fh):
         r["status"] = "INFO"; r["detail"] = "height-mismatch-syncing"
     log(r, fh)
 
+    # The frontier itself, guarded by the M-2b result: a full
+    # getDetailedMomentumsByHeight answer at the frontier height is part of
+    # the spec; it is only meaningful when both nodes are on the same
+    # frontier hash.
+    if fr["hash"] == ft["hash"]:
+        r = {"case": "M-2a", "height": fr["height"], "frontier": True}
+        try:
+            status, detail = compare_momentum_answer(
+                detailed(ref, fr["height"]), detailed(test, ft["height"]))
+            r["status"] = status; r.update(detail)
+        except Exception as e:
+            r["status"] = "ERROR"; r["error"] = str(e)[:200]
+        log(r, fh)
+    else:
+        log({"case": "M-2a", "height": fr["height"], "frontier": True,
+             "status": "INFO", "detail": "skipped: frontier hashes differ (see M-2b)"}, fh)
+
     # ---- M-2c: frontier state
-    # The sample is drawn by the #17 rule from the test node: it carries
-    # the full history, while a pruned reference node serves account blocks
-    # only near the frontier.  The manifest (address, found height, account
-    # height, frontier block hash at sampling) goes to its own file, hashed
-    # into the log, so the sample can be checked later from any node.
-    rows = sample_addresses(test, args.sample_height, args.addr_count, fh)
+    # The sample is drawn by the #17 rule from the test node (the seed is
+    # cross-checked against the reference node, which is full history).
+    # The manifest (address, found height, account height, frontier block
+    # hash at sampling) goes to its own file, hashed into the log, so the
+    # sample can be checked later from any node.
+    rows = sample_addresses(test, ref, args.sample_height, args.addr_count, fh)
     with open(args.sample_out, "w") as sf:
         for row in rows:
             sf.write(json.dumps(row) + "\n")
@@ -511,7 +550,8 @@ def run(ref, test, args, fh):
     # Embedded getters: run the identical walk on both nodes and compare.
     # RPC-level errors are comparable answers: identical errors on both sides
     # are a PASS (e.g. a not-found id or a getter missing on the release),
-    # an error on exactly one side is an INFO, not a FAIL.
+    # an error on exactly one side is a FAIL (the full-history reference
+    # serves every method, so one-sided breakage is a regression).
     addr = addrs[0] if addrs else \
         "z1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
     ctx = Ctx(ref, addr)
@@ -561,7 +601,7 @@ def run(ref, test, args, fh):
                 r["status"] = "PASS" if rerr == terr else "FAIL"
             r["refError"], r["testError"] = rerr[:200], terr[:200]
         elif rerr is not None or terr is not None:
-            r["status"] = "INFO"; r["detail"] = "error-on-one-side"
+            r["status"] = "FAIL"; r["detail"] = "error-on-one-side"
             r["refError"], r["testError"] = (rerr or "")[:200], (terr or "")[:200]
         elif h_before[0] == h_before[1] == h_after[0] == h_after[1]:
             r["status"] = "PASS" if rr == tt else "FAIL"
