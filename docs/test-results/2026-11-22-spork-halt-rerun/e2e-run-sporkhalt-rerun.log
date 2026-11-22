@@ -1,0 +1,29 @@
+2026-11-22 re-run of TestSporkUnknownBinary on the committed infra
+(worktree at test/spork-cases-halt + fix commits; devnet from
+docker-compose.yml + test/devnet/compose.variant.yml (staged) +
+test/devnet/compose.oldnode.yml; oldnode image built by
+OLDNODE=1 test/devnet/build-image.sh).
+
+Driver: E2E_OLDNODE=1 E2E_DEVNET_GENESIS=$PWD/test/devnet/genesis/staged.json \
+  E2E_RPC=http://localhost:37997,http://localhost:35991 \
+  go test -tags e2e -v -run TestSporkUnknownBinary -timeout 30m ./test/e2e/
+
+e2e: endpoints [http://localhost:37997 http://localhost:35991], chain 69, start height 83
+e2e: sporks enforced: [accelerator bridge dynamic-plasma embedded-refund epoch-reward-terms htlc libp2p ptlc]
+=== RUN   TestSporkUnknownBinary
+=== RUN   TestSporkUnknownBinary/S-4_old_node_cannot_pass_the_enforcement_height
+    (oldnode pinned at 69 while the five nodes produced past it;
+     "Detected an unimplemented spork" in the container log)
+=== RUN   TestSporkUnknownBinary/X-4_nodes_with_the_spork_continued_past_it
+=== RUN   TestSporkUnknownBinary/S-4c_binary_without_the_spork_cannot_start_on_a_past_enforcement_db
+    sporkhalt_test.go:254: old binary on a past-enforcement db exited with code 1 (dev exits 1 via cli.go; v0.0.10 exited 2 from chain.Init)
+    sporkhalt_test.go:261: oldnode volume recorded at height 88 before the recovery swap
+=== RUN   TestSporkUnknownBinary/S-4b_recovery_binary_continues_without_resync
+    sporkhalt_test.go:281: recovered node reached height 89 (frontier at start 89, first boot frontier 89) on its existing data
+--- PASS: TestSporkUnknownBinary (50.47s)
+    --- PASS: TestSporkUnknownBinary/S-4_old_node_cannot_pass_the_enforcement_height (30.06s)
+    --- PASS: TestSporkUnknownBinary/X-4_nodes_with_the_spork_continued_past_it (0.00s)
+    --- PASS: TestSporkUnknownBinary/S-4c_binary_without_the_spork_cannot_start_on_a_past_enforcement_db (12.86s)
+    --- PASS: TestSporkUnknownBinary/S-4b_recovery_binary_continues_without_resync (7.54s)
+PASS
+ok  	github.com/zenon-network/go-zenon/test/e2e	640.850s

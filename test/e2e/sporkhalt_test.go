@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,11 +27,10 @@ import (
 //
 //   - live node (in sync or syncing): the momentum pool refuses the
 //     enforcement-height momentum, rolls it back and the node stays
-//     running one below the height (chain/momentum_pool.go; docs/
-//     test-results 2026-11-18 finding 3). Released v0.0.10 called
-//     os.Exit(2) on the same condition (chain/momentum_pool.go at
-//     c3e0e88) — the upgrade-day rehearsal on v0.0.10 measured the
-//     crash-loop exit 2 (results/phase-28-upgrade-rehearsal).
+//     running one below the height (chain/momentum_pool.go). Released
+//     v0.0.10 called os.Exit(2) on the same condition (chain/
+//     momentum_pool.go at c3e0e88), measured in an upgrade-day rehearsal
+//     of the official binary on a devnet.
 //   - restart with a data directory whose frontier is already at or past
 //     an enforced spork the binary lacks: chain.Init refuses to start the
 //     node, the start error reaches cli.go and the process exits with
@@ -41,19 +41,26 @@ import (
 //
 //   - the staged genesis (embedded-refund enforced at 70; ptlc at 60 and
 //     epoch-reward-terms at 80 distinguish it from stock/all-on), and
+//
 //   - a sixth container "znnd-devnet-oldnode" running a binary with the
 //     EmbeddedRefundSpork entry removed from ImplementedSporksMap (built
 //     from the same commit otherwise), started with restart "no" so its
-//     state stays inspectable. If the container joins after the libp2p
-//     spork height (20 on staged), its config needs "P2PBackend":
-//     "libp2p": a stock-config late joiner cannot sync past the swap
-//     (docs/test-results 2026-11-18 finding 2, issue #105). See
-//     results/phase-30-test-framework/compose-oldnode.yml in the lab
-//     workspace for the service used in the reference run.
+//     state stays inspectable. Everything needed is in the repo:
+//
+//     OLDNODE=1 test/devnet/build-image.sh        # the noref image
+//     docker compose -f docker-compose.yml -f test/devnet/compose.variant.yml \
+//     -f test/devnet/compose.oldnode.yml up -d oldnode
+//
+//     The overlay mounts test/devnet/oldnode/syncnode/config.json over the
+//     syncnode role config: it sets "P2PBackend": "libp2p", because a
+//     stock-config late joiner cannot sync past the libp2p swap spork
+//     (zenon-network/go-zenon issue #105) and the oldnode always joins
+//     after that height (20 on staged).
 //
 // Nothing here touches the five standard nodes: the case is safe to run
 // alongside the normal groups on a staged devnet. Set E2E_OLDNODE=1 to
-// enable.
+// enable; E2E_DEVNET_GENESIS must point at the staged genesis file (the
+// same DEVNET_GENESIS test/devnet/up.sh exports).
 func TestSporkUnknownBinary(t *testing.T) {
 	if os.Getenv("E2E_OLDNODE") != "1" {
 		t.Skip("needs the oldnode container and docker access; set E2E_OLDNODE=1")
@@ -71,8 +78,17 @@ func TestSporkUnknownBinary(t *testing.T) {
 	const oldnode = "znnd-devnet-oldnode"
 	network := envOr("E2E_OLDNET", "znnd-devnet")
 	image := envOr("E2E_DEVNET_IMAGE", "go-zenon-devnet:latest")
-	volume := envOr("E2E_OLDNODE_VOLUME", "go-zenon-spork-cases_oldnode-data")
+	volume := envOr("E2E_OLDNODE_VOLUME", "znnd-oldnode-data")
 	rpc := envOr("E2E_OLDNODE_RPC", "http://localhost:36996")
+	genesis := os.Getenv("E2E_DEVNET_GENESIS")
+	if genesis == "" {
+		t.Fatal("E2E_DEVNET_GENESIS must point at the staged genesis file (the DEVNET_GENESIS test/devnet/up.sh exports)")
+	}
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldCfg := filepath.Join(root, "test", "devnet", "oldnode", "syncnode", "config.json")
 	docker := func(args ...string) (string, error) {
 		out, err := exec.Command("docker", args...).CombinedOutput()
 		return strings.TrimSpace(string(out)), err
@@ -123,21 +139,32 @@ func TestSporkUnknownBinary(t *testing.T) {
 		}
 	}
 	// run starts a container on the oldnode data volume with the given
-	// image and waits for its RPC to answer.
-	run := func(name, img string) {
+	// image and waits for its RPC to answer. The staged genesis and the
+	// libp2p syncnode config override are mounted exactly as the oldnode
+	// compose service mounts them (test/devnet/compose.oldnode.yml), so a
+	// first boot seeds the same chain as the five standard nodes.
+	run := func(name, img string) uint64 {
 		t.Helper()
 		out, err := docker("run", "-d", "--name", name, "--network", network,
-			"-v", volume+":/root/.znn", "-e", "ZNND_ROLE=syncnode",
+			"-v", volume+":/root/.znn",
+			"-v", genesis+":/devnet/genesis.json:ro",
+			"-v", oldCfg+":/devnet/syncnode/config.json:ro",
+			"-e", "ZNND_ROLE=syncnode",
 			"-p", "36996:35997", img)
 		if err != nil {
 			t.Fatalf("start %s (%s): %v (%s)", name, img, err, out)
 		}
-		waitFrontier(1, "boot of "+name)
+		return waitFrontier(1, "boot of "+name)
 	}
 	logsContain := func(name, needle string) bool {
 		out, _ := docker("logs", name)
 		return strings.Contains(out, needle)
 	}
+
+	// volumeAt records how far the oldnode data directory had synced
+	// before the recovery swap; S-4b asserts the recovered node continues
+	// from at least here instead of resyncing from genesis.
+	var volumeAt uint64
 
 	t.Run("S-4_old_node_cannot_pass_the_enforcement_height", func(t *testing.T) {
 		cover(t, "E7", "spork", "EmbeddedRefundSpork")
@@ -185,29 +212,44 @@ func TestSporkUnknownBinary(t *testing.T) {
 		// Upgrade-day edge: a data directory that already passed the
 		// enforcement height cannot boot a binary that lacks the spork.
 		// Get the volume past the height with the stock image, then try
-		// the old binary and record how it refuses.
+		// the old binary and record how it refuses. The height the volume
+		// reached is recorded: S-4b asserts the recovered node continues
+		// from at least here instead of resyncing from genesis.
 		if out, err := docker("rm", "-f", oldnode); err != nil {
 			t.Fatalf("remove the live old node: %v (%s)", err, out)
 		}
 		run("oldnode-sync-past", image)
-		waitFrontier(enf+3, "stock binary syncing the oldnode volume past the enforcement height")
+		volumeAt = waitFrontier(enf+3, "stock binary syncing the oldnode volume past the enforcement height")
 		if out, err := docker("rm", "-f", "oldnode-sync-past"); err != nil {
 			t.Fatalf("remove the sync-past container: %v (%s)", err, out)
 		}
 		// The old binary on the same volume: chain.Init must refuse to
 		// start. This tree exits 1 (cli.go on the start error); released
 		// v0.0.10 exited 2 from chain.Init. Assert the designed refusal,
-		// not a specific code, and log the code for the record.
-		out, err := docker("run", "--name", oldnode, "--network", network,
-			"-v", volume+":/root/.znn", "-e", "ZNND_ROLE=syncnode",
+		// not a specific code, and log the code for the record. Started
+		// detached and polled so a surprise start cannot hang the test.
+		out, err := docker("run", "-d", "--name", oldnode, "--network", network,
+			"-v", volume+":/root/.znn",
+			"-v", genesis+":/devnet/genesis.json:ro",
+			"-v", oldCfg+":/devnet/syncnode/config.json:ro",
+			"-e", "ZNND_ROLE=syncnode",
 			"-p", "36996:35997", envOr("E2E_OLDNODE_IMAGE", "go-zenon-devnet-noref:latest"))
-		_ = out // the container is expected to exit non-zero
-		if err == nil {
-			t.Fatal("the old binary started on a past-enforcement database; want a start refusal")
+		if err != nil {
+			t.Fatalf("start the old binary on the past-enforcement volume: %v (%s)", err, out)
 		}
-		status, code, err := state(oldnode)
-		if err != nil || status != "exited" {
-			t.Fatalf("old binary container state %q (%v), want exited", status, err)
+		deadline := time.Now().Add(3 * time.Minute)
+		var status string
+		var code int
+		for {
+			status, code, err = state(oldnode)
+			if err == nil && status == "exited" {
+				break
+			}
+			if time.Now().After(deadline) {
+				docker("rm", "-f", oldnode)
+				t.Fatal("old binary did not exit within 3 min on a past-enforcement database; it apparently started — want a start refusal")
+			}
+			time.Sleep(2 * time.Second)
 		}
 		t.Logf("old binary on a past-enforcement db exited with code %d (dev exits 1 via cli.go; v0.0.10 exited 2 from chain.Init)", code)
 		if !logsContain(oldnode, "unimplemented spork") {
@@ -216,20 +258,26 @@ func TestSporkUnknownBinary(t *testing.T) {
 		if out, err := docker("rm", "-f", oldnode); err != nil {
 			t.Fatalf("remove the refused container: %v (%s)", err, out)
 		}
+		t.Logf("oldnode volume recorded at height %d before the recovery swap", volumeAt)
 	})
 
 	t.Run("S-4b_recovery_binary_continues_without_resync", func(t *testing.T) {
 		// Recovery per the upgrade runbook: stop (done above), swap to a
 		// binary that implements the spork, start on the SAME data
-		// directory. The chain continues without a resync, so the
-		// recovered node reaches the live frontier.
-		run(oldnode, image)
+		// directory. The chain continues without a resync: the first
+		// frontier after boot must already be at or beyond the height the
+		// volume had reached before the swap (a resync from genesis would
+		// boot far below it), and the node then reaches the live frontier.
+		first := run(oldnode, image)
 		t.Cleanup(func() { docker("rm", "-f", oldnode) })
+		if first < volumeAt {
+			t.Errorf("recovered node first frontier is %d, below the recorded volume height %d — it resynced instead of continuing on the existing data", first, volumeAt)
+		}
 		want, err := net.Frontier()
 		if err != nil {
 			t.Fatal(err)
 		}
 		got := waitFrontier(want.Height, "recovered node catching up on its existing data")
-		t.Logf("recovered node reached height %d (frontier at start %d) on its existing data", got, want.Height)
+		t.Logf("recovered node reached height %d (frontier at start %d, first boot frontier %d) on its existing data", got, want.Height, first)
 	})
 }
