@@ -28,6 +28,7 @@ and the commit the tool was built from.
       --out results.jsonl
 """
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -371,28 +372,52 @@ def page_all(endpoint, method, fixed_args):
     return merged, MAX_PAGES, True
 
 
-def derive_addresses(endpoint, start, window, want):
-    """First-seen unique addresses from account blocks of the last `window`
-    momentums at or below `start`, read in pages of 10 walking backwards."""
+def sample_addresses(endpoint, S, want, fh):
+    """The sampling rule of 0x3639/go-zenon#17, so the sample is the same
+    from any node and can be checked later: the seed is the momentum hash
+    at height S, the first height divisible by 10,000 after the test node
+    reports sync state 2.  For i = 0, 1, 2 and so on, sha3-256 of the seed
+    followed by i as 8 big-endian bytes; the first 8 bytes of the digest,
+    read as a big-endian integer n, name the momentum at 1 + (n mod S).
+    Collect the addresses of the account blocks in those momentums until
+    `want` distinct ones, and record for each: the address, the height it
+    was found at, and the account's height and frontier block hash at
+    sampling time."""
+    seed_hex = rpc(endpoint, "ledger.getMomentumsByHeight", [S, 1])["list"][0]["hash"]
+    seed = bytes.fromhex(seed_hex.removeprefix("0x"))
+    log({"case": "M-2c", "status": "INFO", "detail": "sample-rule",
+         "S": S, "seedHash": seed_hex, "want": want}, fh)
     seen, order = set(), []
-    lo = max(1, start - window + 1)
-    h_hi = start
-    while h_hi >= lo and len(order) < want:
-        h_lo = max(lo, h_hi - 9)
+    i = 0
+    while len(order) < want:
+        d = hashlib.sha3_256(seed + i.to_bytes(8, "big")).digest()
+        h = 1 + int.from_bytes(d[:8], "big") % S
+        i += 1
         try:
-            page = rpc(endpoint, "ledger.getDetailedMomentumsByHeight",
-                       [h_lo, h_hi - h_lo + 1]).get("list") or []
-        except Exception:
-            h_hi = h_lo - 1
-            continue
+            page = detailed(endpoint, h).get("list") or []
+        except Exception as e:
+            # Never skip an index silently: the sample would no longer be
+            # the rule's output and two runs could draw different samples.
+            raise SystemExit(
+                f"sample rule: momentum at height {h} (i={i - 1}) could not be "
+                f"read after retries: {e}. Refusing to continue with a "
+                f"skipped index.")
         for e in page:
             for b in e.get("blocks") or []:
                 for k in ("address", "toAddress"):
                     a = b.get(k)
                     if a and a not in seen:
                         seen.add(a)
-                        order.append(a)
-        h_hi = h_lo - 1
+                        order.append({"address": a, "foundHeight": h})
+    for row in order:
+        page = rpc(endpoint, "ledger.getAccountBlocksByPage",
+                   [row["address"], 0, 1], timeout=30).get("list") or []
+        if page:
+            row["accountHeight"] = page[0].get("height")
+            row["frontierBlockHash"] = page[0].get("hash")
+        else:
+            row["accountHeight"] = 0
+            row["frontierBlockHash"] = None
     return order
 
 
@@ -405,7 +430,7 @@ def run(ref, test, args, fh):
          "toolCommit": tool_commit(),
          "startedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
          "ref": ref, "test": test,
-         "params": {"addrCount": args.addr_count, "addrWindow": args.addr_window,
+         "params": {"addrCount": args.addr_count, "sampleHeight": args.sample_height,
                     "batchSize": args.batch_size},
          "leftOut": LEFT_OUT}, fh)
 
@@ -444,14 +469,20 @@ def run(ref, test, args, fh):
     log(r, fh)
 
     # ---- M-2c: frontier state
-    common = min(fr["height"], ft["height"])
-    # Derive from the test node: it carries the full history, while a
-    # pruned reference node serves account blocks only near the frontier.
-    addrs = derive_addresses(test, common, args.addr_window, args.addr_count)
-    log({"case": "M-2c", "status": "INFO", "detail": "derived-addresses",
-         "count": len(addrs),
-         "source": f"first-seen unique addresses from account blocks of momentums "
-                   f"{max(1, common - args.addr_window)}..{common} on the test node"}, fh)
+    # The sample is drawn by the #17 rule from the test node: it carries
+    # the full history, while a pruned reference node serves account blocks
+    # only near the frontier.  The manifest (address, found height, account
+    # height, frontier block hash at sampling) goes to its own file, hashed
+    # into the log, so the sample can be checked later from any node.
+    rows = sample_addresses(test, args.sample_height, args.addr_count, fh)
+    with open(args.sample_out, "w") as sf:
+        for row in rows:
+            sf.write(json.dumps(row) + "\n")
+    manifest_hash = hashlib.sha256(
+        open(args.sample_out, "rb").read()).hexdigest()
+    addrs = [r["address"] for r in rows]
+    log({"case": "M-2c", "status": "INFO", "detail": "sample-manifest",
+         "count": len(addrs), "file": args.sample_out, "sha256": manifest_hash}, fh)
 
     for i in range(0, len(addrs), args.batch_size):
         batch = addrs[i:i + args.batch_size]
@@ -583,12 +614,18 @@ def main():
     ap.add_argument("--ref", default="http://127.0.0.1:35997")
     ap.add_argument("--test", default="http://127.0.0.1:36997")
     ap.add_argument("--addr-count", type=int, default=1000)
-    ap.add_argument("--addr-window", type=int, default=25000)
+    ap.add_argument("--sample-height", type=int, required=True,
+                    help="first height divisible by 10,000 after the test node "
+                         "reported sync state 2 (the #17 sampling rule's S)")
     ap.add_argument("--batch-size", type=int, default=50)
     ap.add_argument("--out", default="")
+    ap.add_argument("--sample-out", default="",
+                    help="where the sample manifest is written (default: <out>.sample.jsonl)")
     args = ap.parse_args()
 
     path = args.out or os.path.join(os.environ.get("TMPDIR", "/tmp"), "compare-results.jsonl")
+    if not args.sample_out:
+        args.sample_out = path + ".sample.jsonl"
     with open(path, "w") as fh:
         run(args.ref, args.test, args, fh)
     by_case = summarize(path)

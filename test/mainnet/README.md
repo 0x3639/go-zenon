@@ -19,8 +19,9 @@ mainnet host). Both tools:
 python3 test/mainnet/compare.py \
     --ref http://127.0.0.1:35997 \          # v0.0.10 reference node
     --test http://127.0.0.1:36997 \         # dev binary under test
-    --addr-count 1000 --addr-window 25000 \ # M-2c address derivation
-    --out results.jsonl
+    --sample-height 14700000 \               # S of the #17 sampling rule
+    --addr-count 1000 --batch-size 50 \     # M-2c sample size / batching
+    --out results.jsonl                      # sample manifest: results.jsonl.sample.jsonl
 ```
 
 - **M-2a**: full `ledger.getDetailedMomentumsByHeight` answers (momentum
@@ -29,12 +30,23 @@ python3 test/mainnet/compare.py \
   frontier. Heights the test node has not synced to are `INFO`.
 - **M-2b**: frontier momentum hash; same height with different hash is a
   `FAIL` (split chain).
-- **M-2c**: frontier state. Account infos are derived deterministically
-  (first-seen unique addresses from account blocks of the last
-  `--addr-window` momentums on the test node), read in batches of
+- **M-2c**: frontier state. The 1,000-address sample is drawn by the rule
+  of 0x3639/go-zenon#17: seed = the momentum hash at height `S` (the first
+  height divisible by 10,000 after the test node reports sync state 2);
+  for `i` = 0, 1, 2, ..., `sha3-256(seed || i as 8 big-endian bytes)`, the
+  first 8 bytes of the digest as a big-endian integer `n` name the momentum
+  at `1 + (n mod S)`; collect the addresses of the account blocks in those
+  momentums until there are `--addr-count` distinct ones. The manifest —
+  address, the height it was found at, and the account's height and
+  frontier block hash at sampling time — is written to `--sample-out`, one
+  JSON line per address, with its sha256 in the log, so the sample can be
+  checked later from any node. Account infos are read in batches of
   `--batch-size`; a batch counts only if the frontier hashes of both nodes
-  are identical before and after the batch. Then every `embedded.*` read
-  method in `test/inventory/coverage.tsv` (60 methods) with lazily resolved
+  are identical before and after the batch. Then the getters: every
+  `embedded.*` read method listed in `test/inventory/coverage.tsv` (57) plus
+  `embedded.token.getAll`/`getByOwner`/`getByZts`, which the argument
+  resolution itself needs (those three are not in coverage.tsv — a coverage
+  gap worth its own line, they are run anyway), with lazily resolved
   arguments (pillar name, accelerator project/phase, bridge network/wrap/
   unwrap ids, ZNN zts, ...) and paging to the end (pageSize 1000).
 - **M-2d** controls: self-self at height 100 (must match) and a planted
@@ -53,11 +65,12 @@ Left out of the getter list (spec: listed): `stats.*` (node-local),
 `ledger.getUnconfirmedBlocksByAddress` (unconfirmed pool), all write methods
 and subscriptions.
 
-**Validation** (results/ extract in docs/test-results/ on the PR): self-self
-run against one v0.0.10 node — M-2a 15 PASS, M-2b PASS, account-info batches
-PASS, 59/60 getters PASS with one `frontier-moved` INFO, controls 2 PASS,
-exit 0; cross-run against a `dev@54f6bad` node mid-sync — all comparable
-cases either PASS or INFO, exit 0.
+**Validation** (self-self against one v0.0.10 node, 2026-11-22, S = 14,700,000): exit 0 —
+M-2a 15 PASS, M-2b PASS, sample drawn per the rule above (manifest 1,004 addresses,
+sha256 in the log; independently re-simulated height-for-height outside the tool:
+exact match), M-2c-accountInfos 21/21 batches PASS, getters 59 PASS + 1
+`frontier-moved` INFO, controls 2 PASS. An address that never transacted records
+`accountHeight` 0 and a null frontier hash (it can appear as a `toAddress`).
 
 ## `scan.py` — M-3: mainnet history scanner
 
