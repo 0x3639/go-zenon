@@ -220,15 +220,27 @@ def detailed(endpoint, h):
     return rpc(endpoint, "ledger.getDetailedMomentumsByHeight", [h, 1])
 
 
+# PillarInfo fields served from a node-local consensus cache (refreshed
+# asynchronously, at most every 5 min): weight, rank and currentStats
+# legitimately differ between two nodes on the same frontier (see #17).
+# Guarded by the producerAddress discriminator so a same-named field in
+# another structure is never silently stripped.
+PILLAR_NODE_LOCAL = ("weight", "rank", "currentStats")
+
+
 def normalize(value):
     """Strip node-local contextual fields that legitimately differ between
     two nodes at different heights (but would also differ at the same
     height): confirmation counters and token supplies embedded in account
-    blocks.  Applied recursively so pairedAccountBlock is covered too."""
+    blocks, and the pillar consensus-cache fields (weight/rank/currentStats).
+    Applied recursively so pairedAccountBlock is covered too."""
     if isinstance(value, dict):
+        is_pillar_info = "producerAddress" in value
         out = {}
         for k, v in value.items():
             if k == "numConfirmations":
+                continue
+            if is_pillar_info and k in PILLAR_NODE_LOCAL:
                 continue
             if k == "token" and isinstance(v, dict):
                 v = {tk: tv for tk, tv in v.items()
@@ -604,7 +616,7 @@ def run(ref, test, args, fh):
             r["status"] = "FAIL"; r["detail"] = "error-on-one-side"
             r["refError"], r["testError"] = (rerr or "")[:200], (terr or "")[:200]
         elif h_before[0] == h_before[1] == h_after[0] == h_after[1]:
-            r["status"] = "PASS" if rr == tt else "FAIL"
+            r["status"] = "PASS" if normalize(rr) == normalize(tt) else "FAIL"
         else:
             r["status"] = "INFO"; r["detail"] = "frontier-moved-during-getter"
         log(r, fh)

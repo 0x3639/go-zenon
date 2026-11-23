@@ -56,7 +56,13 @@ python3 test/mainnet/compare.py \
 
 Comparison semantics: node-local contextual fields (`numConfirmations`,
 `token.totalSupply`/`maxSupply`, recursively incl. `pairedAccountBlock`) are
-normalized before comparison. RPC-level errors are comparable answers:
+normalized before comparison. Pillar answers additionally have the
+consensus-cache fields `weight`/`rank`/`currentStats` normalized — they come
+from a node-local cache refreshed asynchronously (at most every 5 min), so
+two nodes on the same frontier legitimately report different values; the
+strip is guarded by the `producerAddress` discriminator so a same-named
+field elsewhere is never silently dropped. RPC-level errors are comparable
+answers:
 identical errors on both sides are a PASS; a method missing on exactly one
 build (a getter added after the reference release) is `INFO`
 (`method-missing-on-one-side`); an error on exactly one side, a different
