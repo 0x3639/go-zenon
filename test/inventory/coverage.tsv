@@ -151,7 +151,7 @@ contract-method	token.IssueToken	E1:TK-1 E2:TK-2 E5:TK-2
 contract-method	token.Mint	E1:TK-3 E2:TK-5 E3:TK-4 E4:TK-9
 contract-method	token.UpdateToken	E1:TK-10 E1:TK-9 E3:TK-8
 error	chain.ErrMomentumAcknowledgedNotCanonical	
-error	chain.ErrStaleMomentumAcknowledged	
+error	chain.ErrStaleMomentumAcknowledged	E7:S-7
 error	chain/cache/storage.ErrCacheStopped	
 error	chain/genesis.ErrGenesisAmountOverflow	
 error	chain/genesis.ErrGenesisDuplicateAddress	
@@ -405,7 +405,7 @@ rpc-method	LedgerApi.GetFrontierAccountBlock	E1:B-1 E1:B-2b
 rpc-method	LedgerApi.GetFrontierMomentum	SMOKE E1:B-1
 rpc-method	LedgerApi.GetMomentumBeforeTime	
 rpc-method	LedgerApi.GetMomentumByHash	
-rpc-method	LedgerApi.GetMomentumsByHeight	SMOKE
+rpc-method	LedgerApi.GetMomentumsByHeight	SMOKE E1:TestSporkEdge E1:TestSporkStagedEnforcement
 rpc-method	LedgerApi.GetMomentumsByPage	SMOKE
 rpc-method	LedgerApi.GetUnconfirmedBlocksByAddress	E1:B-9
 rpc-method	LedgerApi.GetUnreceivedBlocksByAddress	E1:B-1
@@ -454,17 +454,17 @@ rpc-method	TokenAPI.GetByOwner	E1:TK-1
 rpc-method	TokenAPI.GetByZts	E1:TK-1 E1:TK-10 E1:TK-3 E1:TK-4 E1:TK-5 E1:TK-7 E1:TK-8 E1:TK-9
 spork	AcceleratorSpork	
 spork	BridgeAndLiquiditySpork	
-spork	DynamicPlasmaSpork	
-spork	EmbeddedRefundSpork	
-spork	EpochRewardTermsSpork	
+spork	DynamicPlasmaSpork	E7:S-1 E7:S-2 E7:S-5 E7:S-7
+spork	EmbeddedRefundSpork	E7:S-1 E7:S-2 E7:S-5
+spork	EpochRewardTermsSpork	E7:S-1 E7:S-2 E7:S-5 E7:S-7
 spork	HtlcSpork	
-spork	Libp2pSpork	
-spork	PtlcSpork	
+spork	Libp2pSpork	E7:S-1 E7:S-2 E7:S-5
+spork	PtlcSpork	E7:S-1 E7:S-2 E7:S-5
 subscription	AccountBlocksByAddress	
 subscription	AllAccountBlocks	
 subscription	Momentums	
 subscription	UnreceivedAccountBlocksByAddress	
-verifier-rule	account_block.acknowledgementRecency	
+verifier-rule	account_block.acknowledgementRecency	E7:S-7
 verifier-rule	account_block.all	
 verifier-rule	account_block.amounts	
 verifier-rule	account_block.blockType	

@@ -1,0 +1,9 @@
+e2e: endpoints [http://localhost:36997], chain 69, start height 104, account indexes from 7656
+e2e: sporks enforced: [accelerator bridge dynamic-plasma embedded-refund epoch-reward-terms htlc libp2p ptlc]
+e2e: node v0.0.10-alphanet-734-gabe1fa6, fast constants: false
+=== RUN   TestSporkStagedEnforcement
+=== RUN   TestSporkStagedEnforcement/S-5_restart_after_activation
+    sporkstaged_test.go:296: restarted [znnd-devnet-pillar znnd-devnet-pillar2 znnd-devnet-pillar3 znnd-devnet-rpc znnd-devnet-observer]; waiting for the chain to continue
+--- PASS: TestSporkStagedEnforcement (14.58s)
+    --- PASS: TestSporkStagedEnforcement/S-5_restart_after_activation (14.58s)
+PASS

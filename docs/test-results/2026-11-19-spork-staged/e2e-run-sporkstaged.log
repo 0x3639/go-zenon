@@ -1,0 +1,20 @@
+e2e: endpoints [http://localhost:36997], chain 69, start height 12, account indexes from 1768
+e2e: sporks enforced: [accelerator bridge htlc]
+e2e: node v0.0.10-alphanet-734-gabe1fa6, fast constants: false
+=== RUN   TestSporkStagedEnforcement
+=== RUN   TestSporkStagedEnforcement/S-1_before_enforcement_gated_rules_off
+=== RUN   TestSporkStagedEnforcement/S-2_libp2p_at_enforcement
+=== RUN   TestSporkStagedEnforcement/S-2_dynamic_plasma_at_enforcement
+=== RUN   TestSporkStagedEnforcement/S-2_ptlc_and_embedded_refund_at_enforcement
+=== RUN   TestSporkStagedEnforcement/S-2_epoch_reward_terms_at_enforcement
+=== RUN   TestSporkStagedEnforcement/S-5_restart_after_activation
+    sporkstaged_test.go:297: restarted [znnd-devnet-pillar znnd-devnet-pillar2 znnd-devnet-pillar3 znnd-devnet-rpc znnd-devnet-observer]; waiting for the chain to continue
+    sporkstaged_test.go:318: momentum 30 after restart: version 1, want 2
+--- FAIL: TestSporkStagedEnforcement (719.56s)
+    --- PASS: TestSporkStagedEnforcement/S-1_before_enforcement_gated_rules_off (0.02s)
+    --- PASS: TestSporkStagedEnforcement/S-2_libp2p_at_enforcement (79.49s)
+    --- PASS: TestSporkStagedEnforcement/S-2_dynamic_plasma_at_enforcement (100.64s)
+    --- PASS: TestSporkStagedEnforcement/S-2_ptlc_and_embedded_refund_at_enforcement (399.35s)
+    --- PASS: TestSporkStagedEnforcement/S-2_epoch_reward_terms_at_enforcement (100.62s)
+    --- FAIL: TestSporkStagedEnforcement/S-5_restart_after_activation (39.43s)
+FAIL

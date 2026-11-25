@@ -1,0 +1,17 @@
+e2e: endpoints [http://localhost:36997 http://localhost:35991], chain 69, start height 134, account indexes from 9576
+e2e: sporks enforced: [accelerator bridge dynamic-plasma embedded-refund epoch-reward-terms htlc libp2p ptlc]
+e2e: node v0.0.10-alphanet-734-gabe1fa6, fast constants: false
+=== RUN   TestSporkUnknownBinary
+=== RUN   TestSporkUnknownBinary/S-4_old_node_cannot_pass_the_enforcement_height
+=== RUN   TestSporkUnknownBinary/X-4_nodes_with_the_spork_continued_past_it
+=== RUN   TestSporkUnknownBinary/S-4c_binary_without_the_spork_cannot_start_on_a_past_enforcement_db
+    sporkhalt_test.go:212: old binary on a past-enforcement db exited with code 1 (dev exits 1 via cli.go; v0.0.10 exited 2 from chain.Init)
+=== RUN   TestSporkUnknownBinary/S-4b_recovery_binary_continues_without_resync
+    sporkhalt_test.go:233: recovered node reached height 140 (frontier at start 140) on its existing data
+--- PASS: TestSporkUnknownBinary (42.33s)
+    --- PASS: TestSporkUnknownBinary/S-4_old_node_cannot_pass_the_enforcement_height (30.13s)
+    --- PASS: TestSporkUnknownBinary/X-4_nodes_with_the_spork_continued_past_it (0.00s)
+    --- PASS: TestSporkUnknownBinary/S-4c_binary_without_the_spork_cannot_start_on_a_past_enforcement_db (6.64s)
+    --- PASS: TestSporkUnknownBinary/S-4b_recovery_binary_continues_without_resync (5.56s)
+PASS
+ok  	github.com/zenon-network/go-zenon/test/e2e	57.454s
