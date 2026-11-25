@@ -1,0 +1,4 @@
+error	chain.ErrStaleMomentumAcknowledged	E7:S-7
+rpc-method	LedgerApi.GetMomentumsByHeight	E1:TestSporkEdge
+spork	DynamicPlasmaSpork	E7:S-7
+verifier-rule	account_block.acknowledgementRecency	E7:S-7
