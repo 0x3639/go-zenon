@@ -10,6 +10,7 @@ Start with [docs/TESTING.md](../docs/TESTING.md): it has the procedures, step by
 | `devnet/fast/` | two files added at build time to make a test binary with a short epoch and short locks | P11 |
 | `e2e/` | the end-to-end driver: signs and sends transactions and reads the results back over RPC | P9 |
 | `inventory/` | lists every testable item from the source and tracks which of them have a case | section 1 |
+| `mainnet/` | read-only RPC differ and history scanner for comparing a `dev` binary against a v0.0.10 reference node on mainnet (L6) | L6 in TEST-PLAN.md |
 
 The shortest way to see it work, from the repository root, with Go, docker and python3 installed:
 
