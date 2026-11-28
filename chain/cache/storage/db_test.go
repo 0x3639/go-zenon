@@ -521,10 +521,21 @@ func TestCompactConcurrentWithReadsWritesAndStop(t *testing.T) {
 		close(start)
 		// Wait for at least one concurrent compaction to complete, then stop
 		// while compaction, reads, and writes are actively racing.
-		<-compacted
-		common.FailIfErr(t, m.Stop())
+		var waitErr error
+		select {
+		case <-compacted:
+		case err := <-errCh:
+			waitErr = err
+		case <-time.After(10 * time.Second):
+			waitErr = fmt.Errorf("timed out waiting for concurrent compaction")
+		}
+		stopErr := m.Stop()
 		wg.Wait()
 		close(errCh)
+		if waitErr != nil {
+			t.Fatal(waitErr)
+		}
+		common.FailIfErr(t, stopErr)
 		for err := range errCh {
 			t.Fatal(err)
 		}
