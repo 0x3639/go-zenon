@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/inconshreveable/log15"
 
@@ -163,12 +164,28 @@ func TestChainCacheInit_BackfillCompactsOnce(t *testing.T) {
 
 	// Verify Init releases chainCache.changes before calling manager.Compact():
 	// GetFrontierCacheStore acquires chainCache.changes, so calling it inside
-	// Compact would deadlock if Init still held the lock.
-	var readerHeightDuringCompact uint64
+	// Compact would block if Init still held the lock. Run it with a short
+	// deadline so a regression fails fast instead of waiting for go test's timeout.
+	var (
+		readerHeightDuringCompact  uint64
+		readerBlockedDuringCompact bool
+		readerDone                 chan uint64
+	)
 	mgr.onCompact = func() {
-		fs := c.GetFrontierCacheStore()
-		if fs != nil {
-			readerHeightDuringCompact = fs.Identifier().Height
+		done := make(chan uint64, 1)
+		readerDone = done
+		go func() {
+			var h uint64
+			if fs := c.GetFrontierCacheStore(); fs != nil {
+				h = fs.Identifier().Height
+			}
+			done <- h
+		}()
+		select {
+		case readerHeightDuringCompact = <-done:
+			readerDone = nil
+		case <-time.After(5 * time.Second):
+			readerBlockedDuringCompact = true
 		}
 	}
 
@@ -176,7 +193,14 @@ func TestChainCacheInit_BackfillCompactsOnce(t *testing.T) {
 	beneficiary := types.ParseAddressPanic("z1qqjnwjjpnue8xmmpanz6csze6tcmtzzdtfsww7")
 	chainMgr, momStore := buildBackfillFixture(t, totalHeights, beneficiary)
 
-	common.FailIfErr(t, c.Init(chainMgr, momStore))
+	initErr := c.Init(chainMgr, momStore)
+	if readerDone != nil {
+		<-readerDone
+	}
+	common.FailIfErr(t, initErr)
+	if readerBlockedDuringCompact {
+		t.Fatal("GetFrontierCacheStore blocked while Init ran manager.Compact (chainCache.changes held across compaction)")
+	}
 
 	if got := atomic.LoadInt32(&mgr.addCalls); got != totalHeights {
 		t.Fatalf("Init replayed %d momentums, want %d", got, totalHeights)

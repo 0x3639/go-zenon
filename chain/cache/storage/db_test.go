@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
@@ -308,12 +309,25 @@ func TestAddDoesNotTriggerManualCompact(t *testing.T) {
 	if got := atomic.LoadInt32(&compactCalls); got != 0 {
 		t.Fatalf("Add across %d heights triggered %d manual compactions, want 0", totalHeights, got)
 	}
+	// Also verify via goleveldb stats so a direct m.ldb.CompactRange call in
+	// Add cannot bypass the m.compact hook: every CompactRange flushes the
+	// memdb first, whereas 250 small Add batches do not fill the 4 MiB write
+	// buffer.
+	var stats leveldb.DBStats
+	common.FailIfErr(t, m.ldb.Stats(&stats))
+	if stats.MemComp != 0 {
+		t.Fatalf("Add across %d heights flushed memdb %d times, want 0", totalHeights, stats.MemComp)
+	}
 	common.Expect(t, GetFrontierIdentifier(m.DB()), getMockIdentifier(totalHeights))
 
 	// Explicit Compact runs once and leaves frontier, values, and rollback intact.
 	common.FailIfErr(t, m.Compact())
 	if got := atomic.LoadInt32(&compactCalls); got != 1 {
 		t.Fatalf("Compact triggered %d compactions, want 1", got)
+	}
+	common.FailIfErr(t, m.ldb.Stats(&stats))
+	if stats.MemComp == 0 {
+		t.Fatalf("explicit Compact did not flush memdb (MemComp = 0)")
 	}
 	common.Expect(t, GetFrontierIdentifier(m.DB()), getMockIdentifier(totalHeights))
 
@@ -357,6 +371,8 @@ func TestCompactDoesNotHoldChangesLock(t *testing.T) {
 
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
 	m.compact = func(util.Range) error {
 		close(entered)
 		<-release
@@ -367,17 +383,72 @@ func TestCompactDoesNotHoldChangesLock(t *testing.T) {
 	go func() {
 		compactDone <- m.Compact()
 	}()
+	compactWaited := false
+	defer func() {
+		unblock()
+		if !compactWaited {
+			<-compactDone
+		}
+	}()
 
-	<-entered
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Compact to enter compaction I/O")
+	}
 
 	// While Compact is blocked in I/O, DB reads, Add, and Pop must not block.
-	common.Expect(t, GetFrontierIdentifier(m.DB()), getMockIdentifier(1))
-	common.FailIfErr(t, m.Add(getMockIdentifier(2), getMockPatch([]byte{2})))
-	common.Expect(t, GetFrontierIdentifier(m.DB()), getMockIdentifier(2))
-	common.FailIfErr(t, m.Pop())
-	common.Expect(t, GetFrontierIdentifier(m.DB()), getMockIdentifier(1))
+	opsDone := make(chan error, 1)
+	go func() {
+		got, err := ReadFrontierIdentifier(m.DB())
+		if err != nil {
+			opsDone <- fmt.Errorf("initial ReadFrontierIdentifier: %w", err)
+			return
+		}
+		if got != getMockIdentifier(1) {
+			opsDone <- fmt.Errorf("initial frontier = %v, want %v", got, getMockIdentifier(1))
+			return
+		}
+		if err := m.Add(getMockIdentifier(2), getMockPatch([]byte{2})); err != nil {
+			opsDone <- fmt.Errorf("Add during Compact: %w", err)
+			return
+		}
+		got, err = ReadFrontierIdentifier(m.DB())
+		if err != nil {
+			opsDone <- fmt.Errorf("ReadFrontierIdentifier after Add: %w", err)
+			return
+		}
+		if got != getMockIdentifier(2) {
+			opsDone <- fmt.Errorf("frontier after Add = %v, want %v", got, getMockIdentifier(2))
+			return
+		}
+		if err := m.Pop(); err != nil {
+			opsDone <- fmt.Errorf("Pop during Compact: %w", err)
+			return
+		}
+		got, err = ReadFrontierIdentifier(m.DB())
+		if err != nil {
+			opsDone <- fmt.Errorf("ReadFrontierIdentifier after Pop: %w", err)
+			return
+		}
+		if got != getMockIdentifier(1) {
+			opsDone <- fmt.Errorf("frontier after Pop = %v, want %v", got, getMockIdentifier(1))
+			return
+		}
+		opsDone <- nil
+	}()
 
-	close(release)
+	select {
+	case err := <-opsDone:
+		common.FailIfErr(t, err)
+	case <-time.After(5 * time.Second):
+		unblock()
+		<-opsDone
+		t.Fatal("DB/Add/Pop blocked while Compact was in flight (changes lock held across I/O)")
+	}
+
+	unblock()
+	compactWaited = true
 	common.FailIfErr(t, <-compactDone)
 }
 
